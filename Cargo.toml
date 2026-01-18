@@ -1,0 +1,56 @@
+[package]
+name = "axterminator"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mikko <mikko@broa.biz>"]
+description = "World's most superior macOS GUI testing framework with background testing"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mikko/axterminator"
+keywords = ["macos", "gui", "testing", "accessibility", "automation"]
+categories = ["development-tools::testing", "gui", "os::macos-apis"]
+
+[lib]
+name = "axterminator"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Python bindings
+pyo3 = { version = "0.22", features = ["extension-module"] }
+
+# macOS accessibility
+core-foundation = "0.10"
+core-graphics = "0.24"
+
+# Async runtime
+tokio = { version = "1.44", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Caching
+lru = "0.12"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile = "3.15"
+
+[build-dependencies]
+pyo3-build-config = "0.22"
+
+[[bench]]
+name = "element_access"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
