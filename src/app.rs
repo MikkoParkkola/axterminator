@@ -357,43 +357,77 @@ impl AXApp {
     /// Get all windows
     fn get_windows(&self) -> AXResult<Vec<AXElement>> {
         let windows_ref = get_attribute(self.element, attributes::AX_WINDOWS)?;
+        // cf_array_to_vec now properly retains each element
         let windows = cf_array_to_vec(windows_ref)
             .ok_or_else(|| AXError::SystemError("Failed to get windows array".into()))?;
 
         accessibility::release_cf(windows_ref);
 
+        // Each window is already retained, AXElement::new takes ownership
         Ok(windows.into_iter().map(AXElement::new).collect())
     }
 
     /// Get main window
     fn get_main_window(&self) -> AXResult<AXElement> {
+        // get_attribute returns a retained reference (Copy rule)
         let main_window_ref = get_attribute(self.element, attributes::AX_MAIN_WINDOW)?;
-        let element = AXElement::new(main_window_ref as AXUIElementRef);
-
-        // Note: We don't release main_window_ref here as it's now owned by the AXElement
-        Ok(element)
+        // AXElement::new takes ownership of the retained reference
+        Ok(AXElement::new(main_window_ref as AXUIElementRef))
     }
 
     /// Perform breadth-first search for element matching criteria
+    ///
+    /// Memory management:
+    /// - Root element (self.element) is NOT retained - it's borrowed from self
+    /// - Children from cf_array_to_vec ARE retained and must be released if not used
+    /// - The matching element is returned with ownership (retained)
     fn breadth_first_search(&self, criteria: &SearchCriteria) -> AXResult<AXElement> {
+        use core_foundation::base::CFTypeRef;
         use std::collections::VecDeque;
 
-        let mut queue = VecDeque::new();
-        queue.push_back(self.element);
+        // First check the root element itself
+        if self.element_matches(self.element, criteria) {
+            // Need to retain since self owns the original
+            accessibility::retain_cf(self.element as CFTypeRef);
+            return Ok(AXElement::new(self.element));
+        }
 
-        while let Some(current) = queue.pop_front() {
+        // Queue holds (element, is_root) - root doesn't need releasing
+        let mut queue: VecDeque<(AXUIElementRef, bool)> = VecDeque::new();
+
+        // Get children of root (these are retained by cf_array_to_vec)
+        if let Ok(children_ref) = get_attribute(self.element, attributes::AX_CHILDREN) {
+            if let Some(children) = cf_array_to_vec(children_ref) {
+                for child in children {
+                    queue.push_back((child, false)); // not root, needs release
+                }
+            }
+            accessibility::release_cf(children_ref);
+        }
+
+        while let Some((current, _is_root)) = queue.pop_front() {
             // Check if current element matches criteria
             if self.element_matches(current, criteria) {
+                // Element is already retained from cf_array_to_vec, pass ownership
+                // Release remaining elements in queue
+                for (elem, _) in queue {
+                    accessibility::release_cf(elem as CFTypeRef);
+                }
                 return Ok(AXElement::new(current));
             }
 
-            // Get children and add to queue
+            // Get children and add to queue (they're retained by cf_array_to_vec)
             if let Ok(children_ref) = get_attribute(current, attributes::AX_CHILDREN) {
                 if let Some(children) = cf_array_to_vec(children_ref) {
-                    queue.extend(children);
+                    for child in children {
+                        queue.push_back((child, false));
+                    }
                 }
                 accessibility::release_cf(children_ref);
             }
+
+            // Release this element since we didn't match it
+            accessibility::release_cf(current as CFTypeRef);
         }
 
         Err(AXError::ElementNotFound(format!("{:?}", criteria)))
@@ -591,9 +625,12 @@ fn cf_string_to_string(cf_ref: core_foundation::base::CFTypeRef) -> Option<Strin
 }
 
 /// Convert CFArray to Vec of AXUIElementRef
+///
+/// IMPORTANT: Each element is retained (CFRetain) before being returned.
+/// Caller is responsible for releasing (CFRelease) when done.
 fn cf_array_to_vec(cf_ref: core_foundation::base::CFTypeRef) -> Option<Vec<AXUIElementRef>> {
     use core_foundation::array::CFArray;
-    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::base::{CFType, CFTypeRef, TCFType};
 
     if cf_ref.is_null() {
         return None;
@@ -608,6 +645,8 @@ fn cf_array_to_vec(cf_ref: core_foundation::base::CFTypeRef) -> Option<Vec<AXUIE
             if let Some(element_ref) = cf_array.get(i) {
                 let element_ptr = element_ref.as_concrete_TypeRef() as AXUIElementRef;
                 if !element_ptr.is_null() {
+                    // CRITICAL: Retain each element so it survives after cf_array is dropped
+                    accessibility::retain_cf(element_ptr as CFTypeRef);
                     result.push(element_ptr);
                 }
             }

@@ -11,7 +11,7 @@ use crate::ActionMode;
 
 /// Wrapper for an accessibility element
 #[pyclass]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AXElement {
     /// Raw accessibility element reference
     pub(crate) element: AXUIElementRef,
@@ -19,6 +19,19 @@ pub struct AXElement {
     pub(crate) role: Option<String>,
     /// Cached title
     pub(crate) title: Option<String>,
+}
+
+// Manual Clone implementation that properly retains the element
+impl Clone for AXElement {
+    fn clone(&self) -> Self {
+        // CRITICAL: Retain the element so both copies own a reference
+        accessibility::retain_cf(self.element as _);
+        Self {
+            element: self.element,
+            role: self.role.clone(),
+            title: self.title.clone(),
+        }
+    }
 }
 
 unsafe impl Send for AXElement {}
@@ -251,8 +264,7 @@ impl AXElement {
             std::thread::sleep(Duration::from_millis(10));
 
             // Key up
-            if let Ok(key_up) = CGEvent::new_keyboard_event(source.clone(), key_code, false)
-            {
+            if let Ok(key_up) = CGEvent::new_keyboard_event(source.clone(), key_code, false) {
                 key_up.set_string_from_utf16_unchecked(&[ch as u16]);
                 key_up.post(CGEventTapLocation::HID);
                 std::thread::sleep(Duration::from_millis(10));

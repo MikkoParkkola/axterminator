@@ -458,7 +458,8 @@ pub enum SyncMode {
 /// 2. Falls back to heuristic tree hashing (all apps)
 ///
 /// # Example
-/// ```rust
+/// ```rust,ignore
+/// // Requires actual accessibility element
 /// let engine = SyncEngine::new(pid, app_element);
 /// if engine.wait_for_idle(Duration::from_secs(5)) {
 ///     println!("App is idle, safe to interact");
@@ -480,7 +481,10 @@ impl SyncEngine {
     /// # Returns
     /// * `Self` - Configured sync engine with best available strategy
     pub fn new(pid: i32, element: AXUIElementRef) -> Self {
-        let xpc = EspressoMacClient::connect(pid);
+        // XPC connection disabled for now - the XPC calls crash when service doesn't exist
+        // TODO: Re-enable when EspressoMac SDK is properly set up in target apps
+        // let xpc = EspressoMacClient::connect(pid);
+        let xpc: Option<EspressoMacClient> = None;
         let mode = if xpc.is_some() {
             SyncMode::XPC
         } else {
@@ -501,11 +505,9 @@ impl SyncEngine {
     /// * `element` - Root accessibility element
     /// * `mode` - Explicit synchronization mode
     pub fn with_mode(pid: i32, element: AXUIElementRef, mode: SyncMode) -> Self {
-        let xpc = if mode != SyncMode::Heuristic {
-            EspressoMacClient::connect(pid)
-        } else {
-            None
-        };
+        // XPC connection disabled - crashes when service doesn't exist
+        let xpc: Option<EspressoMacClient> = None;
+        let _ = mode; // Silence unused warning - we always use Heuristic for now
 
         Self {
             mode,

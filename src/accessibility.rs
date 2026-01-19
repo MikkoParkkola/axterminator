@@ -183,6 +183,16 @@ pub fn release_cf(cf: CFTypeRef) {
     }
 }
 
+/// Retain a CFTypeRef (increment reference count)
+/// Returns the same pointer for convenience
+pub fn retain_cf(cf: CFTypeRef) -> CFTypeRef {
+    if !cf.is_null() {
+        unsafe { CFRetain(cf) }
+    } else {
+        cf
+    }
+}
+
 /// Get string attribute value from an element
 pub fn get_string_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let value = get_attribute(element, attribute).ok()?;
