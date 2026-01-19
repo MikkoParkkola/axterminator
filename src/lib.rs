@@ -25,7 +25,6 @@
 //! ```
 
 use pyo3::prelude::*;
-use std::sync::Arc;
 
 mod accessibility;
 mod actions;
@@ -34,6 +33,8 @@ mod cache;
 mod element;
 mod error;
 mod healing;
+mod router;
+mod sync;
 
 pub use accessibility::*;
 pub use actions::*;
@@ -42,22 +43,21 @@ pub use cache::*;
 pub use element::*;
 pub use error::*;
 pub use healing::*;
+pub use router::*;
+pub use sync::*;
 
 /// Action mode for element interactions
 #[pyclass]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ActionMode {
     /// Perform action in background without stealing focus (DEFAULT)
+    #[default]
     Background,
     /// Bring app to foreground and focus element
     Focus,
 }
 
-impl Default for ActionMode {
-    fn default() -> Self {
-        Self::Background
-    }
-}
 
 /// Initialize the Python module
 #[pymodule]
@@ -68,7 +68,7 @@ fn axterminator(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<HealingConfig>()?;
 
     // Top-level functions
-    m.add_function(wrap_pyfunction!(app, m)?)?;
+    m.add_function(wrap_pyfunction!(connect_app, m)?)?;
     m.add_function(wrap_pyfunction!(is_accessibility_enabled, m)?)?;
     m.add_function(wrap_pyfunction!(configure_healing, m)?)?;
 
@@ -101,9 +101,9 @@ fn axterminator(m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// # By PID
 /// safari = ax.app(pid=12345)
 /// ```
-#[pyfunction]
+#[pyfunction(name = "app")]
 #[pyo3(signature = (name=None, bundle_id=None, pid=None))]
-fn app(name: Option<&str>, bundle_id: Option<&str>, pid: Option<u32>) -> PyResult<AXApp> {
+fn connect_app(name: Option<&str>, bundle_id: Option<&str>, pid: Option<u32>) -> PyResult<AXApp> {
     AXApp::connect(name, bundle_id, pid)
 }
 

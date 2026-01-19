@@ -10,11 +10,10 @@ use crate::accessibility::{
 };
 use crate::element::AXElement;
 use crate::error::{AXError, AXResult};
-use crate::ActionMode;
+use crate::sync::SyncEngine;
 
 /// Application wrapper providing the main entry point for GUI automation
 #[pyclass]
-#[derive(Debug)]
 pub struct AXApp {
     /// Process ID of the application
     pub(crate) pid: i32,
@@ -24,6 +23,21 @@ pub struct AXApp {
     pub(crate) name: Option<String>,
     /// Root accessibility element
     pub(crate) element: AXUIElementRef,
+    /// Synchronization engine for wait_for_idle
+    sync_engine: Arc<SyncEngine>,
+}
+
+// Manual Debug implementation (Arc<SyncEngine> doesn't implement Debug)
+impl std::fmt::Debug for AXApp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AXApp")
+            .field("pid", &self.pid)
+            .field("bundle_id", &self.bundle_id)
+            .field("name", &self.name)
+            .field("element", &self.element)
+            .field("sync_mode", &self.sync_engine.mode())
+            .finish()
+    }
 }
 
 // Safety: AXUIElementRef is thread-safe for read operations
@@ -112,7 +126,17 @@ impl AXApp {
     /// * `timeout_ms` - Timeout in milliseconds (default: 5000)
     #[pyo3(signature = (timeout_ms=5000))]
     fn wait_for_idle(&self, timeout_ms: u64) -> bool {
-        self.wait_for_stable(Duration::from_millis(timeout_ms))
+        self.sync_engine
+            .wait_for_idle(Duration::from_millis(timeout_ms))
+    }
+
+    /// Check if the application is currently idle (non-blocking)
+    ///
+    /// # Returns
+    /// * `true` if app is idle
+    /// * `false` if app is busy
+    fn is_idle(&self) -> bool {
+        self.sync_engine.is_idle()
     }
 
     /// Take a screenshot of the application window
@@ -169,11 +193,14 @@ impl AXApp {
         let element = create_application_element(resolved_pid)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+        let sync_engine = Arc::new(SyncEngine::new(resolved_pid, element));
+
         Ok(Self {
             pid: resolved_pid,
             bundle_id: bundle_id.map(String::from),
             name: name.map(String::from),
             element,
+            sync_engine,
         })
     }
 
@@ -247,9 +274,28 @@ impl AXApp {
 
     /// Search for element (single attempt)
     fn search_element(&self, query: &str) -> AXResult<AXElement> {
-        // TODO: Implement actual tree search
-        // This is a placeholder that will be replaced with proper implementation
-        Err(AXError::ElementNotFound(query.to_string()))
+        // Parse the query into search criteria
+        let criteria = SearchCriteria::parse(query)?;
+
+        // Try cache first (disabled temporarily)
+        // let cache_key = crate::cache::CacheKey {
+        //     pid: self.pid,
+        //     query: query.to_string(),
+        // };
+        //
+        // if let Some(cached) = crate::cache::global_cache().get(&cache_key) {
+        //     if cached.exists() {
+        //         return Ok(cached);
+        //     }
+        // }
+
+        // Perform breadth-first search of accessibility tree
+        let result = self.breadth_first_search(&criteria)?;
+
+        // Cache the result (disabled temporarily)
+        // crate::cache::global_cache().put(cache_key, result.clone());
+
+        Ok(result)
     }
 
     /// Find element by role and attributes
@@ -260,41 +306,14 @@ impl AXApp {
         identifier: Option<&str>,
         label: Option<&str>,
     ) -> AXResult<AXElement> {
-        // TODO: Implement role-based search
-        Err(AXError::ElementNotFound(format!("role={}", role)))
-    }
+        let criteria = SearchCriteria {
+            role: Some(role.to_string()),
+            title: title.map(String::from),
+            identifier: identifier.map(String::from),
+            label: label.map(String::from),
+        };
 
-    /// Wait for UI to stabilize (heuristic approach)
-    fn wait_for_stable(&self, timeout: Duration) -> bool {
-        let start = Instant::now();
-        let mut stable_count = 0;
-        let mut last_hash = 0u64;
-
-        while start.elapsed() < timeout {
-            let current_hash = self.hash_accessibility_tree();
-            if current_hash == last_hash {
-                stable_count += 1;
-                if stable_count >= 3 {
-                    return true;
-                }
-            } else {
-                stable_count = 0;
-                last_hash = current_hash;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        false
-    }
-
-    /// Hash the accessibility tree for change detection
-    fn hash_accessibility_tree(&self) -> u64 {
-        // TODO: Implement proper tree hashing
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        self.pid.hash(&mut hasher);
-        hasher.finish()
+        self.breadth_first_search(&criteria)
     }
 
     /// Capture screenshot of the application
@@ -337,14 +356,112 @@ impl AXApp {
 
     /// Get all windows
     fn get_windows(&self) -> AXResult<Vec<AXElement>> {
-        // TODO: Implement window enumeration
-        Ok(vec![])
+        let windows_ref = get_attribute(self.element, attributes::AX_WINDOWS)?;
+        let windows = cf_array_to_vec(windows_ref)
+            .ok_or_else(|| AXError::SystemError("Failed to get windows array".into()))?;
+
+        accessibility::release_cf(windows_ref);
+
+        Ok(windows.into_iter().map(AXElement::new).collect())
     }
 
     /// Get main window
     fn get_main_window(&self) -> AXResult<AXElement> {
-        // TODO: Implement main window retrieval
-        Err(AXError::ElementNotFound("main window".into()))
+        let main_window_ref = get_attribute(self.element, attributes::AX_MAIN_WINDOW)?;
+        let element = AXElement::new(main_window_ref as AXUIElementRef);
+
+        // Note: We don't release main_window_ref here as it's now owned by the AXElement
+        Ok(element)
+    }
+
+    /// Perform breadth-first search for element matching criteria
+    fn breadth_first_search(&self, criteria: &SearchCriteria) -> AXResult<AXElement> {
+        use std::collections::VecDeque;
+
+        let mut queue = VecDeque::new();
+        queue.push_back(self.element);
+
+        while let Some(current) = queue.pop_front() {
+            // Check if current element matches criteria
+            if self.element_matches(current, criteria) {
+                return Ok(AXElement::new(current));
+            }
+
+            // Get children and add to queue
+            if let Ok(children_ref) = get_attribute(current, attributes::AX_CHILDREN) {
+                if let Some(children) = cf_array_to_vec(children_ref) {
+                    queue.extend(children);
+                }
+                accessibility::release_cf(children_ref);
+            }
+        }
+
+        Err(AXError::ElementNotFound(format!("{:?}", criteria)))
+    }
+
+    /// Check if element matches search criteria
+    fn element_matches(&self, element: AXUIElementRef, criteria: &SearchCriteria) -> bool {
+        // Check role
+        if let Some(required_role) = &criteria.role {
+            if let Ok(role_ref) = get_attribute(element, attributes::AX_ROLE) {
+                let matches = cf_string_to_string(role_ref)
+                    .map(|r| &r == required_role)
+                    .unwrap_or(false);
+                accessibility::release_cf(role_ref);
+                if !matches {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Check title
+        if let Some(required_title) = &criteria.title {
+            if let Ok(title_ref) = get_attribute(element, attributes::AX_TITLE) {
+                let matches = cf_string_to_string(title_ref)
+                    .map(|t| t.contains(required_title))
+                    .unwrap_or(false);
+                accessibility::release_cf(title_ref);
+                if !matches {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Check identifier
+        if let Some(required_id) = &criteria.identifier {
+            if let Ok(id_ref) = get_attribute(element, attributes::AX_IDENTIFIER) {
+                let matches = cf_string_to_string(id_ref)
+                    .map(|i| &i == required_id)
+                    .unwrap_or(false);
+                accessibility::release_cf(id_ref);
+                if !matches {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Check label
+        if let Some(required_label) = &criteria.label {
+            if let Ok(label_ref) = get_attribute(element, attributes::AX_LABEL) {
+                let matches = cf_string_to_string(label_ref)
+                    .map(|l| l.contains(required_label))
+                    .unwrap_or(false);
+                accessibility::release_cf(label_ref);
+                if !matches {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -352,5 +469,292 @@ impl Drop for AXApp {
     fn drop(&mut self) {
         // Release the accessibility element reference
         accessibility::release_cf(self.element as _);
+    }
+}
+
+/// Search criteria for element matching
+#[derive(Debug, Clone)]
+struct SearchCriteria {
+    role: Option<String>,
+    title: Option<String>,
+    identifier: Option<String>,
+    label: Option<String>,
+}
+
+impl SearchCriteria {
+    /// Parse a query string into search criteria
+    ///
+    /// Supports:
+    /// - Simple text: "Save" -> matches title/label/identifier
+    /// - Role: "role:AXButton"
+    /// - Combined: "role:AXButton title:Save"
+    /// - XPath-like: "//AXButton[@AXTitle='Save']"
+    fn parse(query: &str) -> AXResult<Self> {
+        let query = query.trim();
+
+        // XPath-like syntax: //AXButton[@AXTitle='Save']
+        if query.starts_with("//") {
+            return Self::parse_xpath(query);
+        }
+
+        // Check for key:value pairs
+        if query.contains(':') {
+            return Self::parse_key_value(query);
+        }
+
+        // Simple text query - match against title, label, or identifier
+        Ok(Self {
+            role: None,
+            title: Some(query.to_string()),
+            identifier: Some(query.to_string()),
+            label: Some(query.to_string()),
+        })
+    }
+
+    /// Parse XPath-like query: //AXButton[@AXTitle='Save']
+    fn parse_xpath(query: &str) -> AXResult<Self> {
+        let mut criteria = Self {
+            role: None,
+            title: None,
+            identifier: None,
+            label: None,
+        };
+
+        // Extract role: //ROLE[@...]
+        if let Some(role_end) = query.find('[').or(Some(query.len())) {
+            let role = query[2..role_end].trim();
+            if !role.is_empty() {
+                criteria.role = Some(role.to_string());
+            }
+        }
+
+        // Extract attributes: [@AXTitle='Save']
+        for attr_match in query.match_indices("[@") {
+            let start = attr_match.0 + 2;
+            if let Some(end) = query[start..].find(']') {
+                let attr_str = &query[start..start + end];
+                if let Some((key, value)) = attr_str.split_once('=') {
+                    let key = key.trim();
+                    let value = value.trim().trim_matches(|c| c == '\'' || c == '"');
+
+                    match key {
+                        "AXTitle" => criteria.title = Some(value.to_string()),
+                        "AXIdentifier" => criteria.identifier = Some(value.to_string()),
+                        "AXLabel" => criteria.label = Some(value.to_string()),
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Ok(criteria)
+    }
+
+    /// Parse key:value query: "role:AXButton title:Save"
+    fn parse_key_value(query: &str) -> AXResult<Self> {
+        let mut criteria = Self {
+            role: None,
+            title: None,
+            identifier: None,
+            label: None,
+        };
+
+        for part in query.split_whitespace() {
+            if let Some((key, value)) = part.split_once(':') {
+                match key.trim() {
+                    "role" => criteria.role = Some(value.trim().to_string()),
+                    "title" => criteria.title = Some(value.trim().to_string()),
+                    "identifier" | "id" => criteria.identifier = Some(value.trim().to_string()),
+                    "label" => criteria.label = Some(value.trim().to_string()),
+                    _ => return Err(AXError::InvalidQuery(format!("Unknown key: {}", key))),
+                }
+            }
+        }
+
+        Ok(criteria)
+    }
+}
+
+/// Convert CFString to Rust String
+fn cf_string_to_string(cf_ref: core_foundation::base::CFTypeRef) -> Option<String> {
+    use core_foundation::base::TCFType;
+    use core_foundation::string::CFString;
+
+    if cf_ref.is_null() {
+        return None;
+    }
+
+    unsafe {
+        let cf_string = CFString::wrap_under_get_rule(cf_ref as _);
+        Some(cf_string.to_string())
+    }
+}
+
+/// Convert CFArray to Vec of AXUIElementRef
+fn cf_array_to_vec(cf_ref: core_foundation::base::CFTypeRef) -> Option<Vec<AXUIElementRef>> {
+    use core_foundation::array::CFArray;
+    use core_foundation::base::{CFType, TCFType};
+
+    if cf_ref.is_null() {
+        return None;
+    }
+
+    unsafe {
+        let cf_array: CFArray<CFType> = CFArray::wrap_under_get_rule(cf_ref as _);
+        let count = cf_array.len();
+        let mut result = Vec::with_capacity(count as usize);
+
+        for i in 0..count {
+            if let Some(element_ref) = cf_array.get(i) {
+                let element_ptr = element_ref.as_concrete_TypeRef() as AXUIElementRef;
+                if !element_ptr.is_null() {
+                    result.push(element_ptr);
+                }
+            }
+        }
+
+        Some(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_search_criteria_parse_simple_text() {
+        // GIVEN: Simple text query
+        let query = "Save";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should match against title, identifier, and label
+        assert_eq!(criteria.role, None);
+        assert_eq!(criteria.title, Some("Save".to_string()));
+        assert_eq!(criteria.identifier, Some("Save".to_string()));
+        assert_eq!(criteria.label, Some("Save".to_string()));
+    }
+
+    #[test]
+    fn test_search_criteria_parse_role_only() {
+        // GIVEN: Role query
+        let query = "role:AXButton";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should extract role only
+        assert_eq!(criteria.role, Some("AXButton".to_string()));
+        assert_eq!(criteria.title, None);
+        assert_eq!(criteria.identifier, None);
+        assert_eq!(criteria.label, None);
+    }
+
+    #[test]
+    fn test_search_criteria_parse_combined() {
+        // GIVEN: Combined role and title query
+        let query = "role:AXButton title:Save";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should extract both
+        assert_eq!(criteria.role, Some("AXButton".to_string()));
+        assert_eq!(criteria.title, Some("Save".to_string()));
+        assert_eq!(criteria.identifier, None);
+        assert_eq!(criteria.label, None);
+    }
+
+    #[test]
+    fn test_search_criteria_parse_xpath_role_only() {
+        // GIVEN: XPath with role only
+        let query = "//AXButton";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should extract role
+        assert_eq!(criteria.role, Some("AXButton".to_string()));
+        assert_eq!(criteria.title, None);
+    }
+
+    #[test]
+    fn test_search_criteria_parse_xpath_with_title() {
+        // GIVEN: XPath with role and title
+        let query = "//AXButton[@AXTitle='Save']";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should extract role and title
+        assert_eq!(criteria.role, Some("AXButton".to_string()));
+        assert_eq!(criteria.title, Some("Save".to_string()));
+    }
+
+    #[test]
+    fn test_search_criteria_parse_xpath_multiple_attributes() {
+        // GIVEN: XPath with multiple attributes
+        let query = "//AXButton[@AXTitle='Save'][@AXIdentifier='save_btn']";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should extract all attributes
+        assert_eq!(criteria.role, Some("AXButton".to_string()));
+        assert_eq!(criteria.title, Some("Save".to_string()));
+        assert_eq!(criteria.identifier, Some("save_btn".to_string()));
+    }
+
+    #[test]
+    fn test_search_criteria_parse_identifier_alias() {
+        // GIVEN: Query using 'id' instead of 'identifier'
+        let query = "role:AXButton id:save_btn";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: Should accept 'id' as alias
+        assert_eq!(criteria.identifier, Some("save_btn".to_string()));
+    }
+
+    #[test]
+    fn test_search_criteria_parse_invalid_key() {
+        // GIVEN: Invalid key in query
+        let query = "role:AXButton invalid:value";
+
+        // WHEN: Parsing
+        let result = SearchCriteria::parse(query);
+
+        // THEN: Should return error
+        assert!(result.is_err());
+        match result {
+            Err(AXError::InvalidQuery(msg)) => assert!(msg.contains("invalid")),
+            _ => panic!("Expected InvalidQuery error"),
+        }
+    }
+
+    #[test]
+    fn test_cf_string_conversion_null_safety() {
+        // GIVEN: Null CFTypeRef
+        let null_ref: core_foundation::base::CFTypeRef = std::ptr::null();
+
+        // WHEN: Converting to string
+        let result = cf_string_to_string(null_ref);
+
+        // THEN: Should return None
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_cf_array_conversion_null_safety() {
+        // GIVEN: Null CFTypeRef
+        let null_ref: core_foundation::base::CFTypeRef = std::ptr::null();
+
+        // WHEN: Converting to vec
+        let result = cf_array_to_vec(null_ref);
+
+        // THEN: Should return None
+        assert!(result.is_none());
     }
 }

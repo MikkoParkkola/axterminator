@@ -4,9 +4,8 @@
 
 use lru::LruCache;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
-use crate::accessibility::AXUIElementRef;
 use crate::element::AXElement;
 
 /// Cache key for element lookup

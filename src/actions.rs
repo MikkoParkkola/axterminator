@@ -3,7 +3,7 @@
 //! Implements background and focus mode actions.
 
 use crate::accessibility::{actions as ax_actions, perform_action, AXUIElementRef};
-use crate::error::{AXError, AXResult};
+use crate::error::AXResult;
 use crate::ActionMode;
 
 /// Execute an action on an element

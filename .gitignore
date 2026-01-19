@@ -38,6 +38,10 @@ htmlcov/
 *.pyd
 *.whl
 
+# Swift build artifacts
+EspressoMacSDK/.build/
+EspressoMacSDK/Package.resolved
+
 # Temporary
 *.tmp
 *.bak
