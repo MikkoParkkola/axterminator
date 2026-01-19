@@ -215,35 +215,36 @@ impl AXElement {
         perform_action(self.element, actions::AX_SHOW_MENU)
     }
 
-    /// Type text into the element
+    /// Type text into the element (BACKGROUND - no focus stealing!)
+    ///
+    /// Uses CGEventPostToPid to send keyboard events directly to the
+    /// target application without stealing focus from the current app.
     fn perform_type_text(&self, text: &str) -> AXResult<()> {
         use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
-        // Focus the element first
-        self.bring_to_focus_internal()?;
-
-        // Small delay to ensure focus is established
-        std::thread::sleep(Duration::from_millis(50));
+        // Get the PID of the element's owning application
+        let pid = accessibility::get_element_pid(self.element)?;
 
         // Create event source
         let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
             .map_err(|_| AXError::ActionFailed("Failed to create event source".into()))?;
 
-        // Type each character
+        // Type each character directly to the target PID
         for ch in text.chars() {
-            self.type_character(ch, &source)?;
+            self.type_character_to_pid(ch, &source, pid)?;
         }
 
         Ok(())
     }
 
-    /// Type a single character
-    fn type_character(
+    /// Type a single character to a specific PID (BACKGROUND mode)
+    fn type_character_to_pid(
         &self,
         ch: char,
         source: &core_graphics::event_source::CGEventSource,
+        pid: i32,
     ) -> AXResult<()> {
-        use core_graphics::event::{CGEvent, CGEventTapLocation};
+        use core_graphics::event::CGEvent;
 
         // Convert character to virtual key code and determine if shift is needed
         let (key_code, needs_shift) = char_to_keycode(ch);
@@ -251,7 +252,7 @@ impl AXElement {
         // Press shift if needed
         if needs_shift {
             if let Ok(shift_down) = CGEvent::new_keyboard_event(source.clone(), 56, true) {
-                shift_down.post(CGEventTapLocation::HID);
+                shift_down.post_to_pid(pid);
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
@@ -260,13 +261,13 @@ impl AXElement {
         if let Ok(key_down) = CGEvent::new_keyboard_event(source.clone(), key_code, true) {
             // Set the Unicode character
             key_down.set_string_from_utf16_unchecked(&[ch as u16]);
-            key_down.post(CGEventTapLocation::HID);
+            key_down.post_to_pid(pid);
             std::thread::sleep(Duration::from_millis(10));
 
             // Key up
             if let Ok(key_up) = CGEvent::new_keyboard_event(source.clone(), key_code, false) {
                 key_up.set_string_from_utf16_unchecked(&[ch as u16]);
-                key_up.post(CGEventTapLocation::HID);
+                key_up.post_to_pid(pid);
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
@@ -274,7 +275,7 @@ impl AXElement {
         // Release shift if needed
         if needs_shift {
             if let Ok(shift_up) = CGEvent::new_keyboard_event(source.clone(), 56, false) {
-                shift_up.post(CGEventTapLocation::HID);
+                shift_up.post_to_pid(pid);
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
