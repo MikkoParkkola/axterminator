@@ -1,4 +1,4 @@
-//! Element cache for AXTerminator
+//! Element cache for `AXTerminator`
 //!
 //! LRU cache for accessibility elements to improve performance.
 
@@ -34,6 +34,7 @@ pub struct ElementCache {
 
 impl ElementCache {
     /// Create a new element cache
+    #[must_use] 
     pub fn new(capacity: usize, max_age_ms: u64) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(
@@ -49,14 +50,13 @@ impl ElementCache {
 
         if let Some(entry) = cache.get(key) {
             // Check if entry is still valid
-            if entry.timestamp.elapsed().as_millis() < self.max_age_ms as u128 {
+            if entry.timestamp.elapsed().as_millis() < u128::from(self.max_age_ms) {
                 // Clone the element (we can't move out of the cache)
                 // TODO: Implement proper element cloning
                 return None;
-            } else {
-                // Entry expired, remove it
-                cache.pop(key);
             }
+            // Entry expired, remove it
+            cache.pop(key);
         }
         None
     }

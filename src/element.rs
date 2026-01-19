@@ -25,7 +25,7 @@ pub struct AXElement {
 impl Clone for AXElement {
     fn clone(&self) -> Self {
         // CRITICAL: Retain the element so both copies own a reference
-        accessibility::retain_cf(self.element as _);
+        accessibility::retain_cf(self.element.cast());
         Self {
             element: self.element,
             role: self.role.clone(),
@@ -39,7 +39,7 @@ unsafe impl Sync for AXElement {}
 
 #[pymethods]
 impl AXElement {
-    /// Get the element's role (e.g., "AXButton", "AXTextField")
+    /// Get the element's role (e.g., "`AXButton`", "`AXTextField`")
     fn role(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_ROLE)
     }
@@ -172,6 +172,7 @@ impl AXElement {
 
 impl AXElement {
     /// Create a new element wrapper
+    #[must_use] 
     pub fn new(element: AXUIElementRef) -> Self {
         Self {
             element,
@@ -217,7 +218,7 @@ impl AXElement {
 
     /// Type text into the element (BACKGROUND - no focus stealing!)
     ///
-    /// Uses CGEventPostToPid to send keyboard events directly to the
+    /// Uses `CGEventPostToPid` to send keyboard events directly to the
     /// target application without stealing focus from the current app.
     fn perform_type_text(&self, text: &str) -> AXResult<()> {
         use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
@@ -227,7 +228,7 @@ impl AXElement {
 
         // Create event source
         let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .map_err(|_| AXError::ActionFailed("Failed to create event source".into()))?;
+            .map_err(|()| AXError::ActionFailed("Failed to create event source".into()))?;
 
         // Type each character directly to the target PID
         for ch in text.chars() {
@@ -288,7 +289,7 @@ impl AXElement {
         accessibility::set_string_attribute_value(self.element, attributes::AX_VALUE, value)
     }
 
-    /// Bring the element to focus (internal version returning AXResult)
+    /// Bring the element to focus (internal version returning `AXResult`)
     fn bring_to_focus_internal(&self) -> AXResult<()> {
         // Set AXFocused attribute to true
         accessibility::set_bool_attribute_value(self.element, attributes::AX_FOCUSED, true)?;
@@ -432,13 +433,13 @@ impl AXElement {
             }
         }
 
-        Err(AXError::ElementNotFound(format!("{}:{}", attr, value)))
+        Err(AXError::ElementNotFound(format!("{attr}:{value}")))
     }
 }
 
 /// Convert a character to macOS virtual key code
 ///
-/// Returns (key_code, needs_shift)
+/// Returns (`key_code`, `needs_shift`)
 fn char_to_keycode(ch: char) -> (u16, bool) {
     match ch {
         'a' | 'A' => (0, ch.is_uppercase()),
@@ -507,7 +508,7 @@ fn char_to_keycode(ch: char) -> (u16, bool) {
 
 impl Drop for AXElement {
     fn drop(&mut self) {
-        accessibility::release_cf(self.element as _);
+        accessibility::release_cf(self.element.cast());
     }
 }
 

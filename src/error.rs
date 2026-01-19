@@ -1,10 +1,10 @@
-//! Error types for AXTerminator
+//! Error types for `AXTerminator`
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use thiserror::Error;
 
-/// AXTerminator error types
+/// `AXTerminator` error types
 #[derive(Error, Debug)]
 pub enum AXError {
     #[error("Accessibility not enabled. Enable in System Preferences > Privacy > Accessibility")]
@@ -44,5 +44,5 @@ impl From<AXError> for PyErr {
     }
 }
 
-/// Result type for AXTerminator operations
+/// Result type for `AXTerminator` operations
 pub type AXResult<T> = Result<T, AXError>;

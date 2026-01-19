@@ -1,4 +1,4 @@
-//! Application wrapper for AXTerminator
+//! Application wrapper for `AXTerminator`
 
 use pyo3::prelude::*;
 use std::process::Command;
@@ -23,7 +23,7 @@ pub struct AXApp {
     pub(crate) name: Option<String>,
     /// Root accessibility element
     pub(crate) element: AXUIElementRef,
-    /// Synchronization engine for wait_for_idle
+    /// Synchronization engine for `wait_for_idle`
     sync_engine: Arc<SyncEngine>,
 }
 
@@ -91,7 +91,7 @@ impl AXApp {
     /// Find an element by role and optional attributes
     ///
     /// # Arguments
-    /// * `role` - Accessibility role (e.g., "AXButton")
+    /// * `role` - Accessibility role (e.g., "`AXButton`")
     /// * `title` - Optional title attribute
     /// * `identifier` - Optional identifier attribute
     /// * `label` - Optional label attribute
@@ -120,7 +120,7 @@ impl AXApp {
 
     /// Wait for the application to become idle
     ///
-    /// Uses EspressoMac SDK if available, otherwise falls back to heuristic detection.
+    /// Uses `EspressoMac` SDK if available, otherwise falls back to heuristic detection.
     ///
     /// # Arguments
     /// * `timeout_ms` - Timeout in milliseconds (default: 5000)
@@ -204,14 +204,13 @@ impl AXApp {
         })
     }
 
-    /// Get PID from bundle identifier using NSRunningApplication
+    /// Get PID from bundle identifier using `NSRunningApplication`
     fn pid_from_bundle_id(bundle_id: &str) -> PyResult<i32> {
         let output = Command::new("osascript")
             .args([
                 "-e",
                 &format!(
-                    "tell application \"System Events\" to unix id of (processes whose bundle identifier is \"{}\")",
-                    bundle_id
+                    "tell application \"System Events\" to unix id of (processes whose bundle identifier is \"{bundle_id}\")"
                 ),
             ])
             .output()
@@ -222,8 +221,7 @@ impl AXApp {
 
         if pid_str.is_empty() || pid_str == "missing value" {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                "Application not found: {}",
-                bundle_id
+                "Application not found: {bundle_id}"
             )));
         }
 
@@ -244,8 +242,7 @@ impl AXApp {
 
         if pid_str.is_empty() {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                "Application not found: {}",
-                name
+                "Application not found: {name}"
             )));
         }
 
@@ -379,7 +376,7 @@ impl AXApp {
     ///
     /// Memory management:
     /// - Root element (self.element) is NOT retained - it's borrowed from self
-    /// - Children from cf_array_to_vec ARE retained and must be released if not used
+    /// - Children from `cf_array_to_vec` ARE retained and must be released if not used
     /// - The matching element is returned with ownership (retained)
     fn breadth_first_search(&self, criteria: &SearchCriteria) -> AXResult<AXElement> {
         use core_foundation::base::CFTypeRef;
@@ -430,7 +427,7 @@ impl AXApp {
             accessibility::release_cf(current as CFTypeRef);
         }
 
-        Err(AXError::ElementNotFound(format!("{:?}", criteria)))
+        Err(AXError::ElementNotFound(format!("{criteria:?}")))
     }
 
     /// Check if element matches search criteria
@@ -439,8 +436,7 @@ impl AXApp {
         if let Some(required_role) = &criteria.role {
             if let Ok(role_ref) = get_attribute(element, attributes::AX_ROLE) {
                 let matches = cf_string_to_string(role_ref)
-                    .map(|r| &r == required_role)
-                    .unwrap_or(false);
+                    .is_some_and(|r| &r == required_role);
                 accessibility::release_cf(role_ref);
                 if !matches {
                     return false;
@@ -454,8 +450,7 @@ impl AXApp {
         if let Some(required_title) = &criteria.title {
             if let Ok(title_ref) = get_attribute(element, attributes::AX_TITLE) {
                 let matches = cf_string_to_string(title_ref)
-                    .map(|t| t.contains(required_title))
-                    .unwrap_or(false);
+                    .is_some_and(|t| t.contains(required_title));
                 accessibility::release_cf(title_ref);
                 if !matches {
                     return false;
@@ -469,8 +464,7 @@ impl AXApp {
         if let Some(required_id) = &criteria.identifier {
             if let Ok(id_ref) = get_attribute(element, attributes::AX_IDENTIFIER) {
                 let matches = cf_string_to_string(id_ref)
-                    .map(|i| &i == required_id)
-                    .unwrap_or(false);
+                    .is_some_and(|i| &i == required_id);
                 accessibility::release_cf(id_ref);
                 if !matches {
                     return false;
@@ -484,8 +478,7 @@ impl AXApp {
         if let Some(required_label) = &criteria.label {
             if let Ok(label_ref) = get_attribute(element, attributes::AX_LABEL) {
                 let matches = cf_string_to_string(label_ref)
-                    .map(|l| l.contains(required_label))
-                    .unwrap_or(false);
+                    .is_some_and(|l| l.contains(required_label));
                 accessibility::release_cf(label_ref);
                 if !matches {
                     return false;
@@ -502,7 +495,7 @@ impl AXApp {
 impl Drop for AXApp {
     fn drop(&mut self) {
         // Release the accessibility element reference
-        accessibility::release_cf(self.element as _);
+        accessibility::release_cf(self.element.cast());
     }
 }
 
@@ -522,7 +515,7 @@ impl SearchCriteria {
     /// - Simple text: "Save" -> matches title/label/identifier
     /// - Role: "role:AXButton"
     /// - Combined: "role:AXButton title:Save"
-    /// - XPath-like: "//AXButton[@AXTitle='Save']"
+    /// - XPath-like: "//`AXButton`[@`AXTitle`='Save']"
     fn parse(query: &str) -> AXResult<Self> {
         let query = query.trim();
 
@@ -545,7 +538,7 @@ impl SearchCriteria {
         })
     }
 
-    /// Parse XPath-like query: //AXButton[@AXTitle='Save']
+    /// Parse XPath-like query: //`AXButton`[@`AXTitle`='Save']
     fn parse_xpath(query: &str) -> AXResult<Self> {
         let mut criteria = Self {
             role: None,
@@ -600,7 +593,7 @@ impl SearchCriteria {
                     "title" => criteria.title = Some(value.trim().to_string()),
                     "identifier" | "id" => criteria.identifier = Some(value.trim().to_string()),
                     "label" => criteria.label = Some(value.trim().to_string()),
-                    _ => return Err(AXError::InvalidQuery(format!("Unknown key: {}", key))),
+                    _ => return Err(AXError::InvalidQuery(format!("Unknown key: {key}"))),
                 }
             }
         }
@@ -609,7 +602,7 @@ impl SearchCriteria {
     }
 }
 
-/// Convert CFString to Rust String
+/// Convert `CFString` to Rust String
 fn cf_string_to_string(cf_ref: core_foundation::base::CFTypeRef) -> Option<String> {
     use core_foundation::base::TCFType;
     use core_foundation::string::CFString;
@@ -619,15 +612,15 @@ fn cf_string_to_string(cf_ref: core_foundation::base::CFTypeRef) -> Option<Strin
     }
 
     unsafe {
-        let cf_string = CFString::wrap_under_get_rule(cf_ref as _);
+        let cf_string = CFString::wrap_under_get_rule(cf_ref.cast());
         Some(cf_string.to_string())
     }
 }
 
-/// Convert CFArray to Vec of AXUIElementRef
+/// Convert `CFArray` to Vec of `AXUIElementRef`
 ///
-/// IMPORTANT: Each element is retained (CFRetain) before being returned.
-/// Caller is responsible for releasing (CFRelease) when done.
+/// IMPORTANT: Each element is retained (`CFRetain`) before being returned.
+/// Caller is responsible for releasing (`CFRelease`) when done.
 fn cf_array_to_vec(cf_ref: core_foundation::base::CFTypeRef) -> Option<Vec<AXUIElementRef>> {
     use core_foundation::array::CFArray;
     use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -637,7 +630,7 @@ fn cf_array_to_vec(cf_ref: core_foundation::base::CFTypeRef) -> Option<Vec<AXUIE
     }
 
     unsafe {
-        let cf_array: CFArray<CFType> = CFArray::wrap_under_get_rule(cf_ref as _);
+        let cf_array: CFArray<CFType> = CFArray::wrap_under_get_rule(cf_ref.cast());
         let count = cf_array.len();
         let mut result = Vec::with_capacity(count as usize);
 

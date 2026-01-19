@@ -14,8 +14,8 @@ name = "axterminator"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# Python bindings
-pyo3 = { version = "0.22", features = ["extension-module"] }
+# Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
 
 # macOS accessibility
 core-foundation = "0.10"

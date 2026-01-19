@@ -1,4 +1,4 @@
-//! Action execution for AXTerminator
+//! Action execution for `AXTerminator`
 //!
 //! Implements background and focus mode actions.
 
@@ -23,6 +23,7 @@ pub fn execute_action(element: AXUIElementRef, action: &str, mode: ActionMode) -
 }
 
 /// Check if an action can be performed in background mode
+#[must_use] 
 pub fn can_perform_in_background(action: &str) -> bool {
     matches!(
         action,
@@ -37,6 +38,7 @@ pub fn can_perform_in_background(action: &str) -> bool {
 }
 
 /// Actions that require focus mode
+#[must_use] 
 pub fn requires_focus(action: &str) -> bool {
     matches!(action, "type_text" | "drag" | "multi_touch")
 }

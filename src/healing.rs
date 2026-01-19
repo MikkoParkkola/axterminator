@@ -5,7 +5,6 @@
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, TCFType};
 use core_foundation::string::CFString;
-use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -94,8 +93,8 @@ impl Default for HealingConfig {
 static GLOBAL_CONFIG: RwLock<Option<HealingConfig>> = RwLock::new(None);
 
 /// Global healing cache - maps original query to successful healed query
-static HEALING_CACHE: Lazy<RwLock<HashMap<String, ElementQuery>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+static HEALING_CACHE: std::sync::LazyLock<RwLock<HashMap<String, ElementQuery>>> =
+    std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Set the global healing configuration
 pub fn set_global_config(config: HealingConfig) -> PyResult<()> {
@@ -324,11 +323,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 
     for i in 1..=len1 {
         for j in 1..=len2 {
-            let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
-                0
-            } else {
-                1
-            };
+            let cost = usize::from(s1_chars[i - 1] != s2_chars[j - 1]);
             matrix[i][j] = (matrix[i - 1][j] + 1)
                 .min(matrix[i][j - 1] + 1)
                 .min(matrix[i - 1][j - 1] + cost);
@@ -338,7 +333,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     matrix[len1][len2]
 }
 
-/// Simple XPath parser for AX tree paths
+/// Simple `XPath` parser for AX tree paths
 #[derive(Debug)]
 struct XPathSegment {
     role: String,
@@ -375,7 +370,7 @@ fn parse_xpath(xpath: &str) -> Vec<XPathSegment> {
     segments
 }
 
-/// Match element against XPath segment
+/// Match element against `XPath` segment
 fn matches_xpath_segment(element: AXUIElementRef, segment: &XPathSegment) -> bool {
     // Check role
     if let Some(role) = get_string_attr(element, attributes::AX_ROLE) {

@@ -2,8 +2,8 @@
 //!
 //! Routes element operations to the appropriate backend based on app type:
 //! - Native macOS apps: Direct Accessibility API
-//! - Electron apps: Chrome DevTools Protocol (CDP)
-//! - WebView hybrids: Combination of native + JavaScript injection
+//! - Electron apps: Chrome `DevTools` Protocol (CDP)
+//! - `WebView` hybrids: Combination of native + JavaScript injection
 //! - Catalyst apps: iPad apps running on macOS
 
 use crate::accessibility::{self, AXUIElementRef};
@@ -29,7 +29,7 @@ pub enum AppType {
     Native,
     /// Electron app (Chromium-based)
     Electron,
-    /// Native app with embedded WebViews
+    /// Native app with embedded `WebViews`
     WebViewHybrid,
     /// iPad app running on macOS via Catalyst
     Catalyst,
@@ -37,6 +37,7 @@ pub enum AppType {
 
 impl AppType {
     /// Get human-readable name
+    #[must_use] 
     pub fn name(&self) -> &'static str {
         match self {
             Self::Native => "Native",
@@ -47,7 +48,7 @@ impl AppType {
     }
 }
 
-/// Chrome DevTools Protocol connection
+/// Chrome `DevTools` Protocol connection
 #[derive(Debug)]
 pub struct CDPConnection {
     /// WebSocket connection to CDP endpoint
@@ -75,7 +76,7 @@ impl CDPConnection {
         debug!(pid, port, "Found CDP debug port");
 
         // Connect to the CDP endpoint
-        let ws_url = format!("ws://127.0.0.1:{}/devtools/browser", port);
+        let ws_url = format!("ws://127.0.0.1:{port}/devtools/browser");
 
         let (socket, _) = connect(&ws_url).ok()?;
         info!(pid, port, "CDP connection established");
@@ -110,12 +111,11 @@ impl CDPConnection {
 
     /// Test if a port has a CDP endpoint
     fn test_cdp_port(port: u16) -> bool {
-        let addr = format!("127.0.0.1:{}", port);
+        let addr = format!("127.0.0.1:{port}");
         if let Ok(mut stream) = TcpStream::connect(&addr) {
             // Send a simple HTTP GET to /json/version
             let request = format!(
-                "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
-                port
+                "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"
             );
             if stream.write_all(request.as_bytes()).is_ok() {
                 let mut buf = [0u8; 1024];
@@ -152,18 +152,18 @@ impl CDPConnection {
         // Send request
         self.socket
             .send(Message::Text(request.to_string()))
-            .map_err(|e| AXError::SystemError(format!("CDP send failed: {}", e)))?;
+            .map_err(|e| AXError::SystemError(format!("CDP send failed: {e}")))?;
 
         // Read response
         loop {
             let msg = self
                 .socket
                 .read()
-                .map_err(|e| AXError::SystemError(format!("CDP read failed: {}", e)))?;
+                .map_err(|e| AXError::SystemError(format!("CDP read failed: {e}")))?;
 
             if let Message::Text(text) = msg {
                 let response: CDPResponse = serde_json::from_str(&text)
-                    .map_err(|e| AXError::SystemError(format!("CDP parse failed: {}", e)))?;
+                    .map_err(|e| AXError::SystemError(format!("CDP parse failed: {e}")))?;
 
                 // Match response ID
                 if response.id == Some(id) {
@@ -268,8 +268,8 @@ impl CDPElement {
             .as_array()
             .ok_or_else(|| AXError::SystemError("Invalid box model".into()))?;
 
-        let x = (coords[0].as_f64().unwrap_or(0.0) + coords[4].as_f64().unwrap_or(0.0)) / 2.0;
-        let y = (coords[1].as_f64().unwrap_or(0.0) + coords[5].as_f64().unwrap_or(0.0)) / 2.0;
+        let x = f64::midpoint(coords[0].as_f64().unwrap_or(0.0), coords[4].as_f64().unwrap_or(0.0));
+        let y = f64::midpoint(coords[1].as_f64().unwrap_or(0.0), coords[5].as_f64().unwrap_or(0.0));
 
         // Dispatch click event
         conn.execute(
@@ -319,21 +319,22 @@ impl CDPElement {
     }
 }
 
-/// WebView bridge for hybrid apps
+/// `WebView` bridge for hybrid apps
 pub struct WebViewBridge {
-    /// Accessibility element representing the WebView
+    /// Accessibility element representing the `WebView`
     webview_element: AXUIElementRef,
 }
 
 impl WebViewBridge {
-    /// Create a bridge from a WebView accessibility element
+    /// Create a bridge from a `WebView` accessibility element
     ///
     /// # Arguments
-    /// * `element` - Accessibility element that is a WKWebView or WebView
+    /// * `element` - Accessibility element that is a `WKWebView` or `WebView`
     ///
     /// # Returns
-    /// * `Some(WebViewBridge)` if element is a valid WebView
-    /// * `None` if element is not a WebView
+    /// * `Some(WebViewBridge)` if element is a valid `WebView`
+    /// * `None` if element is not a `WebView`
+    #[must_use] 
     pub fn from_element(element: AXUIElementRef) -> Option<Self> {
         // Check if element is a WebView by examining its role
         let role = accessibility::get_attribute(element, accessibility::attributes::AX_ROLE)
@@ -349,7 +350,7 @@ impl WebViewBridge {
         }
     }
 
-    /// Execute JavaScript in the WebView
+    /// Execute JavaScript in the `WebView`
     ///
     /// NOTE: This uses macOS scripting to inject JS. Requires app cooperation.
     ///
@@ -372,7 +373,7 @@ impl WebViewBridge {
         ))
     }
 
-    /// Find an element within the WebView using a selector
+    /// Find an element within the `WebView` using a selector
     ///
     /// # Arguments
     /// * `_selector` - CSS selector
@@ -394,7 +395,7 @@ pub struct TestRouter {
     app_type: AppType,
     /// CDP connection (if Electron)
     cdp: Option<Arc<std::sync::Mutex<CDPConnection>>>,
-    /// WebView bridge (if hybrid)
+    /// `WebView` bridge (if hybrid)
     webview: Option<WebViewBridge>,
     /// Native accessibility element
     native_element: AXUIElementRef,
@@ -441,6 +442,7 @@ impl TestRouter {
     }
 
     /// Get the app type
+    #[must_use] 
     pub fn app_type(&self) -> AppType {
         self.app_type
     }
@@ -598,7 +600,7 @@ fn is_catalyst_app(pid: i32) -> bool {
     false
 }
 
-/// Check if app uses WebView
+/// Check if app uses `WebView`
 fn has_webview(_pid: i32) -> bool {
     // Would need to inspect the accessibility tree for WKWebView or WebView elements
     // This is a simplified check
@@ -616,13 +618,13 @@ fn is_css_selector(query: &str) -> bool {
         || query.contains('~')
 }
 
-/// Convert CFString to Rust String
+/// Convert `CFString` to Rust String
 unsafe fn cfstring_to_string(cf: CFTypeRef) -> Option<String> {
     if cf.is_null() {
         return None;
     }
 
-    let cfstring = CFString::wrap_under_get_rule(cf as _);
+    let cfstring = CFString::wrap_under_get_rule(cf.cast());
     Some(cfstring.to_string())
 }
 

@@ -1,6 +1,6 @@
 //! macOS Accessibility API bindings
 //!
-//! Provides safe Rust wrappers around the macOS Accessibility APIs (AXUIElement).
+//! Provides safe Rust wrappers around the macOS Accessibility APIs (`AXUIElement`).
 
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFTypeRef, TCFType};
@@ -43,16 +43,16 @@ extern "C" {
     fn CFRelease(cf: CFTypeRef);
 }
 
-/// CFTypeID for type checking
+/// `CFTypeID` for type checking
 pub type CFTypeID = usize;
 
-/// Opaque reference to an AXValue
+/// Opaque reference to an `AXValue`
 pub type AXValueRef = *const c_void;
 
 /// Opaque reference to an accessibility element
 pub type AXUIElementRef = *const c_void;
 
-/// AXValue types
+/// `AXValue` types
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AXValueType {
@@ -64,7 +64,7 @@ pub enum AXValueType {
     AXError = 5,
 }
 
-/// CGPoint structure for coordinates
+/// `CGPoint` structure for coordinates
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct CGPoint {
@@ -72,7 +72,7 @@ pub struct CGPoint {
     pub y: f64,
 }
 
-/// CGSize structure for dimensions
+/// `CGSize` structure for dimensions
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct CGSize {
@@ -80,7 +80,7 @@ pub struct CGSize {
     pub height: f64,
 }
 
-/// Error codes from AXUIElement functions
+/// Error codes from `AXUIElement` functions
 pub const AX_ERROR_SUCCESS: i32 = 0;
 pub const AX_ERROR_FAILURE: i32 = -25200;
 pub const AX_ERROR_ILLEGAL_ARGUMENT: i32 = -25201;
@@ -98,6 +98,7 @@ pub const AX_ERROR_PARAMETERIZED_ATTRIBUTE_UNSUPPORTED: i32 = -25212;
 pub const AX_ERROR_NOT_ENOUGH_PRECISION: i32 = -25213;
 
 /// Check if accessibility permissions are enabled
+#[must_use] 
 pub fn check_accessibility_enabled() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
@@ -124,8 +125,7 @@ pub fn create_application_element(pid: i32) -> AXResult<AXUIElementRef> {
     let element = unsafe { AXUIElementCreateApplication(pid) };
     if element.is_null() {
         return Err(AXError::SystemError(format!(
-            "Failed to create element for pid {}",
-            pid
+            "Failed to create element for pid {pid}"
         )));
     }
     Ok(element)
@@ -137,7 +137,7 @@ pub fn get_attribute(element: AXUIElementRef, attribute: &str) -> AXResult<CFTyp
     let mut value: CFTypeRef = ptr::null();
 
     let result = unsafe {
-        AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef() as CFTypeRef, &mut value)
+        AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef() as CFTypeRef, &raw mut value)
     };
 
     if result != AX_ERROR_SUCCESS {
@@ -150,7 +150,7 @@ pub fn get_attribute(element: AXUIElementRef, attribute: &str) -> AXResult<CFTyp
 /// Perform an action on an element
 ///
 /// This is the core function that enables BACKGROUND testing.
-/// AXUIElementPerformAction works on unfocused windows!
+/// `AXUIElementPerformAction` works on unfocused windows!
 pub fn perform_action(element: AXUIElementRef, action: &str) -> AXResult<()> {
     let action_str = CFString::new(action);
 
@@ -167,7 +167,7 @@ pub fn perform_action(element: AXUIElementRef, action: &str) -> AXResult<()> {
 /// Get the PID of the application owning an element
 pub fn get_element_pid(element: AXUIElementRef) -> AXResult<i32> {
     let mut pid: i32 = 0;
-    let result = unsafe { AXUIElementGetPid(element, &mut pid) };
+    let result = unsafe { AXUIElementGetPid(element, &raw mut pid) };
 
     if result != AX_ERROR_SUCCESS {
         return Err(AXError::SystemError("Failed to get PID".into()));
@@ -176,24 +176,26 @@ pub fn get_element_pid(element: AXUIElementRef) -> AXResult<i32> {
     Ok(pid)
 }
 
-/// Release a CFTypeRef
+/// Release a `CFTypeRef`
 pub fn release_cf(cf: CFTypeRef) {
     if !cf.is_null() {
         unsafe { CFRelease(cf) };
     }
 }
 
-/// Retain a CFTypeRef (increment reference count)
+/// Retain a `CFTypeRef` (increment reference count)
 /// Returns the same pointer for convenience
+#[must_use] 
 pub fn retain_cf(cf: CFTypeRef) -> CFTypeRef {
-    if !cf.is_null() {
-        unsafe { CFRetain(cf) }
-    } else {
+    if cf.is_null() {
         cf
+    } else {
+        unsafe { CFRetain(cf) }
     }
 }
 
 /// Get string attribute value from an element
+#[must_use] 
 pub fn get_string_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -215,6 +217,7 @@ pub fn get_string_attribute_value(element: AXUIElementRef, attribute: &str) -> O
 }
 
 /// Get boolean attribute value from an element
+#[must_use] 
 pub fn get_bool_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<bool> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -236,6 +239,7 @@ pub fn get_bool_attribute_value(element: AXUIElementRef, attribute: &str) -> Opt
 }
 
 /// Get number attribute value from an element
+#[must_use] 
 pub fn get_number_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<f64> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -256,7 +260,8 @@ pub fn get_number_attribute_value(element: AXUIElementRef, attribute: &str) -> O
     }
 }
 
-/// Get position (CGPoint) from AXValue
+/// Get position (`CGPoint`) from `AXValue`
+#[must_use] 
 pub fn get_position_attribute(element: AXUIElementRef) -> Option<CGPoint> {
     let value = get_attribute(element, attributes::AX_POSITION).ok()?;
     if value.is_null() {
@@ -274,7 +279,7 @@ pub fn get_position_attribute(element: AXUIElementRef) -> Option<CGPoint> {
         AXValueGetValue(
             value as AXValueRef,
             AXValueType::CGPoint,
-            &mut point as *mut _ as *mut c_void,
+            (&raw mut point).cast::<c_void>(),
         )
     };
 
@@ -287,7 +292,8 @@ pub fn get_position_attribute(element: AXUIElementRef) -> Option<CGPoint> {
     }
 }
 
-/// Get size (CGSize) from AXValue
+/// Get size (`CGSize`) from `AXValue`
+#[must_use] 
 pub fn get_size_attribute(element: AXUIElementRef) -> Option<CGSize> {
     let value = get_attribute(element, attributes::AX_SIZE).ok()?;
     if value.is_null() {
@@ -305,7 +311,7 @@ pub fn get_size_attribute(element: AXUIElementRef) -> Option<CGSize> {
         AXValueGetValue(
             value as AXValueRef,
             AXValueType::CGSize,
-            &mut size as *mut _ as *mut c_void,
+            (&raw mut size).cast::<c_void>(),
         )
     };
 
@@ -340,7 +346,7 @@ pub fn set_attribute_value(
 /// Set a string attribute value on an element
 ///
 /// Convenience wrapper for setting text values.
-/// Commonly used for AXValue attribute to set text field contents.
+/// Commonly used for `AXValue` attribute to set text field contents.
 pub fn set_string_attribute_value(
     element: AXUIElementRef,
     attribute: &str,
@@ -357,7 +363,7 @@ pub fn set_string_attribute_value(
 /// Set a boolean attribute value on an element
 ///
 /// Convenience wrapper for setting boolean values.
-/// Commonly used for AXFocused attribute.
+/// Commonly used for `AXFocused` attribute.
 pub fn set_bool_attribute_value(
     element: AXUIElementRef,
     attribute: &str,
@@ -373,7 +379,8 @@ pub fn set_bool_attribute_value(
 
 /// Get a point attribute (generic version)
 ///
-/// Unlike get_position_attribute, this accepts any attribute name.
+/// Unlike `get_position_attribute`, this accepts any attribute name.
+#[must_use] 
 pub fn get_point_attribute(element: AXUIElementRef, attribute: &str) -> Option<CGPoint> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -391,7 +398,7 @@ pub fn get_point_attribute(element: AXUIElementRef, attribute: &str) -> Option<C
         AXValueGetValue(
             value as AXValueRef,
             AXValueType::CGPoint,
-            &mut point as *mut _ as *mut c_void,
+            (&raw mut point).cast::<c_void>(),
         )
     };
 
@@ -406,7 +413,8 @@ pub fn get_point_attribute(element: AXUIElementRef, attribute: &str) -> Option<C
 
 /// Get a size attribute (generic version)
 ///
-/// Unlike get_size_attribute, this accepts any attribute name.
+/// Unlike `get_size_attribute`, this accepts any attribute name.
+#[must_use] 
 pub fn get_size_attribute_generic(element: AXUIElementRef, attribute: &str) -> Option<CGSize> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -424,7 +432,7 @@ pub fn get_size_attribute_generic(element: AXUIElementRef, attribute: &str) -> O
         AXValueGetValue(
             value as AXValueRef,
             AXValueType::CGSize,
-            &mut size as *mut _ as *mut c_void,
+            (&raw mut size).cast::<c_void>(),
         )
     };
 
@@ -472,25 +480,25 @@ pub fn get_children(element: AXUIElementRef) -> AXResult<Vec<AXUIElementRef>> {
     Ok(children)
 }
 
-/// Convert AX error code to AXResult
+/// Convert AX error code to `AXResult`
 fn ax_error_to_result(code: i32, context: &str) -> AXError {
     match code {
         AX_ERROR_FAILURE => AXError::ActionFailed(context.into()),
         AX_ERROR_ILLEGAL_ARGUMENT => {
-            AXError::InvalidQuery(format!("Illegal argument: {}", context))
+            AXError::InvalidQuery(format!("Illegal argument: {context}"))
         }
         AX_ERROR_INVALID_ELEMENT => AXError::ElementNotFound(context.into()),
-        AX_ERROR_CANNOT_COMPLETE => AXError::ActionFailed(format!("Cannot complete: {}", context)),
+        AX_ERROR_CANNOT_COMPLETE => AXError::ActionFailed(format!("Cannot complete: {context}")),
         AX_ERROR_ATTRIBUTE_UNSUPPORTED => {
-            AXError::InvalidQuery(format!("Attribute unsupported: {}", context))
+            AXError::InvalidQuery(format!("Attribute unsupported: {context}"))
         }
         AX_ERROR_ACTION_UNSUPPORTED => {
-            AXError::BackgroundNotSupported(format!("Action unsupported: {}", context))
+            AXError::BackgroundNotSupported(format!("Action unsupported: {context}"))
         }
         AX_ERROR_NOT_PERMITTED => AXError::AccessibilityNotEnabled,
         AX_ERROR_API_DISABLED => AXError::AccessibilityNotEnabled,
-        AX_ERROR_NO_VALUE => AXError::ElementNotFound(format!("No value for: {}", context)),
-        _ => AXError::SystemError(format!("Unknown error {}: {}", code, context)),
+        AX_ERROR_NO_VALUE => AXError::ElementNotFound(format!("No value for: {context}")),
+        _ => AXError::SystemError(format!("Unknown error {code}: {context}")),
     }
 }
 
