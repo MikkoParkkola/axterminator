@@ -12,6 +12,7 @@ use core_foundation::string::CFString;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ptr;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use crate::accessibility::{get_attribute, AXUIElementRef};
@@ -535,13 +536,17 @@ impl SyncEngine {
     /// # Returns
     /// * `true` if app became idle within timeout
     /// * `false` if timeout exceeded
-    #[must_use] 
+    #[must_use]
     pub fn wait_for_idle(&self, timeout: Duration) -> bool {
+        // Static runtime to avoid per-call allocation (FMEA fix: Risk 9→2)
+        static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+        let runtime = RUNTIME.get_or_init(|| {
+            tokio::runtime::Runtime::new().expect("Failed to create tokio runtime")
+        });
+
         match self.mode {
             SyncMode::XPC => {
                 if let Some(ref xpc) = self.xpc {
-                    // Use tokio runtime for async wait
-                    let runtime = tokio::runtime::Runtime::new().unwrap();
                     runtime.block_on(xpc.wait_for_idle(timeout))
                 } else {
                     // XPC requested but unavailable, fall back
@@ -551,7 +556,6 @@ impl SyncEngine {
             SyncMode::Heuristic => self.heuristic.wait_for_stable(timeout),
             SyncMode::Auto => {
                 if let Some(ref xpc) = self.xpc {
-                    let runtime = tokio::runtime::Runtime::new().unwrap();
                     runtime.block_on(xpc.wait_for_idle(timeout))
                 } else {
                     self.heuristic.wait_for_stable(timeout)

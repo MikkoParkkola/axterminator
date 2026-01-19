@@ -37,7 +37,7 @@ pub enum AppType {
 
 impl AppType {
     /// Get human-readable name
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Self::Native => "Native",
@@ -106,7 +106,9 @@ impl CDPConnection {
         }
 
         // Try common Electron debugging ports
-        [9222, 9223, 9224, 9225].into_iter().find(|&port| Self::test_cdp_port(port))
+        [9222, 9223, 9224, 9225]
+            .into_iter()
+            .find(|&port| Self::test_cdp_port(port))
     }
 
     /// Test if a port has a CDP endpoint
@@ -114,9 +116,7 @@ impl CDPConnection {
         let addr = format!("127.0.0.1:{port}");
         if let Ok(mut stream) = TcpStream::connect(&addr) {
             // Send a simple HTTP GET to /json/version
-            let request = format!(
-                "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"
-            );
+            let request = format!("GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
             if stream.write_all(request.as_bytes()).is_ok() {
                 let mut buf = [0u8; 1024];
                 if let Ok(n) = stream.read(&mut buf) {
@@ -268,8 +268,13 @@ impl CDPElement {
             .as_array()
             .ok_or_else(|| AXError::SystemError("Invalid box model".into()))?;
 
-        let x = f64::midpoint(coords[0].as_f64().unwrap_or(0.0), coords[4].as_f64().unwrap_or(0.0));
-        let y = f64::midpoint(coords[1].as_f64().unwrap_or(0.0), coords[5].as_f64().unwrap_or(0.0));
+        // Calculate center point - stable Rust (no f64::midpoint)
+        let x0 = coords[0].as_f64().unwrap_or(0.0);
+        let x1 = coords[4].as_f64().unwrap_or(0.0);
+        let y0 = coords[1].as_f64().unwrap_or(0.0);
+        let y1 = coords[5].as_f64().unwrap_or(0.0);
+        let x = (x0 + x1) * 0.5;
+        let y = (y0 + y1) * 0.5;
 
         // Dispatch click event
         conn.execute(
@@ -334,7 +339,7 @@ impl WebViewBridge {
     /// # Returns
     /// * `Some(WebViewBridge)` if element is a valid `WebView`
     /// * `None` if element is not a `WebView`
-    #[must_use] 
+    #[must_use]
     pub fn from_element(element: AXUIElementRef) -> Option<Self> {
         // Check if element is a WebView by examining its role
         let role = accessibility::get_attribute(element, accessibility::attributes::AX_ROLE)
@@ -442,7 +447,7 @@ impl TestRouter {
     }
 
     /// Get the app type
-    #[must_use] 
+    #[must_use]
     pub fn app_type(&self) -> AppType {
         self.app_type
     }
