@@ -365,9 +365,9 @@ class TestAppMethods:
     @pytest.mark.requires_app
     def test_app_terminate_method(self, calculator_app: TestApp) -> None:
         """terminate() method kills the app."""
-        import axterminator as ax
-
         import time
+
+        import axterminator as ax
 
         app = ax.app(name="Calculator")
         assert app.is_running()

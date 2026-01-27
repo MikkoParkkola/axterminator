@@ -502,8 +502,9 @@ class TestAsyncSync:
     @pytest.mark.requires_app
     def test_sync_doesnt_block_other_threads(self, calculator_app: TestApp) -> None:
         """Sync operations don't block Python GIL excessively."""
-        import axterminator as ax
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        import axterminator as ax
 
         app = ax.app(name="Calculator")
 

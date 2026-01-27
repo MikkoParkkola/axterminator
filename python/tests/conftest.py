@@ -13,9 +13,10 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Generator
+from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
