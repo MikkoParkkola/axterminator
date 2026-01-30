@@ -46,3 +46,7 @@ EspressoMacSDK/Package.resolved
 *.tmp
 *.bak
 *.log
+
+# Build caches
+.mypy_cache/
+.ruff_cache/
