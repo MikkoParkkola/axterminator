@@ -93,7 +93,7 @@ impl EspressoMacClient {
     /// # Returns
     /// * `Some(Self)` if connection successful
     /// * `None` if app does not have `EspressoMac` SDK or service unavailable
-    #[must_use] 
+    #[must_use]
     pub fn connect(pid: i32) -> Option<Self> {
         unsafe {
             // Create service name with PID suffix (apps expose per-process XPC services)
@@ -146,7 +146,7 @@ impl EspressoMacClient {
     /// # Returns
     /// * `true` if app is idle (no pending UI updates, animations, or work)
     /// * `false` if app is busy or query failed
-    #[must_use] 
+    #[must_use]
     pub fn is_idle(&self) -> bool {
         let Some(connection) = self.connection else {
             return false;
@@ -278,7 +278,7 @@ impl HeuristicSync {
     /// # Arguments
     /// * `pid` - Process ID of the target application
     /// * `element` - Root accessibility element of the application
-    #[must_use] 
+    #[must_use]
     pub fn new(pid: i32, element: AXUIElementRef) -> Self {
         Self {
             pid,
@@ -296,7 +296,7 @@ impl HeuristicSync {
     /// # Returns
     /// * `true` if tree stabilized within timeout
     /// * `false` if timeout exceeded
-    #[must_use] 
+    #[must_use]
     pub fn wait_for_stable(&self, timeout: Duration) -> bool {
         let start = Instant::now();
         let mut stable_count = 0;
@@ -333,7 +333,7 @@ impl HeuristicSync {
     ///
     /// # Returns
     /// * Hash value representing the current tree state
-    #[must_use] 
+    #[must_use]
     pub fn hash_tree(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
 
@@ -451,8 +451,7 @@ unsafe impl Send for HeuristicSync {}
 unsafe impl Sync for HeuristicSync {}
 
 /// Synchronization mode selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SyncMode {
     /// Use `EspressoMac` XPC service (fastest, most accurate)
     XPC,
@@ -462,7 +461,6 @@ pub enum SyncMode {
     #[default]
     Auto,
 }
-
 
 /// Unified synchronization engine
 ///
@@ -493,7 +491,7 @@ impl SyncEngine {
     ///
     /// # Returns
     /// * `Self` - Configured sync engine with best available strategy
-    #[must_use] 
+    #[must_use]
     pub fn new(pid: i32, element: AXUIElementRef) -> Self {
         // XPC connection disabled for now - the XPC calls crash when service doesn't exist
         // TODO: Re-enable when EspressoMac SDK is properly set up in target apps
@@ -518,7 +516,7 @@ impl SyncEngine {
     /// * `pid` - Process ID
     /// * `element` - Root accessibility element
     /// * `mode` - Explicit synchronization mode
-    #[must_use] 
+    #[must_use]
     pub fn with_mode(pid: i32, element: AXUIElementRef, mode: SyncMode) -> Self {
         // XPC connection disabled - crashes when service doesn't exist
         let xpc: Option<EspressoMacClient> = None;
@@ -572,7 +570,7 @@ impl SyncEngine {
     /// # Returns
     /// * `true` if app is idle
     /// * `false` if app is busy or state unknown
-    #[must_use] 
+    #[must_use]
     pub fn is_idle(&self) -> bool {
         match self.mode {
             SyncMode::XPC => self.xpc.as_ref().is_some_and(EspressoMacClient::is_idle),
@@ -597,13 +595,13 @@ impl SyncEngine {
     }
 
     /// Get the current synchronization mode in use
-    #[must_use] 
+    #[must_use]
     pub fn mode(&self) -> SyncMode {
         self.mode
     }
 
     /// Check if XPC connection is available
-    #[must_use] 
+    #[must_use]
     pub fn has_xpc(&self) -> bool {
         self.xpc.is_some()
     }

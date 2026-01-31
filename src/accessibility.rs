@@ -106,7 +106,7 @@ pub const AX_ERROR_PARAMETERIZED_ATTRIBUTE_UNSUPPORTED: i32 = -25212;
 pub const AX_ERROR_NOT_ENOUGH_PRECISION: i32 = -25213;
 
 /// Check if accessibility permissions are enabled
-#[must_use] 
+#[must_use]
 pub fn check_accessibility_enabled() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
@@ -145,7 +145,11 @@ pub fn get_attribute(element: AXUIElementRef, attribute: &str) -> AXResult<CFTyp
     let mut value: CFTypeRef = ptr::null();
 
     let result = unsafe {
-        AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef() as CFTypeRef, &raw mut value)
+        AXUIElementCopyAttributeValue(
+            element,
+            attr.as_concrete_TypeRef() as CFTypeRef,
+            &raw mut value,
+        )
     };
 
     if result != AX_ERROR_SUCCESS {
@@ -193,7 +197,7 @@ pub fn release_cf(cf: CFTypeRef) {
 
 /// Retain a `CFTypeRef` (increment reference count)
 /// Returns the same pointer for convenience
-#[must_use] 
+#[must_use]
 pub fn retain_cf(cf: CFTypeRef) -> CFTypeRef {
     if cf.is_null() {
         cf
@@ -203,7 +207,7 @@ pub fn retain_cf(cf: CFTypeRef) -> CFTypeRef {
 }
 
 /// Get string attribute value from an element
-#[must_use] 
+#[must_use]
 pub fn get_string_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -225,7 +229,7 @@ pub fn get_string_attribute_value(element: AXUIElementRef, attribute: &str) -> O
 }
 
 /// Get boolean attribute value from an element
-#[must_use] 
+#[must_use]
 pub fn get_bool_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<bool> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -247,7 +251,7 @@ pub fn get_bool_attribute_value(element: AXUIElementRef, attribute: &str) -> Opt
 }
 
 /// Get number attribute value from an element
-#[must_use] 
+#[must_use]
 pub fn get_number_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<f64> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -269,7 +273,7 @@ pub fn get_number_attribute_value(element: AXUIElementRef, attribute: &str) -> O
 }
 
 /// Get position (`CGPoint`) from `AXValue`
-#[must_use] 
+#[must_use]
 pub fn get_position_attribute(element: AXUIElementRef) -> Option<CGPoint> {
     let value = get_attribute(element, attributes::AX_POSITION).ok()?;
     if value.is_null() {
@@ -301,7 +305,7 @@ pub fn get_position_attribute(element: AXUIElementRef) -> Option<CGPoint> {
 }
 
 /// Get size (`CGSize`) from `AXValue`
-#[must_use] 
+#[must_use]
 pub fn get_size_attribute(element: AXUIElementRef) -> Option<CGSize> {
     let value = get_attribute(element, attributes::AX_SIZE).ok()?;
     if value.is_null() {
@@ -388,7 +392,7 @@ pub fn set_bool_attribute_value(
 /// Get a point attribute (generic version)
 ///
 /// Unlike `get_position_attribute`, this accepts any attribute name.
-#[must_use] 
+#[must_use]
 pub fn get_point_attribute(element: AXUIElementRef, attribute: &str) -> Option<CGPoint> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -422,7 +426,7 @@ pub fn get_point_attribute(element: AXUIElementRef, attribute: &str) -> Option<C
 /// Get a size attribute (generic version)
 ///
 /// Unlike `get_size_attribute`, this accepts any attribute name.
-#[must_use] 
+#[must_use]
 pub fn get_size_attribute_generic(element: AXUIElementRef, attribute: &str) -> Option<CGSize> {
     let value = get_attribute(element, attribute).ok()?;
     if value.is_null() {
@@ -492,9 +496,7 @@ pub fn get_children(element: AXUIElementRef) -> AXResult<Vec<AXUIElementRef>> {
 fn ax_error_to_result(code: i32, context: &str) -> AXError {
     match code {
         AX_ERROR_FAILURE => AXError::ActionFailed(context.into()),
-        AX_ERROR_ILLEGAL_ARGUMENT => {
-            AXError::InvalidQuery(format!("Illegal argument: {context}"))
-        }
+        AX_ERROR_ILLEGAL_ARGUMENT => AXError::InvalidQuery(format!("Illegal argument: {context}")),
         AX_ERROR_INVALID_ELEMENT => AXError::ElementNotFound(context.into()),
         AX_ERROR_CANNOT_COMPLETE => AXError::ActionFailed(format!("Cannot complete: {context}")),
         AX_ERROR_ATTRIBUTE_UNSUPPORTED => {

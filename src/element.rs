@@ -174,7 +174,7 @@ impl AXElement {
 
 impl AXElement {
     /// Create a new element wrapper
-    #[must_use] 
+    #[must_use]
     pub fn new(element: AXUIElementRef) -> Self {
         Self {
             element,

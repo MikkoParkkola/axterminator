@@ -437,8 +437,7 @@ impl AXApp {
         // Check role
         if let Some(required_role) = &criteria.role {
             if let Ok(role_ref) = get_attribute(element, attributes::AX_ROLE) {
-                let matches = cf_string_to_string(role_ref)
-                    .is_some_and(|r| &r == required_role);
+                let matches = cf_string_to_string(role_ref).is_some_and(|r| &r == required_role);
                 accessibility::release_cf(role_ref);
                 if !matches {
                     return false;
@@ -451,8 +450,8 @@ impl AXApp {
         // Check title
         if let Some(required_title) = &criteria.title {
             if let Ok(title_ref) = get_attribute(element, attributes::AX_TITLE) {
-                let matches = cf_string_to_string(title_ref)
-                    .is_some_and(|t| t.contains(required_title));
+                let matches =
+                    cf_string_to_string(title_ref).is_some_and(|t| t.contains(required_title));
                 accessibility::release_cf(title_ref);
                 if !matches {
                     return false;
@@ -465,8 +464,7 @@ impl AXApp {
         // Check identifier
         if let Some(required_id) = &criteria.identifier {
             if let Ok(id_ref) = get_attribute(element, attributes::AX_IDENTIFIER) {
-                let matches = cf_string_to_string(id_ref)
-                    .is_some_and(|i| &i == required_id);
+                let matches = cf_string_to_string(id_ref).is_some_and(|i| &i == required_id);
                 accessibility::release_cf(id_ref);
                 if !matches {
                     return false;
@@ -479,8 +477,8 @@ impl AXApp {
         // Check label
         if let Some(required_label) = &criteria.label {
             if let Ok(label_ref) = get_attribute(element, attributes::AX_LABEL) {
-                let matches = cf_string_to_string(label_ref)
-                    .is_some_and(|l| l.contains(required_label));
+                let matches =
+                    cf_string_to_string(label_ref).is_some_and(|l| l.contains(required_label));
                 accessibility::release_cf(label_ref);
                 if !matches {
                     return false;

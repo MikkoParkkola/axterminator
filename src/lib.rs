@@ -51,8 +51,7 @@ pub use sync::*;
 
 /// Action mode for element interactions
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActionMode {
     /// Perform action in background without stealing focus (DEFAULT)
     #[default]
@@ -60,7 +59,6 @@ pub enum ActionMode {
     /// Bring app to foreground and focus element
     Focus,
 }
-
 
 /// Initialize the Python module
 #[pymodule]

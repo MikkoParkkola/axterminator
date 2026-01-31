@@ -34,7 +34,7 @@ pub struct ElementCache {
 
 impl ElementCache {
     /// Create a new element cache
-    #[must_use] 
+    #[must_use]
     pub fn new(capacity: usize, max_age_ms: u64) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(
