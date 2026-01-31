@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-rust:
+    name: Build Rust ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon
+          - os: macos-14
+            target: aarch64-apple-darwin
+          # macOS Intel
+          - os: macos-15
+            target: x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          # The library is the main output for this crate
+          if [ -f libaxterminator.dylib ]; then
+            cp libaxterminator.dylib axterminator-${{ matrix.target }}.dylib
+          fi
+          # Also package the rlib if it exists
+          if [ -f libaxterminator.rlib ]; then
+            cp libaxterminator.rlib axterminator-${{ matrix.target }}.rlib
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axterminator-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/axterminator-${{ matrix.target }}.*
+
+  build-python:
+    name: Build Python wheel ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-15
+            target: x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build wheel
+        run: maturin build --release --target ${{ matrix.target }}
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: target/wheels/*.whl
+
+  release:
+    name: Create Release
+    needs: [build-rust, build-python]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          # Copy all artifacts to release folder
+          find artifacts -type f \( -name "*.dylib" -o -name "*.rlib" -o -name "*.whl" \) -exec cp {} release/ \;
+          cd release
+          ls -la
+          sha256sum * > checksums-sha256.txt || shasum -a 256 * > checksums-sha256.txt
+          cat checksums-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/*

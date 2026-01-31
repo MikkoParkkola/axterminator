@@ -39,10 +39,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mikko/axterminator"
-Documentation = "https://github.com/mikko/axterminator#readme"
-Repository = "https://github.com/mikko/axterminator"
-Issues = "https://github.com/mikko/axterminator/issues"
+Homepage = "https://github.com/MikkoParkkola/axterminator"
+Documentation = "https://github.com/MikkoParkkola/axterminator#readme"
+Repository = "https://github.com/MikkoParkkola/axterminator"
+Issues = "https://github.com/MikkoParkkola/axterminator/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
