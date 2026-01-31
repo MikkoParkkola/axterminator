@@ -9,10 +9,11 @@
 | Capability | AXTerminator | XCUITest | Appium | Others |
 |------------|-------------|----------|--------|--------|
 | **Background Testing** | ✅ WORLD FIRST | ❌ | ❌ | ❌ |
-| **Element Access** | 242µs | ~500ms | ~2s | 10-1000x slower |
-| **Full Test Scenario** | 103ms | ~3s | 6.6s | 30-64x slower |
+| **Element Access** | ~250µs ¹ | ~200ms | ~500ms-2s | 800-8000× slower |
 | **Cross-App Testing** | ✅ Native | ❌ | Limited | ❌ |
-| **Self-Healing** | 7-strategy | ❌ | Basic | 1-2 strategy |
+| **Self-Healing** | 6+1 strategies ² | ❌ | Basic | 1-2 strategy |
+
+<sup>¹ Measured via `bench_quick.rs` - direct AX API access. ² 6 implemented + visual_vlm (experimental)</sup>
 
 ## Quick Start
 
@@ -52,14 +53,15 @@ for _ in range(100):
     app.find("Refresh").click()  # All background
 ```
 
-### ⚡ 60-100x Faster
+### ⚡ 800-2000× Faster
 
-- Element access: 242µs (vs 500ms-2s competitors)
-- Full login test: 103ms (vs 6.6s Appium)
+- Element access: ~250µs (vs 200ms-2s competitors)
+- Direct macOS Accessibility API - no HTTP/WebDriver overhead
+- Benchmarked with `rustc -O bench_quick.rs && ./bench_quick`
 
 ### 🔧 Self-Healing Locators
 
-7-strategy fallback for robust element location:
+6+1 strategy fallback for robust element location:
 
 ```python
 ax.configure_healing(HealingConfig(
@@ -67,10 +69,10 @@ ax.configure_healing(HealingConfig(
         "data_testid",   # Best - developer-set stable IDs
         "aria_label",    # Accessibility labels
         "identifier",    # AX identifier
-        "title",         # Element title
+        "title",         # Element title (fuzzy matching)
         "xpath",         # Structural path
         "position",      # Relative position
-        "visual_vlm",    # VLM fallback (last resort)
+        # "visual_vlm",  # Experimental - VLM fallback (coming soon)
     ],
     max_heal_time_ms=100,
 ))
