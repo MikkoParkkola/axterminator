@@ -24,6 +24,9 @@
 //! safari.find("URL").type_text("https://example.com", mode=ax.FOCUS)
 //! ```
 
+#![allow(hidden_glob_reexports)]
+#![allow(clippy::useless_conversion)]
+
 use pyo3::prelude::*;
 
 mod accessibility;
@@ -47,7 +50,7 @@ pub use router::*;
 pub use sync::*;
 
 /// Action mode for element interactions
-#[pyclass]
+#[pyclass(eq, eq_int)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[derive(Default)]
 pub enum ActionMode {

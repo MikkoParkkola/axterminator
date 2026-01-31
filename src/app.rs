@@ -1,5 +1,7 @@
 //! Application wrapper for `AXTerminator`
 
+#![allow(clippy::useless_conversion)]
+
 use pyo3::prelude::*;
 use std::process::Command;
 use std::sync::Arc;
@@ -385,7 +387,7 @@ impl AXApp {
         // First check the root element itself
         if self.element_matches(self.element, criteria) {
             // Need to retain since self owns the original
-            accessibility::retain_cf(self.element as CFTypeRef);
+            let _ = accessibility::retain_cf(self.element as CFTypeRef);
             return Ok(AXElement::new(self.element));
         }
 
@@ -639,7 +641,7 @@ fn cf_array_to_vec(cf_ref: core_foundation::base::CFTypeRef) -> Option<Vec<AXUIE
                 let element_ptr = element_ref.as_concrete_TypeRef() as AXUIElementRef;
                 if !element_ptr.is_null() {
                     // CRITICAL: Retain each element so it survives after cf_array is dropped
-                    accessibility::retain_cf(element_ptr as CFTypeRef);
+                    let _ = accessibility::retain_cf(element_ptr as CFTypeRef);
                     result.push(element_ptr);
                 }
             }

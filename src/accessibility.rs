@@ -1,6 +1,13 @@
 //! macOS Accessibility API bindings
 //!
 //! Provides safe Rust wrappers around the macOS Accessibility APIs (`AXUIElement`).
+//!
+//! # Safety
+//!
+//! These functions wrap low-level macOS APIs that require raw pointers.
+//! The callers must ensure the pointers are valid AXUIElement references.
+
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFTypeRef, TCFType};
@@ -14,6 +21,7 @@ use crate::error::{AXError, AXResult};
 
 // External declarations for macOS Accessibility APIs
 #[link(name = "ApplicationServices", kind = "framework")]
+#[allow(dead_code)]
 extern "C" {
     fn AXIsProcessTrusted() -> bool;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;

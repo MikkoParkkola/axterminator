@@ -50,6 +50,7 @@ impl AppType {
 
 /// Chrome `DevTools` Protocol connection
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct CDPConnection {
     /// WebSocket connection to CDP endpoint
     socket: WebSocket<MaybeTlsStream<TcpStream>>,
@@ -228,6 +229,7 @@ struct CDPResponse {
 
 /// CDP error
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CDPError {
     code: i32,
     message: String,
@@ -325,6 +327,7 @@ impl CDPElement {
 }
 
 /// `WebView` bridge for hybrid apps
+#[allow(dead_code)]
 pub struct WebViewBridge {
     /// Accessibility element representing the `WebView`
     webview_element: AXUIElementRef,
@@ -395,6 +398,7 @@ impl WebViewBridge {
 }
 
 /// Unified test router
+#[allow(dead_code)]
 pub struct TestRouter {
     /// Detected app type
     app_type: AppType,

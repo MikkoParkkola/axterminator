@@ -1,5 +1,7 @@
 //! Accessibility element wrapper
 
+#![allow(clippy::useless_conversion)]
+
 use pyo3::prelude::*;
 use std::time::Duration;
 
@@ -25,7 +27,7 @@ pub struct AXElement {
 impl Clone for AXElement {
     fn clone(&self) -> Self {
         // CRITICAL: Retain the element so both copies own a reference
-        accessibility::retain_cf(self.element.cast());
+        let _ = accessibility::retain_cf(self.element.cast());
         Self {
             element: self.element,
             role: self.role.clone(),

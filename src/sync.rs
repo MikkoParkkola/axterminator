@@ -21,6 +21,7 @@ use crate::error::AXResult;
 // XPC service identifiers for EspressoMac
 const ESPRESSOMAC_SERVICE_NAME: &str = "com.apple.EspressoMac.xpc";
 const ESPRESSOMAC_SELECTOR_IDLE: &str = "isIdle";
+#[allow(dead_code)]
 const ESPRESSOMAC_SELECTOR_WAIT: &str = "waitForIdle";
 
 // XPC type definitions (from libxpc.dylib)
@@ -77,6 +78,7 @@ const XPC_TYPE_ERROR_SENTINEL: usize = 1;
 ///
 /// This client connects to the `EspressoMac` XPC service embedded in SDK-enabled apps.
 /// It provides real-time idle state information from the app's internal state machine.
+#[allow(dead_code)]
 pub struct EspressoMacClient {
     connection: Option<xpc_connection_t>,
     pid: i32,
@@ -239,6 +241,7 @@ unsafe impl Send for EspressoMacClient {}
 unsafe impl Sync for EspressoMacClient {}
 
 /// Helper enum for XPC message values
+#[allow(dead_code)]
 enum MessageValue {
     Bool(bool),
     Int(i64),
