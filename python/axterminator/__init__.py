@@ -14,6 +14,9 @@ from axterminator.axterminator import (
     is_accessibility_enabled,
 )
 
+# VLM integration for visual element detection
+from axterminator.vlm import configure_vlm, detect_element_visual
+
 __all__ = [
     "ActionMode",
     "AXApp",
@@ -22,6 +25,8 @@ __all__ = [
     "app",
     "is_accessibility_enabled",
     "configure_healing",
+    "configure_vlm",
+    "detect_element_visual",
     "BACKGROUND",
     "FOCUS",
     "__version__",

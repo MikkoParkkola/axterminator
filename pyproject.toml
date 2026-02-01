@@ -37,6 +37,20 @@ dev = [
     "mypy>=1.0",
     "ruff>=0.1.0",
 ]
+vlm = [
+    "mlx-vlm>=0.1.0",
+]
+vlm-anthropic = [
+    "anthropic>=0.25.0",
+]
+vlm-openai = [
+    "openai>=1.0.0",
+]
+vlm-all = [
+    "mlx-vlm>=0.1.0",
+    "anthropic>=0.25.0",
+    "openai>=1.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/MikkoParkkola/axterminator"

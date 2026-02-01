@@ -1,6 +1,15 @@
 //! Self-healing element location system
 //!
 //! Implements 7-strategy fallback for robust element location.
+//!
+//! Strategies (in order of preference):
+//! 1. data_testid - Developer-set stable IDs
+//! 2. aria_label - Accessibility labels
+//! 3. identifier - AX identifier
+//! 4. title - Element title (fuzzy matching)
+//! 5. xpath - Structural path
+//! 6. position - Relative coordinates
+//! 7. visual_vlm - VLM-based visual detection (MLX/Claude/GPT-4V)
 
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, TCFType};
@@ -584,13 +593,170 @@ fn try_by_position(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEleme
     }
 }
 
-fn try_by_visual(_query: &ElementQuery, _root: AXUIElementRef) -> Option<AXElement> {
-    // Placeholder for VLM-based visual matching
-    // This would use MLX or similar for element identification from screenshots
-    // Future implementation:
-    // 1. Take screenshot if not provided
-    // 2. Use MLX-based VLM to identify element from description
-    // 3. Return element at identified coordinates
+fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement> {
+    // VLM-based visual matching using Python MLX/Claude/GPT-4V
+    //
+    // Strategy:
+    // 1. Take screenshot of the window
+    // 2. Call Python VLM to identify element from description
+    // 3. Find element at returned coordinates
+
+    // Get description to search for
+    let description = query.description.as_ref().or(query.text_hint.as_ref())?;
+
+    // Take screenshot - try to get window bounds first
+    let screenshot_data = capture_window_screenshot(root)?;
+
+    // Get window dimensions for coordinate conversion
+    let (width, height) = get_window_dimensions(root)?;
+
+    // Call Python VLM detector
+    let result = Python::with_gil(|py| -> Option<(f64, f64)> {
+        // Import the VLM module
+        let vlm_module = py.import_bound("axterminator.vlm").ok()?;
+        let detect_fn = vlm_module.getattr("detect_element_visual").ok()?;
+
+        // Create PyBytes from screenshot data
+        let py_bytes = pyo3::types::PyBytes::new_bound(py, &screenshot_data);
+
+        // Call: detect_element_visual(image_data, description, width, height)
+        let result = detect_fn
+            .call1((py_bytes, description, width as i32, height as i32))
+            .ok()?;
+
+        // Parse result - returns Optional[(x, y)]
+        if result.is_none() {
+            return None;
+        }
+
+        let coords: (f64, f64) = result.extract().ok()?;
+        Some(coords)
+    });
+
+    // If we got coordinates, find element at that position
+    if let Some((x, y)) = result {
+        // Search for element at or near the coordinates
+        return find_element_at_position(root, x, y);
+    }
+
+    None
+}
+
+/// Capture screenshot of the window containing the root element
+fn capture_window_screenshot(root: AXUIElementRef) -> Option<Vec<u8>> {
+    use std::process::Command;
+
+    // Get the PID from the element
+    let pid = crate::accessibility::get_element_pid(root).ok()?;
+
+    // Get window ID for this app
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            &format!(
+                "tell application \"System Events\" to id of window 1 of (processes whose unix id is {})",
+                pid
+            ),
+        ])
+        .output()
+        .ok()?;
+
+    let window_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Capture screenshot to temp file
+    let temp_path = format!("/tmp/axterminator_vlm_screenshot_{}.png", pid);
+
+    let capture_result = Command::new("screencapture")
+        .args(["-l", &window_id, "-o", "-x", &temp_path])
+        .output()
+        .ok()?;
+
+    if !capture_result.status.success() {
+        return None;
+    }
+
+    // Read the screenshot data
+    let data = std::fs::read(&temp_path).ok()?;
+    let _ = std::fs::remove_file(&temp_path);
+
+    Some(data)
+}
+
+/// Get window dimensions
+fn get_window_dimensions(root: AXUIElementRef) -> Option<(f64, f64)> {
+    // Try to get size from the root element or its window
+    if let Some(size) = crate::accessibility::get_size_attribute(root) {
+        return Some((size.width, size.height));
+    }
+
+    // Try to find a window parent
+    let mut current = root;
+    for _ in 0..10 {
+        if let Some(role) = get_string_attr(current, attributes::AX_ROLE) {
+            if role == "AXWindow" {
+                if let Some(size) = crate::accessibility::get_size_attribute(current) {
+                    return Some((size.width, size.height));
+                }
+            }
+        }
+
+        // Get parent
+        if let Ok(parent_ref) = get_attribute(current, attributes::AX_PARENT) {
+            if parent_ref.is_null() {
+                break;
+            }
+            current = parent_ref as AXUIElementRef;
+        } else {
+            break;
+        }
+    }
+
+    // Default to screen size if we can't determine window size
+    Some((1920.0, 1080.0))
+}
+
+/// Find element at given screen coordinates
+fn find_element_at_position(root: AXUIElementRef, target_x: f64, target_y: f64) -> Option<AXElement> {
+    let mut best_match: Option<AXUIElementRef> = None;
+    let mut best_distance = f64::MAX;
+    let mut smallest_area = f64::MAX;
+
+    // Walk the tree looking for elements that contain the target point
+    walk_tree(
+        root,
+        &mut |element| {
+            if let Some((x, y, w, h)) = get_bounds(element) {
+                // Check if point is inside this element
+                if target_x >= x && target_x <= x + w && target_y >= y && target_y <= y + h {
+                    let area = w * h;
+                    // Prefer smaller elements (more specific match)
+                    if area < smallest_area {
+                        smallest_area = area;
+                        best_match = Some(element);
+                    }
+                } else {
+                    // If not inside, calculate distance to center
+                    let center_x = x + w / 2.0;
+                    let center_y = y + h / 2.0;
+                    let dist = ((center_x - target_x).powi(2) + (center_y - target_y).powi(2)).sqrt();
+                    if dist < best_distance && best_match.is_none() {
+                        best_distance = dist;
+                        best_match = Some(element);
+                    }
+                }
+            }
+            false // Continue walking
+        },
+        30, // Max depth
+    );
+
+    // Return the best match if within reasonable distance
+    if let Some(elem) = best_match {
+        // Retain the element for the new AXElement
+        let _ = crate::accessibility::retain_cf(elem.cast());
+        return Some(AXElement::new(elem));
+    }
+
     None
 }
 

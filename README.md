@@ -11,9 +11,9 @@
 | **Background Testing** | ✅ WORLD FIRST | ❌ | ❌ | ❌ |
 | **Element Access** | ~250µs ¹ | ~200ms | ~500ms-2s | 800-8000× slower |
 | **Cross-App Testing** | ✅ Native | ❌ | Limited | ❌ |
-| **Self-Healing** | 6+1 strategies ² | ❌ | Basic | 1-2 strategy |
+| **Self-Healing** | 7 strategies | ❌ | Basic | 1-2 strategy |
 
-<sup>¹ Measured via `bench_quick.rs` - direct AX API access. ² 6 implemented + visual_vlm (experimental)</sup>
+<sup>¹ Measured via `bench_quick.rs` - direct AX API access.</sup>
 
 ## Quick Start
 
@@ -61,7 +61,7 @@ for _ in range(100):
 
 ### 🔧 Self-Healing Locators
 
-6+1 strategy fallback for robust element location:
+7-strategy fallback for robust element location:
 
 ```python
 ax.configure_healing(HealingConfig(
@@ -72,10 +72,33 @@ ax.configure_healing(HealingConfig(
         "title",         # Element title (fuzzy matching)
         "xpath",         # Structural path
         "position",      # Relative position
-        # "visual_vlm",  # Experimental - VLM fallback (coming soon)
+        "visual_vlm",    # VLM fallback - uses AI vision (MLX/Claude/GPT-4V)
     ],
     max_heal_time_ms=100,
 ))
+```
+
+### 🤖 Visual Element Detection (visual_vlm)
+
+When all other strategies fail, use AI vision to find elements:
+
+```python
+import axterminator as ax
+
+# Configure VLM backend (choose one)
+ax.configure_vlm(backend="mlx")           # Local MLX - fast, private, free
+ax.configure_vlm(backend="anthropic")     # Claude Vision - accurate
+ax.configure_vlm(backend="openai")        # GPT-4V
+
+# Now visual_vlm strategy works in healing
+app.find(description="the blue Save button in the toolbar")
+```
+
+Install VLM support:
+```bash
+pip install mlx-vlm              # For local MLX
+pip install anthropic            # For Claude Vision
+pip install openai               # For GPT-4V
 ```
 
 ### 🌐 Unified API
