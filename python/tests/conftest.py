@@ -88,33 +88,40 @@ def calculator_app() -> Generator[TestApp, None, None]:
     Note: macOS Calculator UI has changed over versions.
     Tests using specific button titles may need adjustment.
     """
-    # Kill any existing Calculator instances first for clean state
-    subprocess.run(
-        ["pkill", "-x", "Calculator"],
-        capture_output=True,
-        check=False,
-    )
-    time.sleep(0.3)
-
-    # Launch Calculator
-    process = subprocess.Popen(
-        ["open", "-a", "Calculator", "--new"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    # Wait for app to launch and get PID
-    time.sleep(1.5)  # Give app more time to launch
-
-    # Get PID via pgrep - use -n for newest
+    # Check if Calculator is already running
     result = subprocess.run(
-        ["pgrep", "-n", "-x", "Calculator"],
+        ["pgrep", "-x", "Calculator"],
         capture_output=True,
         text=True,
         check=False,
     )
 
-    pid = int(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
+    existing_pid = None
+    if result.returncode == 0 and result.stdout.strip():
+        # Use existing Calculator
+        existing_pid = int(result.stdout.strip().split()[0])
+        pid = existing_pid
+        process = None
+    else:
+        # Launch Calculator
+        process = subprocess.Popen(
+            ["open", "-a", "Calculator"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Wait for app to launch and get PID
+        time.sleep(2.0)  # Give app more time to launch
+
+        # Get PID via pgrep - use -n for newest
+        result = subprocess.run(
+            ["pgrep", "-n", "-x", "Calculator"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        pid = int(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
 
     app = TestApp(
         name="Calculator",
@@ -125,13 +132,14 @@ def calculator_app() -> Generator[TestApp, None, None]:
 
     yield app
 
-    # Cleanup: quit the app
-    subprocess.run(
-        ["osascript", "-e", 'tell application "Calculator" to quit'],
-        capture_output=True,
-        check=False,
-    )
-    time.sleep(0.5)
+    # Only cleanup if we launched it (not if it was already running)
+    if existing_pid is None and process is not None:
+        subprocess.run(
+            ["osascript", "-e", 'tell application "Calculator" to quit'],
+            capture_output=True,
+            check=False,
+        )
+        time.sleep(0.5)
 
 
 @pytest.fixture
