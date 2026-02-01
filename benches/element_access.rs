@@ -29,11 +29,7 @@ extern "C" {
 /// Get Finder PID (always running on macOS)
 fn get_finder_pid() -> Option<i32> {
     let output = Command::new("pgrep").args(["-x", "Finder"]).output().ok()?;
-    String::from_utf8(output.stdout)
-        .ok()?
-        .trim()
-        .parse()
-        .ok()
+    String::from_utf8(output.stdout).ok()?.trim().parse().ok()
 }
 
 /// Benchmark: Create AXUIElementRef for application
@@ -86,8 +82,11 @@ fn benchmark_get_children(c: &mut Criterion) {
         // First get windows
         let mut windows: CFTypeRef = std::ptr::null();
         let windows_attr = CFString::new("AXWindows");
-        let result =
-            AXUIElementCopyAttributeValue(app_ref, windows_attr.as_concrete_TypeRef(), &mut windows);
+        let result = AXUIElementCopyAttributeValue(
+            app_ref,
+            windows_attr.as_concrete_TypeRef(),
+            &mut windows,
+        );
 
         if result == 0 && !windows.is_null() {
             use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};

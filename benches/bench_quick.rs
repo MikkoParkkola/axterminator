@@ -60,7 +60,9 @@ fn main() {
             let mut value: *mut std::ffi::c_void = std::ptr::null_mut();
             let _ = AXUIElementCopyAttributeValue(app, attr as _, &mut value);
             CFRelease(attr);
-            if !value.is_null() { CFRelease(value); }
+            if !value.is_null() {
+                CFRelease(value);
+            }
         }
         let simple_access_ns = start.elapsed().as_nanos() as f64 / 1000.0;
 
@@ -80,7 +82,8 @@ fn main() {
                     // Get children of window
                     let children_attr = cfstring("AXChildren");
                     let mut children: *mut std::ffi::c_void = std::ptr::null_mut();
-                    let _ = AXUIElementCopyAttributeValue(window, children_attr as _, &mut children);
+                    let _ =
+                        AXUIElementCopyAttributeValue(window, children_attr as _, &mut children);
                     CFRelease(children_attr);
 
                     if !children.is_null() {
@@ -90,9 +93,15 @@ fn main() {
                             let child = CFArrayGetValueAtIndex(children, 0);
                             let role_attr = cfstring("AXRole");
                             let mut role_value: *mut std::ffi::c_void = std::ptr::null_mut();
-                            let _ = AXUIElementCopyAttributeValue(child, role_attr as _, &mut role_value);
+                            let _ = AXUIElementCopyAttributeValue(
+                                child,
+                                role_attr as _,
+                                &mut role_value,
+                            );
                             CFRelease(role_attr);
-                            if !role_value.is_null() { CFRelease(role_value); }
+                            if !role_value.is_null() {
+                                CFRelease(role_value);
+                            }
                         }
                         CFRelease(children);
                     }
@@ -117,9 +126,18 @@ fn main() {
         println!("  ┌─────────────────────────────────┬────────────────────┐");
         println!("  │ Operation                       │ Time               │");
         println!("  ├─────────────────────────────────┼────────────────────┤");
-        println!("  │ Single attribute (AXRole)       │ {:>10.1} µs       │", simple_access_ns / 1000.0);
-        println!("  │ Element access (window→child)   │ {:>10.1} µs       │", element_access_ns / 1000.0);
-        println!("  │ Perform action (AXRaise)        │ {:>10.1} µs       │", action_ns / 1000.0);
+        println!(
+            "  │ Single attribute (AXRole)       │ {:>10.1} µs       │",
+            simple_access_ns / 1000.0
+        );
+        println!(
+            "  │ Element access (window→child)   │ {:>10.1} µs       │",
+            element_access_ns / 1000.0
+        );
+        println!(
+            "  │ Perform action (AXRaise)        │ {:>10.1} µs       │",
+            action_ns / 1000.0
+        );
         println!("  └─────────────────────────────────┴────────────────────┘\n");
 
         // Determine the representative "element access" time
@@ -130,18 +148,36 @@ fn main() {
         println!("  ┌─────────────────────┬─────────────────┬─────────────────┬────────────┐");
         println!("  │ Framework           │ Element Access  │ vs AXTerminator │ Source     │");
         println!("  ├─────────────────────┼─────────────────┼─────────────────┼────────────┤");
-        println!("  │ AXTerminator        │ {:>10.0} µs   │      1× baseline│ measured   │", elem_access_us);
-        println!("  │ XCUITest            │ ~200,000 µs     │    ~{:>5.0}× slower│ Apple docs │", 200_000.0 / elem_access_us);
-        println!("  │ Appium (Mac2)       │ ~500,000 µs     │    ~{:>5.0}× slower│ est. HTTP  │", 500_000.0 / elem_access_us);
-        println!("  │ Appium (worst case) │ ~2,000,000 µs   │    ~{:>5.0}× slower│ est. WebDr │", 2_000_000.0 / elem_access_us);
+        println!(
+            "  │ AXTerminator        │ {:>10.0} µs   │      1× baseline│ measured   │",
+            elem_access_us
+        );
+        println!(
+            "  │ XCUITest            │ ~200,000 µs     │    ~{:>5.0}× slower│ Apple docs │",
+            200_000.0 / elem_access_us
+        );
+        println!(
+            "  │ Appium (Mac2)       │ ~500,000 µs     │    ~{:>5.0}× slower│ est. HTTP  │",
+            500_000.0 / elem_access_us
+        );
+        println!(
+            "  │ Appium (worst case) │ ~2,000,000 µs   │    ~{:>5.0}× slower│ est. WebDr │",
+            2_000_000.0 / elem_access_us
+        );
         println!("  └─────────────────────┴─────────────────┴─────────────────┴────────────┘");
 
-        println!("\n✅ VERIFIED: Element access is ~{:.0}µs (README claims 242µs)", elem_access_us);
+        println!(
+            "\n✅ VERIFIED: Element access is ~{:.0}µs (README claims 242µs)",
+            elem_access_us
+        );
 
         if elem_access_us < 500.0 {
             println!("   → Claim is ACCURATE (within same order of magnitude)");
         } else {
-            println!("   → Claim needs updating (measured {:.0}µs vs claimed 242µs)", elem_access_us);
+            println!(
+                "   → Claim needs updating (measured {:.0}µs vs claimed 242µs)",
+                elem_access_us
+            );
         }
 
         // Calculate realistic speedup
@@ -152,9 +188,15 @@ fn main() {
         if speedup >= 60.0 && speedup <= 100.0 {
             println!("   → \"60-100x faster\" claim is ACCURATE");
         } else if speedup >= 100.0 {
-            println!("   → \"60-100x faster\" claim is CONSERVATIVE (actual: {:.0}×)", speedup);
+            println!(
+                "   → \"60-100x faster\" claim is CONSERVATIVE (actual: {:.0}×)",
+                speedup
+            );
         } else {
-            println!("   → \"60-100x faster\" claim needs revision (actual: {:.0}×)", speedup);
+            println!(
+                "   → \"60-100x faster\" claim needs revision (actual: {:.0}×)",
+                speedup
+            );
         }
     }
 }

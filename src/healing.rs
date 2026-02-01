@@ -716,7 +716,11 @@ fn get_window_dimensions(root: AXUIElementRef) -> Option<(f64, f64)> {
 }
 
 /// Find element at given screen coordinates
-fn find_element_at_position(root: AXUIElementRef, target_x: f64, target_y: f64) -> Option<AXElement> {
+fn find_element_at_position(
+    root: AXUIElementRef,
+    target_x: f64,
+    target_y: f64,
+) -> Option<AXElement> {
     let mut best_match: Option<AXUIElementRef> = None;
     let mut best_distance = f64::MAX;
     let mut smallest_area = f64::MAX;
@@ -738,7 +742,8 @@ fn find_element_at_position(root: AXUIElementRef, target_x: f64, target_y: f64) 
                     // If not inside, calculate distance to center
                     let center_x = x + w / 2.0;
                     let center_y = y + h / 2.0;
-                    let dist = ((center_x - target_x).powi(2) + (center_y - target_y).powi(2)).sqrt();
+                    let dist =
+                        ((center_x - target_x).powi(2) + (center_y - target_y).powi(2)).sqrt();
                     if dist < best_distance && best_match.is_none() {
                         best_distance = dist;
                         best_match = Some(element);
