@@ -198,12 +198,14 @@ class TestFocusClick:
         assert "Calculator" in after_focus.frontmost_app
 
     @pytest.mark.requires_app
-    def test_focus_click_explicit(self, calculator_app: TestApp) -> None:
+    def test_focus_click_explicit(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Focus click works with explicit mode."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("8")
+        element = find_calculator_button(app, "8")
 
         # Should not raise
         element.click(mode=ax.FOCUS)
@@ -240,6 +242,7 @@ class TestDoubleClick:
         self,
         calculator_app: TestApp,
         focus_tracker: Callable,
+        find_calculator_button: Callable,
     ) -> None:
         """Double-click in background mode doesn't steal focus."""
         import axterminator as ax
@@ -247,7 +250,7 @@ class TestDoubleClick:
         before_focus = focus_tracker()
 
         app = ax.app(name="Calculator")
-        element = app.find("0")
+        element = find_calculator_button(app, "0")
 
         element.double_click()
 
@@ -257,23 +260,27 @@ class TestDoubleClick:
         assert before_focus.frontmost_app == after_focus.frontmost_app
 
     @pytest.mark.requires_app
-    def test_double_click_focus_mode(self, calculator_app: TestApp) -> None:
+    def test_double_click_focus_mode(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Double-click in focus mode."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("1")
+        element = find_calculator_button(app, "1")
 
         # Should not raise
         element.double_click(mode=ax.FOCUS)
 
     @pytest.mark.requires_app
-    def test_double_click_timing(self, calculator_app: TestApp) -> None:
+    def test_double_click_timing(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Double-click has appropriate timing between clicks."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("2")
+        element = find_calculator_button(app, "2")
 
         start = time.perf_counter()
         element.double_click()
@@ -329,12 +336,14 @@ class TestRightClick:
             pass
 
     @pytest.mark.requires_app
-    def test_right_click_with_mode(self, calculator_app: TestApp) -> None:
+    def test_right_click_with_mode(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Right-click accepts mode parameter."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         # Should accept mode parameter
         try:
@@ -488,12 +497,14 @@ class TestSetValue:
         except RuntimeError:
             pass
 
-    def test_set_value_on_button_fails(self, calculator_app: TestApp) -> None:
+    def test_set_value_on_button_fails(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Set value on button should fail (no value attribute)."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         with pytest.raises(RuntimeError):
             element.set_value("cannot set")
@@ -534,12 +545,14 @@ class TestActionErrors:
     """Tests for action error handling."""
 
     @pytest.mark.requires_app
-    def test_click_on_nonexistent_element_raises(self, calculator_app: TestApp) -> None:
+    def test_click_on_nonexistent_element_raises(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Clicking destroyed/invalid element raises error."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         # Terminate app
         calculator_app.terminate()
@@ -566,12 +579,13 @@ class TestActionPerformance:
         self,
         calculator_app: TestApp,
         perf_timer: Callable[..., PerformanceResult],
+        find_calculator_button: Callable,
     ) -> None:
         """Background click should be fast."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         result = perf_timer(
             lambda: element.click(),
@@ -588,12 +602,13 @@ class TestActionPerformance:
         self,
         calculator_app: TestApp,
         perf_timer: Callable[..., PerformanceResult],
+        find_calculator_button: Callable,
     ) -> None:
         """Double-click includes internal delay but should still be fast."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         result = perf_timer(
             lambda: element.double_click(),
@@ -627,12 +642,14 @@ class TestScreenshot:
             pass
 
     @pytest.mark.requires_app
-    def test_element_screenshot(self, calculator_app: TestApp) -> None:
+    def test_element_screenshot(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Element screenshot captures just that element."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         try:
             data = element.screenshot()
