@@ -1,193 +1,305 @@
 # AXTerminator
 
-> **World's Most Superior macOS GUI Testing Framework**
+<div align="center">
 
-🏆 **WORLD FIRST**: Test macOS apps without stealing focus - true background testing.
+[![PyPI version](https://img.shields.io/pypi/v/axterminator?color=00d4ff&style=for-the-badge)](https://pypi.org/project/axterminator/)
+[![Python](https://img.shields.io/pypi/pyversions/axterminator?style=for-the-badge)](https://pypi.org/project/axterminator/)
+[![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=for-the-badge)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-stable-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 
-## Why AXTerminator?
+**World's Most Superior macOS GUI Testing Framework**
+
+*Background testing • ~250µs element access • Self-healing locators • AI vision fallback*
+
+[Quick Start](#quick-start) • [Features](#features) • [API](#api-reference) • [Examples](#examples) • [Docs](https://mikkoparkkola.github.io/axterminator/)
+
+</div>
+
+---
+
+## 🏆 World First: True Background Testing
+
+**Test macOS apps without stealing focus.** Continue working while tests run in the background.
+
+```python
+import axterminator as ax
+
+# Tests run IN THE BACKGROUND - your active window stays focused!
+calculator = ax.app(name="Calculator")
+calculator.find("5").click()    # No focus stealing
+calculator.find("+").click()    # Continue your work
+calculator.find("3").click()    # Tests just work
+calculator.find("=").click()    # Magic ✨
+```
+
+## ⚡ Why AXTerminator?
 
 | Capability | AXTerminator | XCUITest | Appium | Others |
-|------------|-------------|----------|--------|--------|
-| **Background Testing** | ✅ WORLD FIRST | ❌ | ❌ | ❌ |
-| **Element Access** | ~250µs ¹ | ~200ms | ~500ms-2s | 800-8000× slower |
+|------------|:------------:|:--------:|:------:|:------:|
+| **Background Testing** | ✅ **WORLD FIRST** | ❌ | ❌ | ❌ |
+| **Element Access** | **~250µs** | ~200ms | ~500ms-2s | 800-8000× slower |
 | **Cross-App Testing** | ✅ Native | ❌ | Limited | ❌ |
-| **Self-Healing** | 7 strategies | ❌ | Basic | 1-2 strategy |
-
-<sup>¹ Measured via `bench_quick.rs` - direct AX API access.</sup>
+| **Self-Healing** | 7 strategies | ❌ | Basic | 1-2 |
+| **AI Vision Fallback** | ✅ VLM | ❌ | ❌ | ❌ |
 
 ## Quick Start
+
+### Installation
 
 ```bash
 pip install axterminator
 ```
 
+### Basic Usage
+
 ```python
 import axterminator as ax
 
-# Check accessibility permissions
+# 1. Check accessibility permissions
 if not ax.is_accessibility_enabled():
-    print("Enable in System Preferences > Privacy > Accessibility")
+    print("Enable in System Settings > Privacy > Accessibility")
+    exit(1)
 
-# Connect to an app
-safari = ax.app(bundle_id="com.apple.Safari")
+# 2. Connect to app
+app = ax.app(name="Calculator")
 
-# Click a button - IN BACKGROUND! (no focus stealing)
-safari.find("New Tab").click()
-
-# Type text (requires focus mode)
-safari.find("URL").type_text("https://example.com", mode=ax.FOCUS)
-
-# Take a screenshot
-screenshot = safari.screenshot()
+# 3. Interact (background mode by default!)
+app.find("7").click()
+app.find("+").click()
+app.find("3").click()
+app.find("=").click()
+# Result: 10
 ```
 
-## Key Features
+### CLI Tool
 
-### 🎭 Background Testing (WORLD FIRST)
-
-Test apps without stealing focus from your active work:
-
-```python
-# User can continue working while tests run!
-for _ in range(100):
-    app.find("Refresh").click()  # All background
-```
-
-### ⚡ 800-2000× Faster
-
-- Element access: ~250µs (vs 200ms-2s competitors)
-- Direct macOS Accessibility API - no HTTP/WebDriver overhead
-- Benchmarked with `rustc -O bench_quick.rs && ./bench_quick`
-
-### 🔧 Self-Healing Locators
-
-7-strategy fallback for robust element location:
-
-```python
-ax.configure_healing(HealingConfig(
-    strategies=[
-        "data_testid",   # Best - developer-set stable IDs
-        "aria_label",    # Accessibility labels
-        "identifier",    # AX identifier
-        "title",         # Element title (fuzzy matching)
-        "xpath",         # Structural path
-        "position",      # Relative position
-        "visual_vlm",    # VLM fallback - uses AI vision (MLX/Claude/GPT-4V)
-    ],
-    max_heal_time_ms=100,
-))
-```
-
-### 🤖 Visual Element Detection (visual_vlm)
-
-When all other strategies fail, use AI vision to find elements:
-
-```python
-import axterminator as ax
-
-# Configure VLM backend (choose one)
-ax.configure_vlm(backend="mlx")           # Local MLX - fast, private, free
-ax.configure_vlm(backend="anthropic")     # Claude Vision - accurate
-ax.configure_vlm(backend="openai")        # GPT-4V
-
-# Now visual_vlm strategy works in healing
-app.find(description="the blue Save button in the toolbar")
-```
-
-Install VLM support:
 ```bash
-pip install mlx-vlm              # For local MLX
-pip install anthropic            # For Claude Vision
-pip install openai               # For GPT-4V
+# Check permissions
+axterminator check
+
+# Find elements
+axterminator find Calculator "5"
+
+# Click elements
+axterminator click Calculator "+"
+
+# Record interactions
+axterminator record Calculator
 ```
 
-### 🌐 Unified API
+## Features
 
-Works with any macOS app technology:
+### 🎭 Background Testing
+```python
+# User continues working while tests run!
+for i in range(100):
+    app.find("Refresh").click()  # All in background
+```
 
-- Native macOS (SwiftUI/AppKit)
-- Electron apps (VS Code, Slack, etc.)
-- WebView hybrid apps
-- Catalyst apps
+### 🔧 Self-Healing Locators (7 Strategies)
+```python
+# Element survives UI changes via fallback strategies:
+# 1. data_testid  - Developer-set stable IDs
+# 2. aria_label   - Accessibility labels
+# 3. identifier   - AX identifier
+# 4. title        - Element title (fuzzy matching)
+# 5. xpath        - Structural path
+# 6. position     - Relative position
+# 7. visual_vlm   - AI vision fallback
+```
+
+### 🤖 AI Vision Detection (VLM)
+```python
+# When all else fails, use AI to find elements
+ax.configure_vlm(backend="mlx")      # Local (fast, private)
+ax.configure_vlm(backend="anthropic") # Claude Vision
+ax.configure_vlm(backend="openai")    # GPT-4V
+ax.configure_vlm(backend="gemini")    # Gemini Vision
+ax.configure_vlm(backend="ollama")    # Local Ollama
+
+# Natural language element description
+app.find("the blue Save button in the toolbar")
+```
+
+### 🧪 pytest Integration
+```python
+import pytest
+
+@pytest.mark.ax_requires_app("Calculator")
+def test_addition(ax_app, ax_wait):
+    app = ax_app("Calculator")
+    app.find("7").click()
+    app.find("+").click()
+    app.find("3").click()
+    app.find("=").click()
+    ax_wait(0.1)
+```
+
+### 🎬 Recording Mode
+```python
+from axterminator import Recorder
+
+recorder = Recorder(app)
+recorder.start()
+# ... perform actions ...
+recorder.stop()
+
+# Generate test code
+print(recorder.generate_test())
+```
 
 ## API Reference
 
 ### App Connection
 
 ```python
-# By bundle ID (recommended)
-app = ax.app(bundle_id="com.apple.Safari")
-
 # By name
 app = ax.app(name="Safari")
 
+# By bundle ID (recommended)
+app = ax.app(bundle_id="com.apple.Safari")
+
 # By PID
 app = ax.app(pid=12345)
+
+# Launch if not running
+app = ax.app(name="Notes", launch=True)
 ```
 
-### Element Finding
+### Finding Elements
 
 ```python
-# By text
+# By text/title
 button = app.find("Save")
 
-# By role and attributes
-button = app.find_by_role("AXButton", title="Save")
-
 # With timeout
-button = app.wait_for_element("Loading Complete", timeout_ms=5000)
+button = app.find("Save", timeout_ms=5000)
+
+# By role
+text_field = app.find("", role="AXTextField")
+
+# Find all matching
+buttons = app.find_all("role:AXButton")
 ```
 
 ### Actions
 
 ```python
-# Background mode (DEFAULT - no focus stealing!)
+# Clicks (background by default)
 element.click()
 element.double_click()
 element.right_click()
 
-# Focus mode (required for text input)
+# Focused mode (for text input)
 element.click(mode=ax.FOCUS)
-element.type_text("Hello", mode=ax.FOCUS)
+element.type_text("Hello World!")
+
+# Get properties
+print(element.title)
+print(element.value)
+print(element.role)
 ```
 
-### Cross-App Testing
+### Synchronization
 
 ```python
-# Test multiple apps without focus switching
-safari = ax.app(bundle_id="com.apple.Safari")
-notes = ax.app(bundle_id="com.apple.Notes")
+from axterminator.sync import wait_for_idle, wait_for_element
 
-# Copy from Safari (background)
-safari.find("Copy").click()
+# Wait for app to settle
+wait_for_idle(app, timeout_ms=5000)
 
-# Paste to Notes (background)
-notes.find("Paste").click()
+# Wait for element to appear
+button = wait_for_element(app, "Done", timeout_ms=3000)
+```
+
+## Examples
+
+See [`examples/`](examples/) for real-world automation:
+
+| Script | Description |
+|--------|-------------|
+| `basic_usage.py` | Calculator automation |
+| `system_preferences.py` | System Settings navigation |
+| `finder_automation.py` | Finder file operations |
+| `notes_app.py` | Notes app automation |
+| `textedit_automation.py` | Document creation |
+| `pytest_example.py` | pytest integration |
+| `self_healing_locators.py` | Locator strategies |
+| `vlm_visual_detection.py` | VLM fallback demo |
+
+## Browser Extension
+
+Record browser interactions → generate axterminator code:
+
+1. Load `browser-extension/` in Chrome (Developer mode)
+2. Click extension → Start Recording
+3. Interact with web pages
+4. Copy generated Python code
+
+## Installation Options
+
+```bash
+# Basic
+pip install axterminator
+
+# With VLM backends
+pip install axterminator[vlm]           # Local MLX
+pip install axterminator[vlm-anthropic] # Claude Vision
+pip install axterminator[vlm-openai]    # GPT-4V
+pip install axterminator[vlm-gemini]    # Gemini Vision
+pip install axterminator[vlm-ollama]    # Ollama
+pip install axterminator[vlm-all]       # All backends
 ```
 
 ## Requirements
 
-- macOS 11.0 or later
-- Python 3.9 or later
-- Accessibility permissions enabled
+- **macOS 12+** (Monterey or later)
+- **Python 3.9+**
+- **Accessibility permissions** granted to terminal/IDE
 
 ## Building from Source
 
 ```bash
-# Install maturin
-pip install maturin
+git clone https://github.com/MikkoParkkola/axterminator
+cd axterminator
 
-# Build and install
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Build
+pip install maturin
 maturin develop
 
-# Run tests
-pytest
+# Test
+pytest python/tests/
 ```
+
+## Performance
+
+| Operation | Time |
+|-----------|------|
+| Element access | ~250µs |
+| Click | ~1ms |
+| Type text | ~5ms |
+| Find element | ~10-50ms |
+
+*Benchmarked with `cargo bench` on M1 MacBook Pro*
 
 ## License
 
-MIT OR Apache-2.0
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)
 
 ## Contributing
 
-Contributions welcome! Please read the design document in `docs/` first.
+Contributions welcome! See [docs/](docs/) for architecture details.
+
+---
+
+<div align="center">
+
+**Built with 🦀 Rust + 🐍 Python**
+
+[Report Bug](https://github.com/MikkoParkkola/axterminator/issues) • [Request Feature](https://github.com/MikkoParkkola/axterminator/issues)
+
+</div>
