@@ -71,6 +71,7 @@ nav:
     - Config: api/config.md
   - Performance:
     - Benchmarks: performance.md
+    - Tool Comparison: comparison.md
   - Architecture:
     - Design: axterminator-design-doc.md
     - Sync Engine: SYNC_ENGINE.md

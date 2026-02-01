@@ -35,13 +35,16 @@ calculator.find("=").click()    # Magic ✨
 
 ## ⚡ Why AXTerminator?
 
-| Capability | AXTerminator | XCUITest | Appium | Others |
-|------------|:------------:|:--------:|:------:|:------:|
-| **Background Testing** | ✅ **WORLD FIRST** | ❌ | ❌ | ❌ |
-| **Element Access** | **~380µs** | ~200ms | ~500ms-2s | **1,321× faster** |
-| **Cross-App Testing** | ✅ Native | ❌ | Limited | ❌ |
-| **Self-Healing** | 7 strategies | ❌ | Basic | 1-2 |
-| **AI Vision Fallback** | ✅ VLM | ❌ | ❌ | ❌ |
+| Capability | AXTerminator | XCUITest | Appium | PyAutoGUI | Maestro |
+|------------|:------------:|:--------:|:------:|:---------:|:-------:|
+| **Background Testing** | ✅ **WORLD FIRST** | ❌ | ❌ | ❌ | ❌ |
+| **Element Access** | **379µs** | ~200ms | ~500ms | ~100ms | ~300ms |
+| **Speedup** | baseline | 528× slower | 1,321× slower | 264× slower | 792× slower |
+| **Cross-App Testing** | ✅ | ❌ | Limited | ✅ | Limited |
+| **Self-Healing** | 7 strategies | ❌ | Basic | ❌ | ✅ |
+| **AI Vision Fallback** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Python API** | ✅ | ❌ | ✅ | ✅ | ❌ |
+| **No Xcode Required** | ✅ | ❌ | ❌ | ✅ | ✅ |
 
 ## Quick Start
 
