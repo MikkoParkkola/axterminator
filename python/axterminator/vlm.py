@@ -6,6 +6,7 @@ when traditional locators fail. Supports multiple backends:
 - MLX (local, fast, private) - DEFAULT
 - Anthropic Claude Vision API
 - OpenAI GPT-4V API
+- Google Gemini Vision API
 
 Usage:
     from axterminator.vlm import VLMDetector, configure_vlm
@@ -15,6 +16,9 @@ Usage:
 
     # Or use Claude Vision
     configure_vlm(backend="anthropic", api_key="sk-...")
+
+    # Or use Gemini
+    configure_vlm(backend="gemini", api_key="...")
 
     # The detector is automatically used by the healing system
 """
@@ -244,6 +248,73 @@ If the element is not found, return: {{"error": "not found"}}"""
             return None
 
 
+class GeminiBackend(VLMBackend):
+    """Google Gemini Vision API backend."""
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
+        self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        self.model = model
+        if not self.api_key:
+            raise ValueError(
+                "Google API key required. Set GOOGLE_API_KEY or pass api_key."
+            )
+
+    def detect_element(
+        self, image_data: bytes, description: str, image_width: int, image_height: int
+    ) -> Optional[BoundingBox]:
+        """Detect element using Gemini Vision."""
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            raise ImportError(
+                "Google Generative AI SDK not installed. Install with: pip install google-generativeai"
+            )
+
+        genai.configure(api_key=self.api_key)
+        model = genai.GenerativeModel(self.model)
+
+        # Create image part from bytes
+        image_part = {"mime_type": "image/png", "data": image_data}
+
+        prompt = f"""Look at this macOS application screenshot.
+Find the UI element that matches this description: "{description}"
+
+Return ONLY a JSON object with the bounding box coordinates as percentages (0-100) of the image dimensions:
+{{"x": <left_percent>, "y": <top_percent>, "width": <width_percent>, "height": <height_percent>}}
+
+If the element is not found, return: {{"error": "not found"}}"""
+
+        response = model.generate_content([image_part, prompt])
+
+        return self._parse_bbox_response(
+            response.text, image_width, image_height
+        )
+
+    def _parse_bbox_response(
+        self, response: str, image_width: int, image_height: int
+    ) -> Optional[BoundingBox]:
+        """Parse bounding box from model response."""
+        try:
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start == -1 or end == 0:
+                return None
+
+            data = json.loads(response[start:end])
+
+            if "error" in data:
+                return None
+
+            return BoundingBox(
+                x=data["x"] * image_width / 100,
+                y=data["y"] * image_height / 100,
+                width=data["width"] * image_width / 100,
+                height=data["height"] * image_height / 100,
+            )
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None
+
+
 class OpenAIBackend(VLMBackend):
     """OpenAI GPT-4V API backend."""
 
@@ -388,8 +459,10 @@ def configure_vlm(
         vlm_backend = AnthropicBackend(api_key=api_key, model=model or "claude-sonnet-4-20250514")
     elif backend == "openai":
         vlm_backend = OpenAIBackend(api_key=api_key, model=model or "gpt-4o")
+    elif backend == "gemini":
+        vlm_backend = GeminiBackend(api_key=api_key, model=model or "gemini-2.0-flash")
     else:
-        raise ValueError(f"Unknown backend: {backend}. Use 'mlx', 'anthropic', or 'openai'")
+        raise ValueError(f"Unknown backend: {backend}. Use 'mlx', 'anthropic', 'openai', or 'gemini'")
 
     _vlm_detector = VLMDetector(vlm_backend)
 
@@ -427,6 +500,8 @@ def detect_element_visual(
                 configure_vlm(backend="anthropic")
             elif os.environ.get("OPENAI_API_KEY"):
                 configure_vlm(backend="openai")
+            elif os.environ.get("GOOGLE_API_KEY"):
+                configure_vlm(backend="gemini")
             else:
                 return None
 

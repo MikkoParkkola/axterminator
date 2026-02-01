@@ -9,6 +9,7 @@ from axterminator.vlm import (
     MLXBackend,
     AnthropicBackend,
     OpenAIBackend,
+    GeminiBackend,
     configure_vlm,
     get_vlm_detector,
     detect_element_visual,
@@ -127,6 +128,51 @@ class TestOpenAIBackend:
         assert backend.model == "gpt-4o"
 
 
+class TestGeminiBackend:
+    """Tests for Gemini backend."""
+
+    def test_gemini_backend_requires_key(self):
+        """Test Gemini backend requires API key."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="API key required"):
+                GeminiBackend()
+
+    def test_gemini_backend_with_key(self):
+        """Test Gemini backend with API key."""
+        backend = GeminiBackend(api_key="test-key")
+        assert backend.api_key == "test-key"
+        assert backend.model == "gemini-2.0-flash"
+
+    def test_gemini_backend_custom_model(self):
+        """Test Gemini backend with custom model."""
+        backend = GeminiBackend(api_key="test-key", model="gemini-1.5-pro")
+        assert backend.model == "gemini-1.5-pro"
+
+    def test_gemini_backend_env_key(self):
+        """Test Gemini backend reads key from environment."""
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "env-test-key"}):
+            backend = GeminiBackend()
+            assert backend.api_key == "env-test-key"
+
+    def test_gemini_backend_parse_bbox_valid(self):
+        """Test parsing valid bbox response."""
+        backend = GeminiBackend(api_key="test-key")
+        response = '{"x": 10, "y": 20, "width": 30, "height": 40}'
+        bbox = backend._parse_bbox_response(response, 100, 100)
+        assert bbox is not None
+        assert bbox.x == 10.0
+        assert bbox.y == 20.0
+        assert bbox.width == 30.0
+        assert bbox.height == 40.0
+
+    def test_gemini_backend_parse_bbox_error(self):
+        """Test parsing error response."""
+        backend = GeminiBackend(api_key="test-key")
+        response = '{"error": "not found"}'
+        bbox = backend._parse_bbox_response(response, 100, 100)
+        assert bbox is None
+
+
 class TestVLMDetector:
     """Tests for VLMDetector class."""
 
@@ -185,6 +231,19 @@ class TestConfigureVLM:
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValueError):
                 configure_vlm(backend="openai")
+
+    def test_configure_vlm_gemini_requires_key(self):
+        """Test configure_vlm with Gemini requires key."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError):
+                configure_vlm(backend="gemini")
+
+    def test_configure_vlm_gemini_with_key(self):
+        """Test configure_vlm with Gemini backend."""
+        configure_vlm(backend="gemini", api_key="test-key")
+        detector = get_vlm_detector()
+        assert detector is not None
+        assert isinstance(detector.backend, GeminiBackend)
 
 
 class TestDetectElementVisual:

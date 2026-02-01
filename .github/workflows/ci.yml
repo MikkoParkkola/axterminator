@@ -55,4 +55,4 @@ jobs:
           python-version: '3.11'
       - run: pip install maturin pytest
       - run: maturin develop
-      - run: pytest tests/ -v || echo "No Python tests yet"
+      - run: pytest python/tests/ -v --ignore=python/tests/test_integration.py
