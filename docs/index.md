@@ -205,6 +205,69 @@ button = wait_for_element(app, "Done", timeout_ms=3000)
 | Type text | ~5ms |
 | Find element | ~10-50ms |
 
+## CLI Tool
+
+```bash
+# Check accessibility permissions
+axterminator check
+
+# List running apps
+axterminator list-apps
+
+# Find an element
+axterminator find Calculator "5"
+
+# Click an element
+axterminator click Calculator "+"
+
+# Type text
+axterminator type Calculator "textfield" "123"
+
+# Record interactions
+axterminator record Calculator
+```
+
+## pytest Integration
+
+```python
+import pytest
+
+@pytest.mark.ax_requires_app("Calculator")
+def test_addition(ax_app, ax_wait):
+    app = ax_app("Calculator")
+    app.find("7").click()
+    app.find("+").click()
+    app.find("3").click()
+    app.find("=").click()
+    ax_wait(0.1)
+```
+
+Available fixtures: `ax_app`, `ax_wait`, `ax_calculator`, `ax_finder`
+
+Markers: `@pytest.mark.ax_background`, `@pytest.mark.ax_requires_app(name)`, `@pytest.mark.ax_slow`
+
+## Browser Extension
+
+Record browser interactions and generate axterminator code:
+
+1. Install from `browser-extension/` folder
+2. Click extension icon → Start Recording
+3. Interact with web pages
+4. Stop and copy generated Python code
+
+## Examples
+
+See the `examples/` directory:
+
+- `basic_usage.py` - Calculator automation
+- `system_preferences.py` - System Settings navigation
+- `finder_automation.py` - Finder file operations
+- `notes_app.py` - Notes app automation
+- `textedit_automation.py` - Document creation
+- `pytest_example.py` - pytest integration
+- `self_healing_locators.py` - Locator strategies
+- `vlm_visual_detection.py` - VLM fallback
+
 ## License
 
 MIT OR Apache-2.0
