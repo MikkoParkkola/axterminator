@@ -5,7 +5,7 @@ when traditional locators fail. Supports multiple backends:
 
 - MLX (local, fast, private) - DEFAULT
 - Anthropic Claude Vision API
-- OpenAI GPT-4o API
+- OpenAI GPT-5 API
 - Google Gemini Vision API
 - Ollama (local, free, any vision model)
 
@@ -392,7 +392,7 @@ If the element is not found, return: {{"error": "not found"}}"""
 
 
 class OpenAIBackend(VLMBackend):
-    """OpenAI GPT-4o API backend."""
+    """OpenAI GPT-5 API backend."""
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
@@ -405,7 +405,7 @@ class OpenAIBackend(VLMBackend):
     def detect_element(
         self, image_data: bytes, description: str, image_width: int, image_height: int
     ) -> Optional[BoundingBox]:
-        """Detect element using GPT-4o."""
+        """Detect element using GPT-5."""
         try:
             import openai
         except ImportError:
@@ -521,7 +521,7 @@ def configure_vlm(
         # Use Claude Vision
         configure_vlm(backend="anthropic", api_key="sk-ant-...")
 
-        # Use GPT-4o
+        # Use GPT-5
         configure_vlm(backend="openai", api_key="sk-...")
 
         # Use specific MLX model

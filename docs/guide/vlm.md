@@ -29,7 +29,7 @@ ax.configure_vlm(
     api_key="sk-ant-..."
 )
 
-# GPT-4o
+# GPT-5
 ax.configure_vlm(
     backend="openai",
     api_key="sk-..."
