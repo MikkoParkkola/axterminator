@@ -1,6 +1,6 @@
 site_name: AXTerminator
 site_description: World's Most Superior macOS GUI Testing Framework
-site_url: https://mikkoparkkola.github.io/axterminator
+site_url: https://mikkoparkkola.github.io/axterminator/
 repo_url: https://github.com/MikkoParkkola/axterminator
 repo_name: MikkoParkkola/axterminator
 
@@ -8,14 +8,14 @@ theme:
   name: material
   palette:
     - scheme: slate
-      primary: deep purple
-      accent: amber
+      primary: cyan
+      accent: cyan
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
     - scheme: default
-      primary: deep purple
-      accent: amber
+      primary: cyan
+      accent: cyan
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
@@ -23,8 +23,22 @@ theme:
     - navigation.instant
     - navigation.tracking
     - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
     - content.code.copy
     - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -34,18 +48,38 @@ markdown_extensions:
       alternate_style: true
   - admonition
   - pymdownx.details
+  - attr_list
+  - md_in_html
   - tables
   - toc:
       permalink: true
 
 nav:
   - Home: index.md
-  - Performance: performance.md
-
-plugins:
-  - search
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Permissions: getting-started/permissions.md
+  - User Guide:
+    - Finding Elements: guide/finding-elements.md
+    - Actions: guide/actions.md
+    - Self-Healing: guide/self-healing.md
+    - VLM Vision: guide/vlm.md
+  - API Reference:
+    - Core API: api/core.md
+    - Element API: api/element.md
+    - Config: api/config.md
+  - Performance:
+    - Benchmarks: performance.md
+  - Architecture:
+    - Design: axterminator-design-doc.md
+    - Sync Engine: SYNC_ENGINE.md
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/MikkoParkkola/axterminator
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/axterminator/
+
+copyright: Copyright &copy; 2024-2026 Mikko Parkkola

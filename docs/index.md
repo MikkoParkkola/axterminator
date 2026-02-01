@@ -1,5 +1,17 @@
 # AXTerminator
 
+<div align="center">
+
+**World's Most Superior macOS GUI Testing Framework**
+
+*Background testing • ~250µs element access • Self-healing locators • AI vision fallback*
+
+[![PyPI](https://img.shields.io/pypi/v/axterminator?color=00d4ff)](https://pypi.org/project/axterminator/)
+[![Python](https://img.shields.io/pypi/pyversions/axterminator)](https://pypi.org/project/axterminator/)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](https://github.com/MikkoParkkola/axterminator)
+
+</div>
+
 **World's Most Superior macOS GUI Testing Framework**
 
 AXTerminator enables background GUI testing on macOS without stealing focus, with ~250µs element access times and self-healing locators.
