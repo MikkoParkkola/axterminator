@@ -1,0 +1,45 @@
+name: Generate Demo GIF
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    paths:
+      - 'demo/**'
+      - '.github/workflows/demo.yml'
+
+jobs:
+  generate-gif:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install VHS
+        run: brew install vhs
+
+      - name: Generate Demo GIF
+        run: |
+          cd demo
+          vhs demo.tape
+
+      - name: Upload GIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gif
+          path: demo/axterminator_demo.gif
+          retention-days: 30
+
+      - name: Commit GIF (if on main)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f demo/axterminator_demo.gif ]; then
+            git add demo/axterminator_demo.gif
+            git diff --staged --quiet || git commit -m "Update demo GIF [skip ci]"
+            git push
+          fi
