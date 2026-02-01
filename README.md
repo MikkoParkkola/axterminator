@@ -12,7 +12,7 @@
 
 *Background testing • ~250µs element access • Self-healing locators • AI vision fallback*
 
-[Quick Start](#quick-start) • [Features](#features) • [API](#api-reference) • [Examples](#examples) • [Docs](https://mikkoparkkola.github.io/axterminator/)
+[Quick Start](#quick-start) • [Features](#features) • [API](#api-reference) • [Examples](#examples) • [Docs](https://mikkoparkkola.github.io/axterminator/) • [Benchmarks](https://mikkoparkkola.github.io/axterminator/performance/)
 
 </div>
 
@@ -38,7 +38,7 @@ calculator.find("=").click()    # Magic ✨
 | Capability | AXTerminator | XCUITest | Appium | Others |
 |------------|:------------:|:--------:|:------:|:------:|
 | **Background Testing** | ✅ **WORLD FIRST** | ❌ | ❌ | ❌ |
-| **Element Access** | **~250µs** | ~200ms | ~500ms-2s | 800-8000× slower |
+| **Element Access** | **~380µs** | ~200ms | ~500ms-2s | **1,321× faster** |
 | **Cross-App Testing** | ✅ Native | ❌ | Limited | ❌ |
 | **Self-Healing** | 7 strategies | ❌ | Basic | 1-2 |
 | **AI Vision Fallback** | ✅ VLM | ❌ | ❌ | ❌ |
@@ -277,14 +277,14 @@ pytest python/tests/
 
 ## Performance
 
-| Operation | Time |
-|-----------|------|
-| Element access | ~250µs |
-| Click | ~1ms |
-| Type text | ~5ms |
-| Find element | ~10-50ms |
+| Operation | Time | vs Appium |
+|-----------|------|-----------|
+| Single attribute | **54µs** | - |
+| Element access | **379µs** | **1,321× faster** |
+| Perform action | **20µs** | - |
+| Find element | ~10-50ms | 100× faster |
 
-*Benchmarked with `cargo bench` on M1 MacBook Pro*
+*Benchmarked on M1 MacBook Pro, macOS 14.2. [Full benchmarks →](https://mikkoparkkola.github.io/axterminator/performance/)*
 
 ## License
 
