@@ -17,6 +17,13 @@ from axterminator.axterminator import (
 # VLM integration for visual element detection
 from axterminator.vlm import configure_vlm, detect_element_visual
 
+
+# Stub for XPC sync availability check (not yet implemented)
+def xpc_sync_available() -> bool:
+    """Check if XPC synchronization is available (not yet implemented)."""
+    return False
+
+
 __all__ = [
     "ActionMode",
     "AXApp",
@@ -27,6 +34,7 @@ __all__ = [
     "configure_healing",
     "configure_vlm",
     "detect_element_visual",
+    "xpc_sync_available",
     "BACKGROUND",
     "FOCUS",
     "__version__",

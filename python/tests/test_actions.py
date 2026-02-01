@@ -35,6 +35,7 @@ class TestBackgroundClick:
         self,
         calculator_app: TestApp,
         focus_tracker: Callable,
+        find_calculator_button: Callable,
     ) -> None:
         """
         CRITICAL: Background click must NOT steal focus.
@@ -49,7 +50,7 @@ class TestBackgroundClick:
 
         # Connect to Calculator (it's in background)
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         # Perform background click (default mode)
         element.click()
@@ -72,6 +73,7 @@ class TestBackgroundClick:
         self,
         calculator_app: TestApp,
         focus_tracker: Callable,
+        find_calculator_button: Callable,
     ) -> None:
         """Background click with explicit BACKGROUND mode."""
         import axterminator as ax
@@ -79,7 +81,7 @@ class TestBackgroundClick:
         before_focus = focus_tracker()
 
         app = ax.app(name="Calculator")
-        element = app.find("7")
+        element = find_calculator_button(app, "7")
 
         # Explicit background mode
         element.click(mode=ax.BACKGROUND)
@@ -92,7 +94,7 @@ class TestBackgroundClick:
     @pytest.mark.background
     @pytest.mark.requires_app
     def test_background_click_default_is_background(
-        self, calculator_app: TestApp
+        self, calculator_app: TestApp, find_calculator_button: Callable
     ) -> None:
         """Default click mode should be BACKGROUND."""
         import axterminator as ax
@@ -101,7 +103,7 @@ class TestBackgroundClick:
         assert ax.ActionMode.Background == ax.BACKGROUND
 
         app = ax.app(name="Calculator")
-        element = app.find("3")
+        element = find_calculator_button(app, "3")
 
         # Default click should work without error
         element.click()
@@ -112,6 +114,7 @@ class TestBackgroundClick:
         self,
         calculator_app: TestApp,
         focus_tracker: Callable,
+        find_calculator_button: Callable,
     ) -> None:
         """Multiple background clicks don't steal focus."""
         import axterminator as ax
@@ -122,7 +125,7 @@ class TestBackgroundClick:
 
         # Click multiple buttons in sequence
         for digit in ["1", "2", "3"]:
-            element = app.find(digit)
+            element = find_calculator_button(app, digit)
             element.click()
             time.sleep(0.1)
 
@@ -133,7 +136,7 @@ class TestBackgroundClick:
     @pytest.mark.background
     @pytest.mark.requires_app
     def test_background_click_on_disabled_element(
-        self, calculator_app: TestApp
+        self, calculator_app: TestApp, find_calculator_button: Callable
     ) -> None:
         """Background click on disabled element handles gracefully."""
         import axterminator as ax
@@ -141,17 +144,19 @@ class TestBackgroundClick:
         app = ax.app(name="Calculator")
 
         # AC button is always enabled, but we test the flow
-        element = app.find("AC")
+        element = find_calculator_button(app, "AC")
         element.click()  # Should work
 
     @pytest.mark.background
     @pytest.mark.requires_app
-    def test_background_click_returns_none(self, calculator_app: TestApp) -> None:
+    def test_background_click_returns_none(
+        self, calculator_app: TestApp, find_calculator_button: Callable
+    ) -> None:
         """Click returns None (not the element for chaining)."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("9")
+        element = find_calculator_button(app, "9")
 
         result = element.click()
 
@@ -175,12 +180,13 @@ class TestFocusClick:
         self,
         calculator_app: TestApp,
         focus_tracker: Callable,
+        find_calculator_button: Callable,
     ) -> None:
         """Focus click brings application to foreground."""
         import axterminator as ax
 
         app = ax.app(name="Calculator")
-        element = app.find("5")
+        element = find_calculator_button(app, "5")
 
         # Focus click should bring Calculator to front
         element.click(mode=ax.FOCUS)
