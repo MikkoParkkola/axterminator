@@ -62,7 +62,7 @@ pip install axterminator[vlm]
 
 # Cloud APIs
 pip install axterminator[vlm-anthropic]  # Claude Vision
-pip install axterminator[vlm-openai]     # GPT-4V
+pip install axterminator[vlm-openai]     # GPT-4o
 pip install axterminator[vlm-gemini]     # Gemini Vision
 
 # All backends

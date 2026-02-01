@@ -9,7 +9,7 @@
 //! 4. title - Element title (fuzzy matching)
 //! 5. xpath - Structural path
 //! 6. position - Relative coordinates
-//! 7. visual_vlm - VLM-based visual detection (MLX/Claude/GPT-4V)
+//! 7. visual_vlm - VLM-based visual detection (MLX/Claude/GPT-4o)
 
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, TCFType};
@@ -594,7 +594,7 @@ fn try_by_position(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEleme
 }
 
 fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement> {
-    // VLM-based visual matching using Python MLX/Claude/GPT-4V
+    // VLM-based visual matching using Python MLX/Claude/GPT-4o
     //
     // Strategy:
     // 1. Take screenshot of the window
