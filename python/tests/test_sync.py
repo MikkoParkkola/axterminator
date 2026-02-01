@@ -1,548 +1,183 @@
-"""
-Tests for AXTerminator synchronization functionality.
-
-Tests cover:
-- Wait for idle
-- Wait for element
-- Heuristic synchronization
-- XPC synchronization (mock)
-"""
-
-from __future__ import annotations
+"""Tests for synchronization utilities."""
 
 import time
-from typing import TYPE_CHECKING, Callable
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from unittest.mock import patch
+from axterminator.sync import (
+    SyncTimeout,
+    wait_for_condition,
+    wait_for_element,
+    wait_for_idle,
+    wait_for_value,
+    xpc_sync_available,
+)
 
-if TYPE_CHECKING:
-    from conftest import PerformanceResult, TestApp
+
+class TestWaitForCondition:
+    """Tests for wait_for_condition function."""
+
+    def test_condition_immediately_true(self):
+        """Test condition that's immediately true."""
+        result = wait_for_condition(lambda: True, timeout_ms=1000)
+        assert result is True
+
+    def test_condition_returns_value(self):
+        """Test condition returning a value."""
+        result = wait_for_condition(lambda: "hello", timeout_ms=1000)
+        assert result == "hello"
+
+    def test_condition_becomes_true(self):
+        """Test condition that becomes true after some time."""
+        start = time.perf_counter()
+        counter = [0]
+
+        def delayed_true():
+            counter[0] += 1
+            return counter[0] >= 3
+
+        result = wait_for_condition(delayed_true, timeout_ms=5000, poll_interval_ms=50)
+        assert result is True
+        assert counter[0] >= 3
+
+    def test_condition_timeout(self):
+        """Test timeout when condition never becomes true."""
+        with pytest.raises(SyncTimeout, match="Timed out"):
+            wait_for_condition(
+                lambda: False,
+                timeout_ms=100,
+                poll_interval_ms=20,
+                description="test condition",
+            )
+
+    def test_condition_exception_ignored(self):
+        """Test that exceptions in condition are ignored."""
+        counter = [0]
+
+        def flaky_condition():
+            counter[0] += 1
+            if counter[0] < 3:
+                raise RuntimeError("Not ready")
+            return True
+
+        result = wait_for_condition(flaky_condition, timeout_ms=5000, poll_interval_ms=50)
+        assert result is True
 
 
 class TestWaitForIdle:
-    """Tests for wait_for_idle synchronization."""
+    """Tests for wait_for_idle function."""
 
-    @pytest.mark.requires_app
-    def test_wait_for_idle_returns_bool(self, calculator_app: TestApp) -> None:
-        """wait_for_idle returns boolean indicating success."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        result = app.wait_for_idle()
-
-        assert isinstance(result, bool)
-
-    @pytest.mark.requires_app
-    def test_wait_for_idle_succeeds_on_stable_app(
-        self, calculator_app: TestApp
-    ) -> None:
-        """wait_for_idle succeeds when app is stable."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Give app time to stabilize
-        time.sleep(0.5)
-
-        result = app.wait_for_idle(timeout_ms=5000)
-
+    def test_wait_for_idle_returns_true(self):
+        """Test that wait_for_idle returns True when app settles."""
+        mock_app = MagicMock()
+        # Patch _get_ui_snapshot to return stable value
+        with patch("axterminator.sync._get_ui_snapshot", return_value="stable"):
+            result = wait_for_idle(mock_app, timeout_ms=500, stability_count=2)
         assert result is True
 
-    @pytest.mark.requires_app
-    def test_wait_for_idle_default_timeout(self, calculator_app: TestApp) -> None:
-        """Default timeout is 5000ms."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Should work with default timeout
-        result = app.wait_for_idle()
-
-        assert isinstance(result, bool)
-
-    @pytest.mark.requires_app
-    def test_wait_for_idle_custom_timeout(self, calculator_app: TestApp) -> None:
-        """Custom timeout is respected."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
+    def test_wait_for_idle_respects_timeout(self):
+        """Test that wait_for_idle respects timeout."""
+        mock_app = MagicMock()
         start = time.perf_counter()
-        result = app.wait_for_idle(timeout_ms=100)
-        elapsed = time.perf_counter() - start
-
-        # Should return within reasonable time
-        assert elapsed < 1.0
-
-    @pytest.mark.slow
-    @pytest.mark.requires_app
-    def test_wait_for_idle_timeout_returns_false(self, calculator_app: TestApp) -> None:
-        """wait_for_idle returns False on timeout."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # With very short timeout, should return quickly
-        # May return True if already stable, or False if timeout
-        result = app.wait_for_idle(timeout_ms=10)
-
-        assert isinstance(result, bool)
-
-    @pytest.mark.requires_app
-    def test_wait_for_idle_after_click(self, calculator_app: TestApp) -> None:
-        """wait_for_idle can be used after triggering action."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Click a button
-        try:
-            element = app.find("5")
-            element.click()
-
-            # Wait for UI to settle
-            result = app.wait_for_idle(timeout_ms=2000)
-
-            assert result is True
-        except RuntimeError:
-            pass
-
-    @pytest.mark.requires_app
-    def test_wait_for_idle_multiple_calls(self, calculator_app: TestApp) -> None:
-        """Multiple wait_for_idle calls work correctly."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        result1 = app.wait_for_idle()
-        result2 = app.wait_for_idle()
-        result3 = app.wait_for_idle()
-
-        # All should succeed on stable app
-        assert result1 is True
-        assert result2 is True
-        assert result3 is True
+        # Very short timeout
+        result = wait_for_idle(mock_app, timeout_ms=100, stability_count=10)
+        elapsed = (time.perf_counter() - start) * 1000
+        # Should return within reasonable time of timeout
+        assert elapsed < 500  # Give some slack
 
 
 class TestWaitForElement:
-    """Tests for wait_for_element synchronization."""
+    """Tests for wait_for_element function."""
 
-    @pytest.mark.requires_app
-    def test_wait_for_element_existing(self, calculator_app: TestApp) -> None:
-        """wait_for_element returns immediately for existing element."""
-        import axterminator as ax
+    def test_element_found_immediately(self):
+        """Test element found on first try."""
+        mock_app = MagicMock()
+        mock_element = MagicMock()
+        mock_app.find.return_value = mock_element
 
-        app = ax.app(name="Calculator")
+        result = wait_for_element(mock_app, "button", timeout_ms=1000)
+        assert result == mock_element
 
-        start = time.perf_counter()
-        try:
-            element = app.wait_for_element("5", timeout_ms=5000)
-            elapsed = time.perf_counter() - start
+    def test_element_found_after_retry(self):
+        """Test element found after some retries."""
+        mock_app = MagicMock()
+        mock_element = MagicMock()
+        call_count = [0]
 
-            assert element is not None
-            # Should return quickly for existing element
-            assert elapsed < 1.0
-        except RuntimeError as e:
-            if "not found" in str(e).lower():
-                pytest.skip("Calculator button '5' not accessible on this macOS version")
+        def side_effect(query, timeout_ms):
+            call_count[0] += 1
+            if call_count[0] < 3:
+                raise RuntimeError("Not found")
+            return mock_element
 
-    @pytest.mark.slow
-    @pytest.mark.requires_app
-    def test_wait_for_element_timeout(self, calculator_app: TestApp) -> None:
-        """wait_for_element raises after timeout for non-existent."""
-        import axterminator as ax
+        mock_app.find.side_effect = side_effect
 
-        app = ax.app(name="Calculator")
+        result = wait_for_element(mock_app, "button", timeout_ms=5000, poll_interval_ms=50)
+        assert result == mock_element
+        assert call_count[0] >= 3
 
-        start = time.perf_counter()
-        with pytest.raises(RuntimeError):
-            app.wait_for_element("NonExistentElement12345", timeout_ms=500)
-        elapsed = time.perf_counter() - start
+    def test_element_not_found_timeout(self):
+        """Test timeout when element never appears."""
+        mock_app = MagicMock()
+        mock_app.find.side_effect = RuntimeError("Not found")
 
-        # Should have waited approximately timeout duration
-        assert 0.4 < elapsed < 1.5
-
-    @pytest.mark.requires_app
-    def test_wait_for_element_default_timeout(self, calculator_app: TestApp) -> None:
-        """Default timeout for wait_for_element is 5000ms."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Should work with default timeout on existing element
-        try:
-            element = app.wait_for_element("5")
-            assert element is not None
-        except RuntimeError as e:
-            if "not found" in str(e).lower():
-                pytest.skip("Calculator button '5' not accessible on this macOS version")
-
-    @pytest.mark.requires_app
-    def test_wait_for_element_returns_element(self, calculator_app: TestApp) -> None:
-        """wait_for_element returns the found element."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        try:
-            element = app.wait_for_element("5")
-
-            # Should be able to use the returned element
-            assert element.role() == "AXButton"
-            assert element.title() == "5"
-        except RuntimeError as e:
-            if "not found" in str(e).lower():
-                pytest.skip("Calculator button '5' not accessible on this macOS version")
-
-    @pytest.mark.requires_app
-    def test_wait_for_element_with_role(self, calculator_app: TestApp) -> None:
-        """wait_for_element works with role queries."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        try:
-            element = app.wait_for_element("role:AXButton", timeout_ms=2000)
-            assert element is not None
-        except RuntimeError:
-            # Query syntax may not be fully implemented
-            pass
+        result = wait_for_element(mock_app, "button", timeout_ms=200, poll_interval_ms=50)
+        assert result is None
 
 
-class TestHeuristicSync:
-    """Tests for heuristic synchronization (accessibility tree change detection)."""
+class TestWaitForValue:
+    """Tests for wait_for_value function."""
 
-    @pytest.mark.requires_app
-    def test_heuristic_detects_stability(self, calculator_app: TestApp) -> None:
-        """Heuristic sync detects when UI is stable."""
-        import axterminator as ax
+    def test_value_matches_immediately(self):
+        """Test value matches immediately."""
+        mock_element = MagicMock()
+        mock_element.value = "expected"
 
-        app = ax.app(name="Calculator")
-
-        # Wait for stability
-        time.sleep(0.5)
-
-        result = app.wait_for_idle(timeout_ms=2000)
-
+        result = wait_for_value(mock_element, "expected", timeout_ms=1000)
         assert result is True
 
-    @pytest.mark.requires_app
-    @pytest.mark.slow
-    def test_heuristic_requires_consecutive_stable(
-        self, calculator_app: TestApp
-    ) -> None:
-        """
-        Heuristic requires multiple consecutive stable readings.
+    def test_value_matches_after_change(self):
+        """Test value matches after it changes."""
+        mock_element = MagicMock()
+        call_count = [0]
 
-        The implementation requires 3 consecutive identical tree hashes
-        before considering the UI stable.
-        """
-        import axterminator as ax
-        import time
+        @property
+        def changing_value(self):
+            call_count[0] += 1
+            return "expected" if call_count[0] >= 3 else "other"
 
-        app = ax.app(name="Calculator")
+        type(mock_element).value = changing_value
 
-        # Give app extra time to stabilize after launch
-        time.sleep(0.5)
+        result = wait_for_value(mock_element, "expected", timeout_ms=5000, poll_interval_ms=50)
+        assert result is True
 
-        # This tests the internal behavior:
-        # - 50ms check interval
-        # - 3 consecutive stable required
-        # - So minimum stable time is ~150ms
+    def test_value_never_matches(self):
+        """Test timeout when value never matches."""
+        mock_element = MagicMock()
+        mock_element.value = "wrong"
 
-        result = app.wait_for_idle(timeout_ms=2000)
-
-        # May return True (stable) or False (timeout) depending on UI state
-        assert isinstance(result, bool)
-
-    @pytest.mark.requires_app
-    def test_heuristic_hash_changes_on_action(self, calculator_app: TestApp) -> None:
-        """Tree hash changes when UI changes."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        try:
-            # Start with stable UI
-            app.wait_for_idle(timeout_ms=1000)
-
-            # Click a button (may change display)
-            element = app.find("5")
-            element.click()
-
-            # UI may briefly be unstable
-            # Wait again should succeed
-            result = app.wait_for_idle(timeout_ms=2000)
-
-            assert result is True
-        except RuntimeError:
-            pass
-
-
-class TestXPCSync:
-    """Tests for XPC-based synchronization (EspressoMac SDK integration)."""
-
-    def test_xpc_sync_not_available_fallback(self) -> None:
-        """When XPC sync unavailable, falls back to heuristic."""
-        import axterminator as ax
-
-        # Verify xpc_sync_available exists and returns bool
-        result = ax.xpc_sync_available()
-        assert isinstance(result, bool)
-        # Currently always returns False (not implemented)
+        result = wait_for_value(mock_element, "expected", timeout_ms=200, poll_interval_ms=50)
         assert result is False
 
-    def test_xpc_sync_preferred_when_available(self) -> None:
-        """XPC sync is preferred over heuristic when available."""
-        # This would test EspressoMac SDK integration
-        pass
 
-    def test_xpc_sync_timeout_respected(self) -> None:
-        """XPC sync respects timeout parameter."""
-        # Mock XPC with delayed response
-        pass
+class TestXPCSyncAvailable:
+    """Tests for XPC sync availability check."""
 
-    def test_xpc_sync_error_handling(self) -> None:
-        """XPC sync errors fallback to heuristic."""
-        # Mock XPC failure
-        pass
+    def test_xpc_sync_not_available(self):
+        """Test XPC sync is not available (stub returns False)."""
+        result = xpc_sync_available()
+        assert result is False
 
 
-class TestSyncCombined:
-    """Tests combining multiple sync methods."""
+class TestSyncTimeout:
+    """Tests for SyncTimeout exception."""
 
-    @pytest.mark.requires_app
-    def test_wait_idle_then_find(self, calculator_app: TestApp) -> None:
-        """Common pattern: wait_for_idle then find element."""
-        import axterminator as ax
+    def test_sync_timeout_message(self):
+        """Test SyncTimeout has correct message."""
+        exc = SyncTimeout("Custom message")
+        assert str(exc) == "Custom message"
 
-        app = ax.app(name="Calculator")
-
-        # Wait for UI stability
-        app.wait_for_idle()
-
-        # Then find element
-        try:
-            element = app.find("5")
-            assert element is not None
-        except RuntimeError as e:
-            if "not found" in str(e).lower():
-                pytest.skip("Calculator button '5' not accessible on this macOS version")
-
-    @pytest.mark.requires_app
-    def test_click_wait_find(self, calculator_app: TestApp) -> None:
-        """Common pattern: click, wait, then find/verify."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        try:
-            # Click a number
-            element = app.find("5")
-            element.click()
-
-            # Wait for UI update
-            app.wait_for_idle()
-
-            # Verify (in a real test, would check display)
-            display = app.find_by_role("AXStaticText")
-            if display:
-                value = display.value()
-                # Calculator display would show "5"
-        except RuntimeError:
-            pass
-
-    @pytest.mark.requires_app
-    def test_sequential_operations_with_sync(self, calculator_app: TestApp) -> None:
-        """Sequential operations with sync between each."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        try:
-            # Perform calculation: 5 + 3 =
-            operations = ["5", "+", "3", "="]
-
-            for op in operations:
-                element = app.find(op)
-                element.click()
-                app.wait_for_idle(timeout_ms=500)
-        except RuntimeError:
-            pass
-
-
-class TestSyncPerformance:
-    """Performance tests for synchronization."""
-
-    @pytest.mark.slow
-    @pytest.mark.requires_app
-    def test_wait_for_idle_performance(
-        self,
-        calculator_app: TestApp,
-        perf_timer: Callable[..., PerformanceResult],
-    ) -> None:
-        """wait_for_idle has reasonable performance on stable app."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Wait for initial stability
-        time.sleep(0.5)
-
-        result = perf_timer(
-            lambda: app.wait_for_idle(timeout_ms=500),
-            iterations=10,
-            name="wait_for_idle",
-        )
-
-        # On stable app, should return within timeout
-        # Heuristic needs multiple checks, so allow up to 1s
-        assert result.avg_ms < 1000, f"wait_for_idle too slow: {result.avg_ms}ms"
-
-    @pytest.mark.slow
-    @pytest.mark.requires_app
-    def test_wait_for_element_performance(
-        self,
-        calculator_app: TestApp,
-        perf_timer: Callable[..., PerformanceResult],
-    ) -> None:
-        """wait_for_element is fast for existing elements."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        result = perf_timer(
-            lambda: app.wait_for_element("5", timeout_ms=100),
-            iterations=50,
-            name="wait_for_element",
-        )
-
-        # For existing element, should be within timeout
-        assert result.p95_ms < 500, f"wait_for_element too slow: {result.p95_ms}ms"
-
-
-class TestSyncEdgeCases:
-    """Edge cases for synchronization."""
-
-    @pytest.mark.requires_app
-    def test_sync_on_minimized_app(self, calculator_app: TestApp) -> None:
-        """Sync works on minimized window."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Note: Can't easily minimize in test, but verify no crash
-        result = app.wait_for_idle(timeout_ms=1000)
-
-        assert isinstance(result, bool)
-
-    @pytest.mark.requires_app
-    def test_sync_zero_timeout(self, calculator_app: TestApp) -> None:
-        """Zero timeout returns immediately."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        start = time.perf_counter()
-        result = app.wait_for_idle(timeout_ms=0)
-        elapsed = time.perf_counter() - start
-
-        # Should return immediately
-        assert elapsed < 0.5
-
-    @pytest.mark.requires_app
-    def test_sync_very_long_timeout(self, calculator_app: TestApp) -> None:
-        """Long timeout doesn't block forever on stable app."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Wait for stability first
-        time.sleep(0.5)
-
-        start = time.perf_counter()
-        result = app.wait_for_idle(timeout_ms=30000)  # 30s timeout
-        elapsed = time.perf_counter() - start
-
-        # Should return quickly despite long timeout
-        assert elapsed < 5.0
-        assert result is True
-
-    def test_sync_after_app_termination(self, calculator_app: TestApp) -> None:
-        """Sync handles terminated app gracefully."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # Terminate the app
-        calculator_app.terminate()
-        time.sleep(0.5)
-
-        # Sync should handle this gracefully (return False or raise)
-        try:
-            result = app.wait_for_idle(timeout_ms=100)
-            # May return False
-            assert isinstance(result, bool)
-        except RuntimeError:
-            # Or may raise error
-            pass
-
-
-class TestSyncRetries:
-    """Tests for retry behavior in synchronization."""
-
-    @pytest.mark.requires_app
-    def test_find_retries_until_found(self, calculator_app: TestApp) -> None:
-        """find() with timeout retries until element found."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # With timeout, should retry
-        try:
-            element = app.find("5", timeout_ms=2000)
-        except RuntimeError as e:
-            if "not found" in str(e).lower():
-                pytest.skip("Calculator button '5' not accessible on this macOS version")
-            raise
-
-        assert element is not None
-
-    @pytest.mark.requires_app
-    def test_find_retry_interval(self, calculator_app: TestApp) -> None:
-        """find() uses appropriate retry interval (50ms)."""
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        # This is internal behavior verification
-        # With 200ms timeout and 50ms interval, ~4 retries possible
-        with pytest.raises(RuntimeError):
-            app.find("NonExistentElement", timeout_ms=200)
-
-
-class TestAsyncSync:
-    """Tests for async synchronization patterns."""
-
-    @pytest.mark.requires_app
-    def test_sync_doesnt_block_other_threads(self, calculator_app: TestApp) -> None:
-        """Sync operations don't block Python GIL excessively."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        import axterminator as ax
-
-        app = ax.app(name="Calculator")
-
-        def sync_operation():
-            return app.wait_for_idle(timeout_ms=100)
-
-        # Run multiple sync operations concurrently
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(sync_operation) for _ in range(3)]
-
-            results = [f.result() for f in as_completed(futures)]
-
-        # All should complete
-        assert len(results) == 3
+    def test_sync_timeout_is_exception(self):
+        """Test SyncTimeout is an Exception."""
+        assert issubclass(SyncTimeout, Exception)

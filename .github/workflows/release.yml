@@ -116,3 +116,26 @@ jobs:
           generate_release_notes: true
           files: |
             release/*
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build-python]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/axterminator
+    permissions:
+      id-token: write  # Trusted publishing
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

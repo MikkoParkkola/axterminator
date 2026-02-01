@@ -17,6 +17,15 @@ from axterminator.axterminator import (
 # VLM integration for visual element detection
 from axterminator.vlm import configure_vlm, detect_element_visual
 
+# Synchronization utilities
+from axterminator.sync import (
+    SyncTimeout,
+    wait_for_condition,
+    wait_for_element,
+    wait_for_idle,
+    wait_for_value,
+)
+
 
 # Stub for XPC sync availability check (not yet implemented)
 def xpc_sync_available() -> bool:
@@ -38,4 +47,10 @@ __all__ = [
     "BACKGROUND",
     "FOCUS",
     "__version__",
+    # Sync utilities
+    "wait_for_idle",
+    "wait_for_element",
+    "wait_for_condition",
+    "wait_for_value",
+    "SyncTimeout",
 ]
