@@ -50,3 +50,4 @@ EspressoMacSDK/Package.resolved
 # Build caches
 .mypy_cache/
 .ruff_cache/
+site/

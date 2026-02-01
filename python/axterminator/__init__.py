@@ -26,6 +26,9 @@ from axterminator.sync import (
     wait_for_value,
 )
 
+# Recording utilities
+from axterminator.recorder import Recorder
+
 
 # Stub for XPC sync availability check (not yet implemented)
 def xpc_sync_available() -> bool:
@@ -53,4 +56,6 @@ __all__ = [
     "wait_for_condition",
     "wait_for_value",
     "SyncTimeout",
+    # Recording
+    "Recorder",
 ]

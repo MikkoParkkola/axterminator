@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "axterminator"
-version = "0.2.1"
+version = "0.3.0"
 description = "World's most superior macOS GUI testing framework with background testing"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
@@ -49,12 +49,22 @@ vlm-openai = [
 vlm-gemini = [
     "google-generativeai>=0.3.0",
 ]
+vlm-ollama = [
+    "httpx>=0.25.0",
+]
 vlm-all = [
     "mlx-vlm>=0.1.0",
     "anthropic>=0.25.0",
     "openai>=1.0.0",
     "google-generativeai>=0.3.0",
+    "httpx>=0.25.0",
 ]
+
+[project.scripts]
+axterminator = "axterminator.cli:main"
+
+[project.entry-points."pytest11"]
+axterminator = "axterminator.pytest_plugin"
 
 [project.urls]
 Homepage = "https://github.com/MikkoParkkola/axterminator"

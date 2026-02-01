@@ -10,6 +10,7 @@ from axterminator.vlm import (
     AnthropicBackend,
     OpenAIBackend,
     GeminiBackend,
+    OllamaBackend,
     configure_vlm,
     get_vlm_detector,
     detect_element_visual,
@@ -173,6 +174,38 @@ class TestGeminiBackend:
         assert bbox is None
 
 
+class TestOllamaBackend:
+    """Tests for Ollama backend."""
+
+    def test_ollama_backend_defaults(self):
+        """Test Ollama backend with defaults."""
+        backend = OllamaBackend()
+        assert backend.model == "llava"
+        assert backend.host == "http://localhost:11434"
+
+    def test_ollama_backend_custom(self):
+        """Test Ollama backend with custom settings."""
+        backend = OllamaBackend(model="bakllava", host="http://192.168.1.100:11434")
+        assert backend.model == "bakllava"
+        assert backend.host == "http://192.168.1.100:11434"
+
+    def test_ollama_backend_parse_bbox_valid(self):
+        """Test parsing valid bbox response."""
+        backend = OllamaBackend()
+        response = '{"x": 10, "y": 20, "width": 30, "height": 40}'
+        bbox = backend._parse_bbox_response(response, 100, 100)
+        assert bbox is not None
+        assert bbox.x == 10.0
+        assert bbox.y == 20.0
+
+    def test_ollama_backend_parse_bbox_error(self):
+        """Test parsing error response."""
+        backend = OllamaBackend()
+        response = '{"error": "not found"}'
+        bbox = backend._parse_bbox_response(response, 100, 100)
+        assert bbox is None
+
+
 class TestVLMDetector:
     """Tests for VLMDetector class."""
 
@@ -244,6 +277,13 @@ class TestConfigureVLM:
         detector = get_vlm_detector()
         assert detector is not None
         assert isinstance(detector.backend, GeminiBackend)
+
+    def test_configure_vlm_ollama(self):
+        """Test configure_vlm with Ollama backend."""
+        configure_vlm(backend="ollama")
+        detector = get_vlm_detector()
+        assert detector is not None
+        assert isinstance(detector.backend, OllamaBackend)
 
 
 class TestDetectElementVisual:

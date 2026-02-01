@@ -7,6 +7,7 @@ when traditional locators fail. Supports multiple backends:
 - Anthropic Claude Vision API
 - OpenAI GPT-4V API
 - Google Gemini Vision API
+- Ollama (local, free, any vision model)
 
 Usage:
     from axterminator.vlm import VLMDetector, configure_vlm
@@ -315,6 +316,81 @@ If the element is not found, return: {{"error": "not found"}}"""
             return None
 
 
+class OllamaBackend(VLMBackend):
+    """Ollama local VLM backend using llava/bakllava models."""
+
+    def __init__(
+        self,
+        model: str = "llava",
+        host: str = "http://localhost:11434",
+    ):
+        self.model = model
+        self.host = host.rstrip("/")
+
+    def detect_element(
+        self, image_data: bytes, description: str, image_width: int, image_height: int
+    ) -> Optional[BoundingBox]:
+        """Detect element using Ollama vision model."""
+        try:
+            import httpx
+        except ImportError:
+            raise ImportError(
+                "httpx not installed. Install with: pip install httpx"
+            )
+
+        # Encode image as base64
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
+
+        prompt = f"""Look at this macOS application screenshot.
+Find the UI element that matches this description: "{description}"
+
+Return ONLY a JSON object with the bounding box coordinates as percentages (0-100) of the image dimensions:
+{{"x": <left_percent>, "y": <top_percent>, "width": <width_percent>, "height": <height_percent>}}
+
+If the element is not found, return: {{"error": "not found"}}"""
+
+        response = httpx.post(
+            f"{self.host}/api/generate",
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "images": [image_b64],
+                "stream": False,
+            },
+            timeout=60.0,
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        return self._parse_bbox_response(
+            result.get("response", ""), image_width, image_height
+        )
+
+    def _parse_bbox_response(
+        self, response: str, image_width: int, image_height: int
+    ) -> Optional[BoundingBox]:
+        """Parse bounding box from model response."""
+        try:
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start == -1 or end == 0:
+                return None
+
+            data = json.loads(response[start:end])
+
+            if "error" in data:
+                return None
+
+            return BoundingBox(
+                x=data["x"] * image_width / 100,
+                y=data["y"] * image_height / 100,
+                width=data["width"] * image_width / 100,
+                height=data["height"] * image_height / 100,
+            )
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None
+
+
 class OpenAIBackend(VLMBackend):
     """OpenAI GPT-4V API backend."""
 
@@ -461,8 +537,10 @@ def configure_vlm(
         vlm_backend = OpenAIBackend(api_key=api_key, model=model or "gpt-4o")
     elif backend == "gemini":
         vlm_backend = GeminiBackend(api_key=api_key, model=model or "gemini-2.0-flash")
+    elif backend == "ollama":
+        vlm_backend = OllamaBackend(model=model or "llava")
     else:
-        raise ValueError(f"Unknown backend: {backend}. Use 'mlx', 'anthropic', 'openai', or 'gemini'")
+        raise ValueError(f"Unknown backend: {backend}. Use 'mlx', 'anthropic', 'openai', 'gemini', or 'ollama'")
 
     _vlm_detector = VLMDetector(vlm_backend)
 
