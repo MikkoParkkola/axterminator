@@ -40,8 +40,62 @@ except ImportError:
     AXTERMINATOR_AVAILABLE = False
     logger.warning("axterminator not installed - install with: pip install axterminator")
 
+# Try to import VLM module for visual fallback
+VLM_AVAILABLE = False
+try:
+    from axterminator.vlm import configure_vlm, detect_element_visual
+    # Try to configure a VLM backend
+    import os
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        configure_vlm(backend="anthropic")
+        VLM_AVAILABLE = True
+        logger.info("VLM fallback enabled (Anthropic)")
+    elif os.environ.get("OPENAI_API_KEY"):
+        configure_vlm(backend="openai")
+        VLM_AVAILABLE = True
+        logger.info("VLM fallback enabled (OpenAI)")
+    else:
+        try:
+            configure_vlm(backend="mlx")
+            VLM_AVAILABLE = True
+            logger.info("VLM fallback enabled (MLX local)")
+        except Exception:
+            logger.info("VLM fallback not available (no MLX or API keys)")
+except ImportError:
+    logger.info("VLM module not installed - visual fallback disabled")
+
 # Store connected apps
 _connected_apps: dict[str, Any] = {}
+
+
+def _click_at_coordinates(x: int, y: int, click_type: str = "single") -> bool:
+    """Click at screen coordinates using Quartz/CGEvent (for VLM fallback)."""
+    try:
+        import Quartz
+        from Quartz import CGEventCreateMouseEvent, CGEventPost, kCGEventLeftMouseDown, kCGEventLeftMouseUp, kCGHIDEventTap, CGPoint
+
+        point = CGPoint(x, y)
+
+        # Mouse down
+        event = CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, point, 0)
+        CGEventPost(kCGHIDEventTap, event)
+
+        # Mouse up
+        event = CGEventCreateMouseEvent(None, kCGEventLeftMouseUp, point, 0)
+        CGEventPost(kCGHIDEventTap, event)
+
+        if click_type == "double":
+            import time
+            time.sleep(0.1)
+            event = CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, point, 0)
+            CGEventPost(kCGHIDEventTap, event)
+            event = CGEventCreateMouseEvent(None, kCGEventLeftMouseUp, point, 0)
+            CGEventPost(kCGHIDEventTap, event)
+
+        return True
+    except Exception as e:
+        logger.warning(f"Coordinate click failed: {e}")
+        return False
 
 # Initialize MCP server
 server = Server("axterminator")
@@ -278,6 +332,58 @@ Returns: Base64 screenshot data.""",
             },
         ),
         Tool(
+            name="ax_click_at",
+            description="""Click at specific screen coordinates.
+
+Use this when VLM visual detection found an element but accessibility couldn't.
+Coordinates are absolute screen position.
+
+Returns: Click result.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "type": "integer",
+                        "description": "X coordinate (pixels from left)",
+                    },
+                    "y": {
+                        "type": "integer",
+                        "description": "Y coordinate (pixels from top)",
+                    },
+                    "click_type": {
+                        "type": "string",
+                        "description": "Click type: 'single' (default), 'double', or 'right'",
+                        "enum": ["single", "double", "right"],
+                        "default": "single",
+                    },
+                },
+                "required": ["x", "y"],
+            },
+        ),
+        Tool(
+            name="ax_find_visual",
+            description="""Find UI element using VLM visual detection (AI vision).
+
+Use this when accessibility-based locators fail (e.g., shadow DOM, canvas, WebGL).
+Takes a screenshot and uses AI to locate the element visually.
+
+Returns: Element coordinates if found.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "app": {
+                        "type": "string",
+                        "description": "App name/alias from ax_connect",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Natural language description of element (e.g., 'Load unpacked button')",
+                    },
+                },
+                "required": ["app", "description"],
+            },
+        ),
+        Tool(
             name="ax_wait_idle",
             description="""Wait for an app to become idle (no pending UI updates).
 
@@ -369,18 +475,27 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             app = _get_app(arguments["app"])
             query = arguments["query"]
             timeout = arguments.get("timeout_ms", 5000)
+            use_vlm = arguments.get("use_vlm_fallback", True)  # Enable VLM fallback by default
 
             element = app.wait_for_element(query, timeout_ms=timeout)
 
             if element:
+                # Call methods on AXElement to get actual values
+                role = element.role() if callable(getattr(element, "role", None)) else getattr(element, "role", "unknown")
+                title = element.title() if callable(getattr(element, "title", None)) else getattr(element, "title", "")
+                value = element.value() if callable(getattr(element, "value", None)) else getattr(element, "value", "")
+                enabled = element.enabled() if callable(getattr(element, "enabled", None)) else getattr(element, "enabled", True)
+                position = element.position() if callable(getattr(element, "position", None)) else getattr(element, "position", None)
+                size = element.size() if callable(getattr(element, "size", None)) else getattr(element, "size", None)
                 info = {
                     "found": True,
-                    "role": getattr(element, "role", "unknown"),
-                    "title": getattr(element, "title", ""),
-                    "value": getattr(element, "value", ""),
-                    "enabled": getattr(element, "enabled", True),
-                    "position": getattr(element, "position", None),
-                    "size": getattr(element, "size", None),
+                    "method": "accessibility",
+                    "role": role,
+                    "title": title,
+                    "value": value,
+                    "enabled": enabled,
+                    "position": position,
+                    "size": size,
                 }
                 return [
                     TextContent(
@@ -388,39 +503,92 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                         text=f"✅ Found element:\n{info}",
                     )
                 ]
-            else:
-                return [
-                    TextContent(
-                        type="text",
-                        text=f"❌ Element not found: '{query}' (timeout: {timeout}ms)",
-                    )
-                ]
+
+            # VLM fallback: try visual detection if accessibility failed
+            if use_vlm and VLM_AVAILABLE:
+                logger.info(f"Accessibility search failed for '{query}', trying VLM visual fallback...")
+                try:
+                    # Take screenshot of the app
+                    screenshot_data = app.screenshot()
+                    if screenshot_data:
+                        # Use VLM to detect element visually
+                        result = detect_element_visual(
+                            image_data=screenshot_data,
+                            description=query,
+                            image_width=1920,  # TODO: get actual dimensions
+                            image_height=1080,
+                        )
+                        if result:
+                            x, y = result
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=f"✅ Found element via VLM visual detection:\n{{'found': True, 'method': 'visual_vlm', 'position': ({x}, {y}), 'query': '{query}'}}",
+                                )
+                            ]
+                except Exception as e:
+                    logger.warning(f"VLM fallback failed: {e}")
+
+            # All strategies failed
+            vlm_status = " (VLM fallback attempted)" if use_vlm and VLM_AVAILABLE else " (VLM fallback not available)"
+            return [
+                TextContent(
+                    type="text",
+                    text=f"❌ Element not found: '{query}' (timeout: {timeout}ms){vlm_status}",
+                )
+            ]
 
         elif name == "ax_click":
             app = _get_app(arguments["app"])
             query = arguments["query"]
             mode_str = arguments.get("mode", "background")
             click_type = arguments.get("click_type", "single")
+            use_vlm = arguments.get("use_vlm_fallback", True)
 
             mode = ax.BACKGROUND if mode_str == "background" else ax.FOCUS
             element = app.find(query)
 
-            if not element:
-                return [TextContent(type="text", text=f"❌ Element not found: '{query}'")]
+            if element:
+                if click_type == "double":
+                    element.double_click(mode=mode)
+                elif click_type == "right":
+                    element.right_click(mode=mode)
+                else:
+                    element.click(mode=mode)
 
-            if click_type == "double":
-                element.double_click(mode=mode)
-            elif click_type == "right":
-                element.right_click(mode=mode)
-            else:
-                element.click(mode=mode)
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"✅ Clicked '{query}' ({click_type}, {mode_str} mode)",
+                    )
+                ]
 
-            return [
-                TextContent(
-                    type="text",
-                    text=f"✅ Clicked '{query}' ({click_type}, {mode_str} mode)",
-                )
-            ]
+            # VLM fallback: try visual detection and coordinate-based click
+            if use_vlm and VLM_AVAILABLE:
+                logger.info(f"Accessibility search failed for '{query}', trying VLM visual click...")
+                try:
+                    screenshot_data = app.screenshot()
+                    if screenshot_data:
+                        result = detect_element_visual(
+                            image_data=screenshot_data,
+                            description=query,
+                            image_width=1920,
+                            image_height=1080,
+                        )
+                        if result:
+                            x, y = result
+                            # Click at the detected coordinates using Quartz
+                            if _click_at_coordinates(x, y, click_type):
+                                return [
+                                    TextContent(
+                                        type="text",
+                                        text=f"✅ Clicked '{query}' at ({x}, {y}) via VLM ({click_type}, {mode_str} mode)",
+                                    )
+                                ]
+                except Exception as e:
+                    logger.warning(f"VLM click fallback failed: {e}")
+
+            return [TextContent(type="text", text=f"❌ Element not found: '{query}'")]
 
         elif name == "ax_type":
             app = _get_app(arguments["app"])
@@ -469,7 +637,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             if not element:
                 return [TextContent(type="text", text=f"❌ Element not found: '{query}'")]
 
-            value = getattr(element, "value", None)
+            value = element.value() if callable(getattr(element, "value", None)) else getattr(element, "value", None)
 
             return [
                 TextContent(
@@ -487,7 +655,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
             result = "Windows:\n"
             for i, w in enumerate(windows):
-                title = getattr(w, "title", f"Window {i}")
+                title = w.title() if callable(getattr(w, "title", None)) else getattr(w, "title", f"Window {i}")
                 result += f"  {i + 1}. {title}\n"
 
             return [TextContent(type="text", text=result)]
@@ -528,6 +696,63 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return [
                     TextContent(type="text", text="✅ Wait complete (no native idle detection)")
                 ]
+
+        elif name == "ax_click_at":
+            x = arguments["x"]
+            y = arguments["y"]
+            click_type = arguments.get("click_type", "single")
+
+            if _click_at_coordinates(x, y, click_type):
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"✅ Clicked at ({x}, {y}) ({click_type} click)",
+                    )
+                ]
+            else:
+                return [TextContent(type="text", text=f"❌ Click at ({x}, {y}) failed")]
+
+        elif name == "ax_find_visual":
+            if not VLM_AVAILABLE:
+                return [
+                    TextContent(
+                        type="text",
+                        text="❌ VLM not available. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or install mlx-vlm.",
+                    )
+                ]
+
+            app = _get_app(arguments["app"])
+            description = arguments["description"]
+
+            try:
+                screenshot_data = app.screenshot()
+                if not screenshot_data:
+                    return [TextContent(type="text", text="❌ Failed to capture screenshot for VLM")]
+
+                result = detect_element_visual(
+                    image_data=screenshot_data,
+                    description=description,
+                    image_width=1920,
+                    image_height=1080,
+                )
+
+                if result:
+                    x, y = result
+                    return [
+                        TextContent(
+                            type="text",
+                            text=f"✅ Found '{description}' at ({x}, {y}) via VLM visual detection",
+                        )
+                    ]
+                else:
+                    return [
+                        TextContent(
+                            type="text",
+                            text=f"❌ VLM could not find: '{description}'",
+                        )
+                    ]
+            except Exception as e:
+                return [TextContent(type="text", text=f"❌ VLM detection failed: {e}")]
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]

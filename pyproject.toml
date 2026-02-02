@@ -9,7 +9,7 @@ description = "World's most superior macOS GUI testing framework with background
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Mikko", email = "mikko@broa.biz" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["macos", "gui", "testing", "accessibility", "automation", "background"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -27,6 +27,9 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Software Development :: Testing",
     "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "mcp",
 ]
 
 [project.optional-dependencies]
