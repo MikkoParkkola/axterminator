@@ -36,6 +36,10 @@ mod cache;
 mod element;
 mod error;
 mod healing;
+pub mod copilot_format;
+pub mod copilot_state;
+pub mod intent;
+pub mod intent_matching;
 mod router;
 mod sync;
 
