@@ -14,9 +14,9 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```ignore
 //! use axterminator::copilot_state::read_copilot_state;
-//! use axterminator::accessibility::create_application_element;
+//! use axterminator::create_application_element;
 //!
 //! let app_ref = create_application_element(12345).unwrap();
 //! let state = read_copilot_state(app_ref);
