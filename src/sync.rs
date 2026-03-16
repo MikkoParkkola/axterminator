@@ -712,7 +712,7 @@ mod tests {
             let sync = HeuristicSync::new(1234, mock_element());
             let timeout = Duration::from_millis(100);
             let start = Instant::now();
-            let stable = sync.wait_for_stable(timeout);
+            let _stable = sync.wait_for_stable(timeout);
             let elapsed = start.elapsed();
 
             // Should return quickly since mock element is always stable
