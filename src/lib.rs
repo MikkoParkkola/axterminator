@@ -42,6 +42,7 @@ pub mod copilot_state;
 pub mod healing_match;
 pub mod intent;
 pub mod intent_matching;
+pub mod persistent_refs;
 mod router;
 mod sync;
 
