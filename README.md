@@ -289,6 +289,10 @@ pytest python/tests/
 
 *Benchmarked on M1 MacBook Pro, macOS 14.2. [Full benchmarks →](https://mikkoparkkola.github.io/axterminator/performance/)*
 
+## Acknowledgements
+
+AXTerminator was inspired by [Terminator](https://github.com/mediar-ai/terminator) by [mediar-ai](https://github.com/mediar-ai), which pioneered accessible GUI automation for Windows. AXTerminator brings similar capabilities to macOS with the addition of world-first background testing, leveraging Apple's Accessibility API for non-intrusive automation.
+
 ## License
 
 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)

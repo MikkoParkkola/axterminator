@@ -194,3 +194,7 @@ PyPI: [pypi.org/project/axterminator](https://pypi.org/project/axterminator/)
 ---
 
 *AXTerminator is dual-licensed under MIT and Apache 2.0.*
+
+## Standing on Shoulders
+
+AXTerminator was inspired by [Terminator](https://github.com/mediar-ai/terminator) from mediar-ai, which brought accessible GUI automation to Windows. We wanted the same power on macOS — but we also wanted something new: the ability to test apps *without stealing focus from your work*. That became background testing, and it turned out to be a world first.
