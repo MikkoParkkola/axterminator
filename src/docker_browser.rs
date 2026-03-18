@@ -430,7 +430,7 @@ fn base64_decode(input: &str) -> AXResult<Vec<u8>> {
             .map(|&b| lookup[b as usize])
             .collect();
 
-        if vals.iter().any(|&v| v == 255) {
+        if vals.contains(&255) {
             return Err(AXError::SystemError("Invalid base64 character".into()));
         }
 

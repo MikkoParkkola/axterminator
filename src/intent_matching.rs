@@ -77,7 +77,7 @@ pub fn score_node(node: &SceneNode, ctx: &MatchContext, scene: &SceneGraph) -> (
     let enabled_bonus = if node.enabled { 0.05 } else { 0.0 };
 
     let raw = label_score + role_score + context_score + enabled_bonus;
-    let confidence = raw.min(1.0_f64).max(0.0_f64);
+    let confidence = raw.clamp(0.0_f64, 1.0_f64);
 
     let reason = build_reason(label_score, role_score, context_score, node);
     (confidence, reason)
@@ -100,11 +100,14 @@ fn score_labels(node: &SceneNode, ctx: &MatchContext) -> f64 {
 
     // Bonus when any label contains the full query as a substring
     let full_query = ctx.tokens.join(" ");
-    let exact_bonus = labels
+    let exact_bonus = if labels
         .iter()
         .any(|l| l.to_lowercase().contains(&full_query))
-        .then_some(0.15)
-        .unwrap_or(0.0);
+    {
+        0.15
+    } else {
+        0.0
+    };
 
     // Contribution cap: 0.60
     (best * 0.60 + exact_bonus).min(0.75)

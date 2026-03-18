@@ -6,7 +6,6 @@ use std::process::Command;
 use std::time::Instant;
 
 #[link(name = "ApplicationServices", kind = "framework")]
-#[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     fn AXUIElementCreateApplication(pid: i32) -> *mut std::ffi::c_void;
     fn AXUIElementCopyAttributeValue(
@@ -26,7 +25,6 @@ extern "C" {
     ) -> *const std::ffi::c_void;
     fn CFArrayGetCount(array: *const std::ffi::c_void) -> isize;
     fn CFArrayGetValueAtIndex(array: *const std::ffi::c_void, idx: isize) -> *mut std::ffi::c_void;
-    fn CFStringGetCStringPtr(string: *const std::ffi::c_void, encoding: u32) -> *const i8;
 }
 
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x08000100;
@@ -185,7 +183,7 @@ fn main() {
         let speedup = appium_estimate / elem_access_us;
         println!("\n   Realistic speedup vs Appium: ~{:.0}× faster", speedup);
 
-        if speedup >= 60.0 && speedup <= 100.0 {
+        if (60.0..=100.0).contains(&speedup) {
             println!("   → \"60-100x faster\" claim is ACCURATE");
         } else if speedup >= 100.0 {
             println!(

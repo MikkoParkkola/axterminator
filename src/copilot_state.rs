@@ -221,7 +221,7 @@ pub fn read_copilot_state(app_ref: AXUIElementRef) -> CopilotState {
 /// * `app_ref`     – application element (must outlive the returned handle)
 /// * `interval_ms` – polling interval in milliseconds (minimum 50 ms)
 /// * `callback`    – called on every detected change, receives the new state
-///                   and the diff from the previous state
+///   and the diff from the previous state
 pub fn watch_state_changes<F>(
     app_ref: AXUIElementRef,
     interval_ms: u64,

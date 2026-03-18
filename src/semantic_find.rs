@@ -17,7 +17,7 @@
 //! When `AXTERMINATOR_LLM_ENDPOINT` is set in the environment the finder sends
 //! the top-20 structural candidates and the query to that endpoint for a second
 //! pass.  When unset, the structural score is used directly.  The LLM path is
-//! modelled as a pluggable [`LlmRanker`] trait so tests can inject a mock.
+//! modelled as a pluggable `LlmRanker` trait so tests can inject a mock.
 //!
 //! # Example
 //!
@@ -128,7 +128,7 @@ impl SemanticFinder {
     /// Find elements in `scene` that match the natural-language `query`.
     ///
     /// Returns up to 20 results sorted by descending confidence.  Elements
-    /// below [`MIN_SCORE`] are excluded.
+    /// below the minimum score threshold (0.05) are excluded.
     ///
     /// # Arguments
     ///
@@ -166,7 +166,7 @@ impl SemanticFinder {
     ) -> Option<(f64, String, &'a SceneNode)> {
         let (base, reason) = score_node(node, ctx, scene);
         let adjusted = base + hints.position_bonus(node) + hints.size_bonus(node);
-        let clamped = adjusted.min(1.0_f64).max(0.0_f64);
+        let clamped = adjusted.clamp(0.0_f64, 1.0_f64);
         (clamped >= MIN_SCORE).then_some((clamped, reason, node))
     }
 }
@@ -438,7 +438,7 @@ mod tests {
     #[test]
     fn find_empty_scene_returns_empty_result() {
         // GIVEN: Empty scene
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let scene = SceneGraph::empty();
         let query = FindQuery::new("submit button");
         // WHEN
@@ -454,7 +454,7 @@ mod tests {
             .map(|i| button(i, "Submit", (0.0, f64::from(i as u32) * 40.0, 100.0, 30.0)))
             .collect();
         let scene = build_scene_from_nodes(nodes);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("submit");
         // WHEN
         let result = finder.find(&scene, &query);
@@ -469,7 +469,7 @@ mod tests {
             button(0, "Search", (0.0, 0.0, 100.0, 30.0)),
             button(1, "Cancel", (0.0, 40.0, 100.0, 30.0)),
         ]);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("search");
         // WHEN
         let result = finder.find(&scene, &query);
@@ -486,7 +486,7 @@ mod tests {
             button(1, "Cancel", (0.0, 40.0, 100.0, 30.0)),
             button(2, "Submit Form", (0.0, 80.0, 100.0, 30.0)),
         ]);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("submit button");
         // WHEN
         let result = finder.find(&scene, &query);
@@ -504,7 +504,7 @@ mod tests {
             field(1, "Email address"),
             button(2, "Cancel", (0.0, 40.0, 60.0, 25.0)),
         ]);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("email input field");
         // WHEN
         let result = finder.find(&scene, &query);
@@ -521,7 +521,7 @@ mod tests {
             button(0, "Email", (0.0, 0.0, 100.0, 30.0)),
             field(1, "Email"),
         ]);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("email input field");
         // WHEN
         let result = finder.find(&scene, &query);
@@ -537,7 +537,7 @@ mod tests {
             button(0, "Close", (10.0, 5.0, 80.0, 30.0)),   // center cy=20 → top
             button(1, "Close", (10.0, 700.0, 80.0, 30.0)), // center cy=715 → bottom
         ]);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("close button at the top");
         // WHEN
         let result = finder.find(&scene, &query);
@@ -561,7 +561,7 @@ mod tests {
     fn find_reasoning_non_empty_for_every_match() {
         // GIVEN
         let scene = build_scene_from_nodes(vec![button(0, "Save", (0.0, 0.0, 80.0, 28.0))]);
-        let finder = SemanticFinder::default();
+        let finder = SemanticFinder;
         let query = FindQuery::new("save");
         // WHEN
         let result = finder.find(&scene, &query);

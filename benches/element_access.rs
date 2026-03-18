@@ -140,6 +140,7 @@ fn benchmark_element_search(c: &mut Criterion) {
 }
 
 /// Search for element with given role (BFS, limited depth)
+#[allow(clippy::cmp_owned)]
 unsafe fn search_for_role(element: CFTypeRef, target_role: &str, max_depth: usize) -> bool {
     use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
 

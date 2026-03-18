@@ -74,7 +74,7 @@ pub enum RecordedAction {
 
 /// A user action annotated with semantic element context.
 ///
-/// The [`element_fingerprint`] is the stable hash used by [`RefStore`] to
+/// The `element_fingerprint` field is the stable hash used by [`RefStore`] to
 /// re-identify the element on replay even if it moves on screen.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecordedEvent {
@@ -96,8 +96,8 @@ pub struct RecordedEvent {
 
 /// Records user actions into a replayable workflow.
 ///
-/// Call [`start_recording`] before the user interaction, then
-/// [`stop_recording`] to obtain the captured event stream.
+/// Call [`WorkflowRecorder::start_recording`] before the user interaction,
+/// then [`WorkflowRecorder::stop_recording`] to obtain the captured event stream.
 pub struct WorkflowRecorder {
     events: Vec<RecordedEvent>,
     recording: bool,
@@ -146,7 +146,7 @@ impl WorkflowRecorder {
     /// Append an event to the recording.
     ///
     /// The event's `timestamp` is overwritten with the elapsed time since
-    /// [`start_recording`] was called, ensuring consistent relative timing.
+    /// [`WorkflowRecorder::start_recording`] was called, ensuring consistent relative timing.
     ///
     /// No-ops if not currently recording.
     pub fn record_event(&mut self, mut event: RecordedEvent) {
@@ -333,10 +333,10 @@ impl WorkflowPlayer {
     /// Resolve an element reference from the store, with label fallback.
     ///
     /// Returns `None` if neither fingerprint nor label matches any live element.
-    fn resolve_element<'s>(
+    fn resolve_element(
         &self,
         event: &RecordedEvent,
-        ref_store: &'s RefStore,
+        ref_store: &RefStore,
         event_index: usize,
         result: &mut ReplayResult,
     ) -> Option<crate::persistent_refs::ElementRef> {

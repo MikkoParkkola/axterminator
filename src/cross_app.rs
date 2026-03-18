@@ -37,7 +37,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /// What caused the user to switch to a different application.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TransitionTrigger {
     /// Manual switch (Cmd+Tab, Dock click, window click).
     UserSwitch,
@@ -46,13 +46,8 @@ pub enum TransitionTrigger {
     /// A notification or alert pulled focus away.
     Notification,
     /// Cause could not be determined.
+    #[default]
     Unknown,
-}
-
-impl Default for TransitionTrigger {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Accumulated state for a single application.

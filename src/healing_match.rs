@@ -1,7 +1,7 @@
 //! Fuzzy string matching and XPath parsing for the healing system.
 //!
-//! Provides [`fuzzy_match`] for title-based element location and
-//! [`parse_xpath`] / [`matches_xpath_segment`] for structural path queries.
+//! Provides `fuzzy_match` for title-based element location and
+//! `parse_xpath` / `matches_xpath_segment` for structural path queries.
 //! All functions are pure (no I/O) and fully unit-tested in this module.
 
 // ---------------------------------------------------------------------------
@@ -12,6 +12,7 @@
 /// similarity (0.0 – 1.0).
 ///
 /// Matching is tried in order: exact → contains → Levenshtein similarity.
+#[allow(dead_code)]
 #[must_use]
 pub(crate) fn fuzzy_match(text: &str, pattern: &str, threshold: f64) -> bool {
     let text_lower = text.to_lowercase();
@@ -33,6 +34,9 @@ pub(crate) fn fuzzy_match(text: &str, pattern: &str, threshold: f64) -> bool {
 }
 
 /// Compute the Levenshtein edit distance between two strings.
+///
+/// Reserved for XPath healing strategy #5 — not yet integrated into healing pipeline.
+#[allow(dead_code)]
 #[must_use]
 pub(crate) fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let len1 = s1.chars().count();
@@ -77,6 +81,9 @@ pub(crate) fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 ///
 /// Example: `AXButton[@AXTitle='Save']` → `role = "AXButton"`,
 /// `predicates = [("AXTitle", "Save")]`.
+///
+/// Reserved for XPath healing strategy #5 — not yet integrated into healing pipeline.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct XPathSegment {
     pub(crate) role: String,
@@ -86,6 +93,9 @@ pub(crate) struct XPathSegment {
 /// Parse a simplified XPath expression into a list of [`XPathSegment`]s.
 ///
 /// Supports `//Role` and `//Role[@Attr='val' and @Attr2='val2']` syntax.
+///
+/// Reserved for XPath healing strategy #5 — not yet integrated into healing pipeline.
+#[allow(dead_code)]
 #[must_use]
 pub(crate) fn parse_xpath(xpath: &str) -> Vec<XPathSegment> {
     let mut segments = Vec::new();
@@ -117,6 +127,9 @@ pub(crate) fn parse_xpath(xpath: &str) -> Vec<XPathSegment> {
 }
 
 /// Return `true` if `element` matches all role and predicate constraints in `segment`.
+///
+/// Reserved for XPath healing strategy #5 — not yet integrated into healing pipeline.
+#[allow(dead_code)]
 #[must_use]
 pub(crate) fn matches_xpath_segment(
     element: crate::accessibility::AXUIElementRef,

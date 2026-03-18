@@ -352,10 +352,10 @@ fn collect_form_fields_in(
     }
 }
 
-fn find_focused_element<'a>(
+fn find_focused_element(
     app_ref: AXUIElementRef,
-    _children: &'a [AXUIElementRef],
-) -> Option<&'a AXUIElementRef> {
+    _children: &[AXUIElementRef],
+) -> Option<&AXUIElementRef> {
     // AXFocusedUIElement is on the application element, not children.
     // We read it inline since we can't return a reference to a temporary.
     let _ = get_string_attribute_value(app_ref, "AXFocusedUIElement");
