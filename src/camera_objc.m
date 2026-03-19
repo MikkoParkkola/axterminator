@@ -320,6 +320,29 @@ void av_free_frame_result(CFrameResult *result) {
  *
  * Returns a static string literal (no heap allocation).
  */
+/**
+ * Minimum joint confidence to trust a landmark position.
+ * Vision can return a point with confidence=0 when the joint is occluded;
+ * using those positions produces false classifications.
+ */
+static const float kMinJointConf = 0.15f;
+
+/**
+ * Thresholds for "finger extended" / "finger curled" decisions.
+ *
+ * Vision returns normalized image coordinates (x,y ∈ [0,1]) with y=0 at the
+ * bottom of the image and y=1 at the top.  For a hand held vertically in front
+ * of the camera the wrist is near y=0.2 and extended fingertips reach y=0.7+,
+ * giving a delta of ~0.5.  We use a conservative 0.08 so the detector fires
+ * even when the hand is partially off-frame or held at an angle.
+ *
+ * The thumb uses a slightly larger threshold (0.10) because the thumb's
+ * neutral position is already elevated relative to the wrist.
+ */
+static const float kFingerUpThresh  = 0.08f;  /* index/middle/ring/little */
+static const float kThumbUpThresh   = 0.10f;  /* thumb tip above wrist    */
+static const float kThumbDownThresh = 0.10f;  /* thumb tip below wrist    */
+
 static const char *classify_hand_pose(VNHumanHandPoseObservation *obs, float *confidence) API_AVAILABLE(macos(11.0)) {
     NSError *err = nil;
 
@@ -338,21 +361,78 @@ static const char *classify_hand_pose(VNHumanHandPoseObservation *obs, float *co
         [obs recognizedPointForJointName:VNHumanHandPoseObservationJointNameLittleTip error:&err];
     VNRecognizedPoint *thumbIP =
         [obs recognizedPointForJointName:VNHumanHandPoseObservationJointNameThumbIP error:&err];
+    VNRecognizedPoint *indexMCP =
+        [obs recognizedPointForJointName:VNHumanHandPoseObservationJointNameIndexMCP error:&err];
+    VNRecognizedPoint *middleMCP =
+        [obs recognizedPointForJointName:VNHumanHandPoseObservationJointNameMiddleMCP error:&err];
+    VNRecognizedPoint *ringMCP =
+        [obs recognizedPointForJointName:VNHumanHandPoseObservationJointNameRingMCP error:&err];
+    VNRecognizedPoint *littleMCP =
+        [obs recognizedPointForJointName:VNHumanHandPoseObservationJointNameLittleMCP error:&err];
 
-    if (!wrist || wrist.confidence < 0.3f) {
+    if (!wrist || wrist.confidence < kMinJointConf) {
         *confidence = 0.0f;
         return NULL;
     }
 
     float wy = (float)wrist.location.y;
+    float wx = (float)wrist.location.x;
 
-    /* Helper: is fingertip above wrist? (Vision coords: y=0 bottom, y=1 top) */
-    bool thumbUp   = thumbTip  && (float)thumbTip.location.y  > wy + 0.15f;
-    bool thumbDown = thumbTip  && (float)thumbTip.location.y  < wy - 0.15f;
-    bool indexUp   = indexTip  && (float)indexTip.location.y  > wy + 0.10f;
-    bool middleUp  = middleTip && (float)middleTip.location.y > wy + 0.10f;
-    bool ringUp    = ringTip   && (float)ringTip.location.y   > wy + 0.10f;
-    bool littleUp  = littleTip && (float)littleTip.location.y > wy + 0.10f;
+    /* Debug: log raw joint positions so unexpected 0-detection can be diagnosed */
+    NSLog(@"[axterminator] hand-pose wrist=(%.3f,%.3f,conf=%.2f) "
+          @"thumbTip=(%.3f,%.3f,conf=%.2f) indexTip=(%.3f,%.3f,conf=%.2f) "
+          @"middleTip=(%.3f,%.3f,conf=%.2f) ringTip=(%.3f,%.3f,conf=%.2f) "
+          @"littleTip=(%.3f,%.3f,conf=%.2f) obs.confidence=%.2f",
+          wx, wy, (float)wrist.confidence,
+          thumbTip  ? (float)thumbTip.location.x  : -1.f,
+          thumbTip  ? (float)thumbTip.location.y  : -1.f,
+          thumbTip  ? (float)thumbTip.confidence  : -1.f,
+          indexTip  ? (float)indexTip.location.x  : -1.f,
+          indexTip  ? (float)indexTip.location.y  : -1.f,
+          indexTip  ? (float)indexTip.confidence  : -1.f,
+          middleTip ? (float)middleTip.location.x : -1.f,
+          middleTip ? (float)middleTip.location.y : -1.f,
+          middleTip ? (float)middleTip.confidence : -1.f,
+          ringTip   ? (float)ringTip.location.x   : -1.f,
+          ringTip   ? (float)ringTip.location.y   : -1.f,
+          ringTip   ? (float)ringTip.confidence   : -1.f,
+          littleTip ? (float)littleTip.location.x : -1.f,
+          littleTip ? (float)littleTip.location.y : -1.f,
+          littleTip ? (float)littleTip.confidence : -1.f,
+          (float)obs.confidence);
+
+    /**
+     * "Is a joint confident enough to use?"
+     * Returns YES when the point is non-nil and its Vision confidence exceeds
+     * kMinJointConf.  Joints occluded by other fingers or out-of-frame return
+     * confidence ~0 and should be treated as unknown, not as "low".
+     */
+#define JOINT_OK(pt) ((pt) && (float)(pt).confidence >= kMinJointConf)
+
+    /**
+     * "Is this fingertip above its MCP knuckle?"
+     *
+     * Comparing tip to its own MCP (instead of the wrist) is more robust for
+     * hands that are angled or partially off-frame: the MCP moves with the
+     * hand, so the relative delta is stable even when the absolute y-positions
+     * shift.  Fall back to a wrist-relative check when the MCP is occluded.
+     */
+#define TIP_ABOVE_MCP(tip, mcp) \
+    (JOINT_OK(tip) && JOINT_OK(mcp) \
+        ? (float)(tip).location.y > (float)(mcp).location.y + kFingerUpThresh \
+        : (JOINT_OK(tip) && (float)(tip).location.y > wy + kFingerUpThresh))
+
+    /* Vision coords: y=0 bottom, y=1 top.  Higher y = finger extended upward. */
+    bool thumbUp   = JOINT_OK(thumbTip) && (float)thumbTip.location.y  > wy + kThumbUpThresh;
+    bool thumbDown = JOINT_OK(thumbTip) && (float)thumbTip.location.y  < wy - kThumbDownThresh;
+    bool indexUp   = TIP_ABOVE_MCP(indexTip,  indexMCP);
+    bool middleUp  = TIP_ABOVE_MCP(middleTip, middleMCP);
+    bool ringUp    = TIP_ABOVE_MCP(ringTip,   ringMCP);
+    bool littleUp  = TIP_ABOVE_MCP(littleTip, littleMCP);
+
+    NSLog(@"[axterminator] gesture flags thumbUp=%d thumbDown=%d indexUp=%d "
+          @"middleUp=%d ringUp=%d littleUp=%d",
+          thumbUp, thumbDown, indexUp, middleUp, ringUp, littleUp);
 
     /* Thumb extended downward and all others closed */
     bool allFingersDown = !indexUp && !middleUp && !ringUp && !littleUp;

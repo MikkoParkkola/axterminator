@@ -7,10 +7,36 @@ use std::time::{Duration, Instant};
 use objc::runtime::Object;
 #[allow(unused_imports)]
 use objc::{msg_send, sel, sel_impl};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use super::ffi::{ns_string_from_str, ns_string_to_rust, objc_class, release_objc_object};
 use super::{AudioData, AudioError};
+
+// ---------------------------------------------------------------------------
+// SFSpeechRecognizerAuthorizationStatus mirror
+// ---------------------------------------------------------------------------
+
+/// Mirror of `SFSpeechRecognizerAuthorizationStatus` enum values.
+///
+/// These must match the Objective-C SDK values exactly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpeechAuthStatus {
+    NotDetermined = 0,
+    Denied        = 1,
+    Restricted    = 2,
+    Authorized    = 3,
+}
+
+impl SpeechAuthStatus {
+    fn from_raw(v: i64) -> Self {
+        match v {
+            1 => Self::Denied,
+            2 => Self::Restricted,
+            3 => Self::Authorized,
+            _ => Self::NotDetermined,
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -71,10 +97,103 @@ pub fn speak(text: &str) -> Result<Duration, AudioError> {
 // Speech recognition internals
 // ---------------------------------------------------------------------------
 
+/// Query `SFSpeechRecognizer.authorizationStatus` without prompting.
+fn speech_authorization_status() -> SpeechAuthStatus {
+    let cls = objc_class("SFSpeechRecognizer");
+    if cls.is_null() {
+        return SpeechAuthStatus::Restricted;
+    }
+    let raw: i64 = unsafe { msg_send![cls, authorizationStatus] };
+    SpeechAuthStatus::from_raw(raw)
+}
+
+/// Request `SFSpeechRecognizer` authorization from the user.
+///
+/// Blocks the calling thread (up to 30 s) until the user responds to the
+/// system permission dialog.  This makes axterminator appear in
+/// **System Settings › Privacy & Security › Speech Recognition**.
+///
+/// Returns `Ok(())` when permission is granted, or an appropriate
+/// [`AudioError`] when denied, restricted, or the dialog times out.
+fn request_speech_authorization() -> Result<(), AudioError> {
+    let status = speech_authorization_status();
+    match status {
+        SpeechAuthStatus::Authorized => return Ok(()),
+        SpeechAuthStatus::Denied => {
+            return Err(AudioError::PermissionDenied);
+        }
+        SpeechAuthStatus::Restricted => {
+            return Err(AudioError::Transcription(
+                "Speech recognition is restricted on this device".to_string(),
+            ));
+        }
+        SpeechAuthStatus::NotDetermined => {}
+    }
+
+    info!("Requesting SFSpeechRecognizer authorization from user");
+
+    let cls = objc_class("SFSpeechRecognizer");
+    if cls.is_null() {
+        return Err(AudioError::Transcription(
+            "SFSpeechRecognizer class not available (macOS 10.15+ required)".to_string(),
+        ));
+    }
+
+    let granted_holder: Arc<Mutex<Option<SpeechAuthStatus>>> = Arc::new(Mutex::new(None));
+    let cvar = Arc::new(Condvar::new());
+
+    let granted_clone = Arc::clone(&granted_holder);
+    let cvar_clone = Arc::clone(&cvar);
+
+    // The completion block is called on an arbitrary background queue.
+    let block = block::ConcreteBlock::new(move |raw_status: i64| {
+        let new_status = SpeechAuthStatus::from_raw(raw_status);
+        if let Ok(mut guard) = granted_clone.lock() {
+            *guard = Some(new_status);
+        }
+        cvar_clone.notify_one();
+    })
+    .copy();
+
+    unsafe {
+        let _: () = msg_send![cls, requestAuthorization: &*block];
+    }
+
+    // Wait up to 30 s for the user to respond.
+    let guard = granted_holder
+        .lock()
+        .map_err(|_| AudioError::Transcription("Lock poisoned waiting for speech auth".to_string()))?;
+    let (mut guard, timeout) = cvar
+        .wait_timeout(guard, Duration::from_secs(30))
+        .map_err(|_| AudioError::Transcription("Condvar wait failed".to_string()))?;
+
+    if timeout.timed_out() {
+        warn!("SFSpeechRecognizer authorization dialog timed out after 30s");
+        return Err(AudioError::PermissionDenied);
+    }
+
+    match guard.take().unwrap_or(SpeechAuthStatus::NotDetermined) {
+        SpeechAuthStatus::Authorized => Ok(()),
+        SpeechAuthStatus::Denied => Err(AudioError::PermissionDenied),
+        SpeechAuthStatus::Restricted => Err(AudioError::Transcription(
+            "Speech recognition is restricted on this device".to_string(),
+        )),
+        SpeechAuthStatus::NotDetermined => Err(AudioError::PermissionDenied),
+    }
+}
+
 /// Perform on-device transcription via `SFSpeechRecognizer`.
 ///
-/// Writes a temporary WAV file in `/tmp`, runs the recognizer, then deletes it.
+/// Ensures speech recognition permission is obtained before attempting
+/// transcription.  Writes a temporary WAV file in `/tmp`, runs the
+/// recognizer, then deletes it.
 fn transcribe_with_sf_speech(audio: &AudioData) -> Result<String, AudioError> {
+    // Ensure authorization is present — this is the fix for BUG #26.
+    // When status is NotDetermined the system dialog is shown and we block
+    // until the user responds.  Without this call, SFSpeechRecognizer silently
+    // returns empty results instead of surfacing a permission error.
+    request_speech_authorization()?;
+
     let wav_bytes = audio.to_wav_bytes();
 
     let tmp_path = write_temp_wav(&wav_bytes)
@@ -118,14 +237,28 @@ fn write_temp_wav(bytes: &[u8]) -> Result<String, std::io::Error> {
 /// Run `SFSpeechRecognizer` on a WAV file at `path`.
 ///
 /// Uses a synchronous ObjC pattern with a `Condvar` to wait for the async
-/// recognition callback. Times out after 10 seconds.
+/// recognition callback.  Times out after 10 seconds.
+///
+/// Errors from the recognition task are surfaced as [`AudioError::Transcription`]
+/// rather than silently producing an empty result.
 fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
     let recognizer = create_sf_speech_recognizer().ok_or_else(|| {
         AudioError::Transcription(
-            "SFSpeechRecognizer unavailable (macOS 13+ required, or locale not supported)"
+            "SFSpeechRecognizer unavailable — check that speech recognition \
+             is enabled and the locale (en-US) is supported on this device"
                 .to_string(),
         )
     })?;
+
+    // Verify the recognizer is actually available (device might not support on-device).
+    let is_available: bool = unsafe { msg_send![recognizer, isAvailable] };
+    if !is_available {
+        return Err(AudioError::Transcription(
+            "SFSpeechRecognizer reports isAvailable=NO — \
+             on-device speech recognition may not be downloaded yet"
+                .to_string(),
+        ));
+    }
 
     let url = nsurl_from_path(wav_path).ok_or_else(|| {
         AudioError::Transcription(format!("Cannot create NSURL for: {wav_path}"))
@@ -361,11 +494,54 @@ mod tests {
     use super::*;
     use crate::audio::{encode_wav_pcm16, CHANNELS, SAMPLE_RATE};
 
+    // -----------------------------------------------------------------------
+    // SpeechAuthStatus
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn speech_auth_status_from_raw_authorized() {
+        // GIVEN: raw value 3 (SFSpeechRecognizerAuthorizationStatusAuthorized)
+        // THEN: maps to Authorized
+        assert_eq!(SpeechAuthStatus::from_raw(3), SpeechAuthStatus::Authorized);
+    }
+
+    #[test]
+    fn speech_auth_status_from_raw_denied() {
+        assert_eq!(SpeechAuthStatus::from_raw(1), SpeechAuthStatus::Denied);
+    }
+
+    #[test]
+    fn speech_auth_status_from_raw_restricted() {
+        assert_eq!(SpeechAuthStatus::from_raw(2), SpeechAuthStatus::Restricted);
+    }
+
+    #[test]
+    fn speech_auth_status_from_raw_not_determined() {
+        assert_eq!(SpeechAuthStatus::from_raw(0), SpeechAuthStatus::NotDetermined);
+    }
+
+    #[test]
+    fn speech_auth_status_from_raw_unknown_defaults_to_not_determined() {
+        // GIVEN: an unknown value (e.g. future SDK variant)
+        // THEN: falls back to NotDetermined (safest default)
+        assert_eq!(SpeechAuthStatus::from_raw(99), SpeechAuthStatus::NotDetermined);
+    }
+
+    // -----------------------------------------------------------------------
+    // speak() guard
+    // -----------------------------------------------------------------------
+
     #[test]
     fn speak_empty_text_returns_synthesis_error() {
+        // GIVEN: empty input
         let err = speak("").unwrap_err();
+        // THEN: synthesis_error code (not a panic or framework error)
         assert_eq!(err.code(), "synthesis_error");
     }
+
+    // -----------------------------------------------------------------------
+    // write_temp_wav
+    // -----------------------------------------------------------------------
 
     #[test]
     fn write_temp_wav_creates_readable_file() {
@@ -386,11 +562,25 @@ mod tests {
 
     #[test]
     fn write_temp_wav_file_contains_wav_header() {
+        // GIVEN: 16 silence samples
         let samples: Vec<f32> = vec![0.0; 16];
         let bytes = encode_wav_pcm16(&samples, SAMPLE_RATE, CHANNELS);
         let path = write_temp_wav(&bytes).unwrap();
         let content = std::fs::read(&path).unwrap();
+        // THEN: file starts with RIFF magic
         assert_eq!(&content[0..4], b"RIFF");
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn write_temp_wav_paths_are_unique_across_calls() {
+        // GIVEN: two rapid successive calls
+        let bytes = encode_wav_pcm16(&[], SAMPLE_RATE, CHANNELS);
+        let p1 = write_temp_wav(&bytes).unwrap();
+        let p2 = write_temp_wav(&bytes).unwrap();
+        // THEN: different paths (no clobbering)
+        assert_ne!(p1, p2);
+        let _ = std::fs::remove_file(&p1);
+        let _ = std::fs::remove_file(&p2);
     }
 }
