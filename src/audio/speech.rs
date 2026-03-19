@@ -296,24 +296,41 @@ fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
         },
     );
 
-    // Wait up to 10 seconds for the recognition callback.
-    let guard = result_holder
-        .lock()
-        .map_err(|_| AudioError::Transcription("Lock poisoned".to_string()))?;
-    let (mut guard, timeout) = cvar
-        .wait_timeout(guard, Duration::from_secs(10))
-        .map_err(|_| AudioError::Transcription("Wait failed".to_string()))?;
-
-    if timeout.timed_out() {
-        warn!("SFSpeechRecognizer timed out after 10s");
-        return Err(AudioError::Transcription(
-            "Recognition timed out — check that Speech Recognition is enabled in \
-             System Settings > Privacy & Security > Speech Recognition, and that \
-             the on-device dictation model is downloaded (System Settings > Keyboard > Dictation)"
-                .to_string(),
-        ));
+    // SFSpeechRecognizer dispatches its callback to the current thread's
+    // RunLoop.  We must pump the RunLoop while waiting, otherwise the
+    // callback never fires and we time out.  This mirrors the Swift pattern:
+    //   while !done { RunLoop.current.run(mode: .default, before: ...) }
+    extern "C" {
+        fn CFRunLoopRunInMode(mode: *const Object, seconds: f64, ret: bool) -> i32;
+        static kCFRunLoopDefaultMode: *const Object;
     }
 
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        // Check if the callback has fired.
+        if let Ok(guard) = result_holder.lock() {
+            if guard.is_some() {
+                break;
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            warn!("SFSpeechRecognizer timed out after 15s");
+            return Err(AudioError::Transcription(
+                "Recognition timed out — check that Speech Recognition is enabled in \
+                 System Settings > Privacy & Security > Speech Recognition, and that \
+                 the on-device dictation model is downloaded (System Settings > Keyboard > Dictation)"
+                    .to_string(),
+            ));
+        }
+        // Pump the RunLoop for 100ms so GCD can deliver the callback.
+        unsafe {
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false);
+        }
+    }
+
+    let mut guard = result_holder
+        .lock()
+        .map_err(|_| AudioError::Transcription("Lock poisoned".to_string()))?;
     guard.take().unwrap_or(Ok(String::new()))
 }
 
