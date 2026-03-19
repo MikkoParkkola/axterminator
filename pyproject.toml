@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "axterminator"
-version = "0.3.2"
+version = "0.4.0"
 description = "macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }

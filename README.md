@@ -3,10 +3,13 @@
 <div align="center">
 
 [![PyPI version](https://img.shields.io/pypi/v/axterminator?color=00d4ff&style=for-the-badge)](https://pypi.org/project/axterminator/)
+[![Downloads](https://img.shields.io/pypi/dm/axterminator?style=for-the-badge&color=00d4ff)](https://pypi.org/project/axterminator/)
+[![Tests](https://img.shields.io/github/actions/workflow/status/MikkoParkkola/axterminator/ci.yml?style=for-the-badge&label=tests)](https://github.com/MikkoParkkola/axterminator/actions)
 [![Python](https://img.shields.io/pypi/pyversions/axterminator?style=for-the-badge)](https://pypi.org/project/axterminator/)
 [![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=for-the-badge)](LICENSE-MIT)
 [![Rust](https://img.shields.io/badge/rust-stable-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Discussions](https://img.shields.io/github/discussions/MikkoParkkola/axterminator?style=for-the-badge&color=blue)](https://github.com/MikkoParkkola/axterminator/discussions)
 
 **macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators.**
 
@@ -107,7 +110,7 @@ for i in range(100):
 # When all else fails, use AI to find elements visually
 ax.configure_vlm(backend="mlx")      # Local (fast, private)
 ax.configure_vlm(backend="anthropic") # Claude Vision
-ax.configure_vlm(backend="openai")    # GPT-4o
+ax.configure_vlm(backend="openai")    # OpenAI Vision
 ax.configure_vlm(backend="gemini")    # Gemini Vision
 ax.configure_vlm(backend="ollama")    # Local Ollama
 
@@ -254,7 +257,7 @@ pip install axterminator
 # With VLM backends
 pip install axterminator[vlm]           # Local MLX
 pip install axterminator[vlm-anthropic] # Claude Vision
-pip install axterminator[vlm-openai]    # GPT-4o
+pip install axterminator[vlm-openai]    # OpenAI Vision
 pip install axterminator[vlm-gemini]    # Gemini Vision
 pip install axterminator[vlm-ollama]    # Ollama
 pip install axterminator[vlm-all]       # All backends

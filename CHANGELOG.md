@@ -5,6 +5,41 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-19
+
+### Added
+- **Query-based scene understanding** with encode-once keystone architecture (#4)
+- **Two-stage screen intent extraction** pipeline (#5)
+- **Copilot-readable state injection** (`useCopilotReadable`) (#6)
+- **Persistent element references** with fingerprint-based WeakRef tracking (#7)
+- **Semantic element find** and Electron DevTools Protocol integration (#8, #9)
+- **Cross-app workflow intelligence** with pattern detection and automation (#10)
+- **Proactive desktop copilot** with rule-based context suggestions (#11)
+- **Triple understanding** and durable automation steps (#12, #16)
+- **Workflow recording** and blackbox desktop testing (#13, #14)
+- **Electron app skill profiles** — 5 built-in profiles + extensible registry (#15)
+- **Docker browser test targets** via Neko containers for CI (#18)
+- MkDocs documentation site with benchmarks
+- Comprehensive tool comparison table (vs XCUITest, Appium, PyAutoGUI, Maestro)
+- Python type stubs (`.pyi`) for full IDE support
+- mediar-ai/terminator acknowledgement in README
+
+### Fixed
+- MCP server: VLM fallback and method calls on AXElement
+- CI: formatting and skip accessibility-dependent tests
+- Clippy: 10 fixes across the codebase for clean `cargo clippy` output
+- 6 documentation link fixes (broken intra-doc links, stale references)
+
+### Changed
+- Updated OpenAI model references to current models (GPT-4o, GPT-5)
+- README rewritten with verified benchmark numbers and factual claims
+- Module-level documentation improvements with `//!` doc headers and examples
+- Publication cleanup: factual claims, honest benchmarks, no superlatives
+
+### Refactored
+- Extracted `copilot_extract.rs` and `healing_match.rs` to fix LOC violations
+- Registered new modules in `lib.rs`
+
 ## [0.3.2] - 2026-03-18
 
 ### Added
