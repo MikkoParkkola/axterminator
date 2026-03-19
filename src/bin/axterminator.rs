@@ -152,14 +152,45 @@ enum Commands {
 #[derive(Subcommand, Debug)]
 enum McpSubcommand {
     /// Start the MCP server (stdio transport, default).
+    ///
+    /// Use `--http <port>` to start the Streamable HTTP transport instead.
+    /// Both transports can run simultaneously with `--http <port> --stdio`.
     Serve {
-        /// Use stdio transport (default)
-        #[arg(long, default_value_t = true, conflicts_with = "http")]
+        /// Use stdio transport.
+        ///
+        /// This is the default when neither `--stdio` nor `--http` is given.
+        /// When combined with `--http`, both transports start concurrently.
+        #[arg(long)]
         stdio: bool,
 
-        /// Use HTTP transport on the given port
-        #[arg(long, conflicts_with = "stdio")]
+        /// Use HTTP transport on the given port (requires `http-transport` feature).
+        ///
+        /// Binds to 127.0.0.1 by default. Override with `--bind`.
+        /// Requires `--token` or `--localhost-only` when `--bind` is not
+        /// a loopback address.
+        #[arg(long)]
         http: Option<u16>,
+
+        /// Bearer token for HTTP authentication.
+        ///
+        /// When absent, a random token is generated and printed to stderr.
+        /// May also be set via the `AXTERMINATOR_HTTP_TOKEN` environment variable.
+        #[arg(long, env = "AXTERMINATOR_HTTP_TOKEN")]
+        token: Option<String>,
+
+        /// IP address to bind the HTTP transport to.
+        ///
+        /// Defaults to `127.0.0.1`. Use `0.0.0.0` for all interfaces (requires
+        /// `--token`).
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+
+        /// Skip authentication — accept requests only from 127.0.0.1.
+        ///
+        /// Cannot be combined with `--token`. Only valid when `--bind` is
+        /// also a loopback address.
+        #[arg(long, conflicts_with = "token")]
+        localhost_only: bool,
     },
 }
 
@@ -184,21 +215,39 @@ fn main() -> Result<()> {
 fn dispatch(cmd: Commands) -> Result<()> {
     match cmd {
         Commands::Mcp { subcommand } => dispatch_mcp(subcommand),
-        Commands::Find { query, app, bundle_id, timeout } => {
-            cmd_find(&query, app.as_deref(), bundle_id.as_deref(), timeout)
-        }
-        Commands::Click { query, app, bundle_id, mode } => {
-            cmd_click(&query, app.as_deref(), bundle_id.as_deref(), &mode)
-        }
-        Commands::TypeText { text, app, bundle_id, element } => {
-            cmd_type(&text, app.as_deref(), bundle_id.as_deref(), element.as_deref())
-        }
-        Commands::Screenshot { app, bundle_id, output } => {
-            cmd_screenshot(app.as_deref(), bundle_id.as_deref(), output.as_deref())
-        }
-        Commands::Tree { app, bundle_id, depth } => {
-            cmd_tree(app.as_deref(), bundle_id.as_deref(), depth)
-        }
+        Commands::Find {
+            query,
+            app,
+            bundle_id,
+            timeout,
+        } => cmd_find(&query, app.as_deref(), bundle_id.as_deref(), timeout),
+        Commands::Click {
+            query,
+            app,
+            bundle_id,
+            mode,
+        } => cmd_click(&query, app.as_deref(), bundle_id.as_deref(), &mode),
+        Commands::TypeText {
+            text,
+            app,
+            bundle_id,
+            element,
+        } => cmd_type(
+            &text,
+            app.as_deref(),
+            bundle_id.as_deref(),
+            element.as_deref(),
+        ),
+        Commands::Screenshot {
+            app,
+            bundle_id,
+            output,
+        } => cmd_screenshot(app.as_deref(), bundle_id.as_deref(), output.as_deref()),
+        Commands::Tree {
+            app,
+            bundle_id,
+            depth,
+        } => cmd_tree(app.as_deref(), bundle_id.as_deref(), depth),
         Commands::Apps => cmd_apps(),
         Commands::Check => cmd_check(),
         Commands::Completions { shell } => cmd_completions(&shell),
@@ -211,15 +260,124 @@ fn dispatch(cmd: Commands) -> Result<()> {
 
 fn dispatch_mcp(sub: McpSubcommand) -> Result<()> {
     match sub {
-        McpSubcommand::Serve { http: Some(port), .. } => {
-            eprintln!("HTTP transport on port {port} is not yet implemented. Use --stdio.");
-            std::process::exit(1);
-        }
-        McpSubcommand::Serve { .. } => {
-            axterminator::mcp::server::run_stdio()
-                .context("MCP stdio server failed")
-        }
+        McpSubcommand::Serve {
+            http,
+            stdio,
+            token,
+            bind,
+            localhost_only,
+        } => dispatch_mcp_serve(http, stdio, token, &bind, localhost_only),
     }
+}
+
+fn dispatch_mcp_serve(
+    http: Option<u16>,
+    stdio: bool,
+    token: Option<String>,
+    bind: &str,
+    localhost_only: bool,
+) -> Result<()> {
+    let want_http = http.is_some();
+    // Default to stdio when no --http; also use stdio when both flags present.
+    // The `want_stdio` binding is consumed only inside the http-transport block;
+    // suppress the warning when the feature is absent.
+    #[cfg_attr(not(feature = "http-transport"), allow(unused_variables))]
+    let want_stdio = stdio || !want_http;
+
+    if want_http {
+        #[cfg(feature = "http-transport")]
+        {
+            let port = http.unwrap();
+            let bind_addr: std::net::IpAddr = bind
+                .parse()
+                .with_context(|| format!("Invalid bind address: '{bind}'"))?;
+            let auth = build_http_auth(token, localhost_only, bind_addr)?;
+            let cfg = axterminator::mcp::transport::HttpConfig {
+                port,
+                bind: bind_addr,
+                auth,
+            };
+
+            if want_stdio {
+                // Run both transports concurrently. HTTP in background tokio
+                // task; stdio blocks the main thread.
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.spawn(async move {
+                    if let Err(e) = axterminator::mcp::transport::serve(
+                        axterminator::mcp::transport::TransportConfig::Http(cfg),
+                    )
+                    .await
+                    {
+                        tracing::error!("HTTP transport error: {e}");
+                    }
+                });
+                axterminator::mcp::server::run_stdio().context("MCP stdio server failed")
+            } else {
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(axterminator::mcp::transport::serve(
+                    axterminator::mcp::transport::TransportConfig::Http(cfg),
+                ))
+                .context("MCP HTTP server failed")
+            }
+        }
+        #[cfg(not(feature = "http-transport"))]
+        {
+            let _ = (http, token, bind, localhost_only);
+            anyhow::bail!(
+                "HTTP transport is not compiled in. Rebuild with \
+                 `--features http-transport`."
+            )
+        }
+    } else {
+        axterminator::mcp::server::run_stdio().context("MCP stdio server failed")
+    }
+}
+
+/// Build the [`AuthConfig`] from CLI flags.
+///
+/// Validates that non-localhost binds have a token configured.
+#[cfg(feature = "http-transport")]
+fn build_http_auth(
+    token: Option<String>,
+    localhost_only: bool,
+    bind_addr: std::net::IpAddr,
+) -> Result<axterminator::mcp::auth::AuthConfig> {
+    use axterminator::mcp::auth::{generate_token, AuthConfig};
+
+    if localhost_only {
+        // Explicit localhost-only: validate bind address.
+        if !bind_addr.is_loopback() {
+            anyhow::bail!(
+                "--localhost-only requires a loopback bind address. \
+                 Got '{bind_addr}'. Use --bind 127.0.0.1."
+            );
+        }
+        return Ok(AuthConfig::localhost_only());
+    }
+
+    // Bearer mode: use provided token or generate one.
+    let tok = match token {
+        Some(t) => t,
+        None => {
+            if !bind_addr.is_loopback() {
+                // Refuse to start on a non-localhost address without explicit token.
+                anyhow::bail!(
+                    "Binding to non-loopback address '{bind_addr}' requires a token. \
+                     Provide one via --token <token> or set AXTERMINATOR_HTTP_TOKEN, \
+                     or use --localhost-only to skip authentication."
+                );
+            }
+            // Auto-generate token for localhost convenience.
+            let t = generate_token();
+            eprintln!(
+                "MCP server started. Bearer token: {t}\n\
+                 (Pass this token in the Authorization header of your MCP client.)"
+            );
+            t
+        }
+    };
+
+    Ok(AuthConfig::bearer(tok))
 }
 
 // ---------------------------------------------------------------------------
@@ -229,15 +387,11 @@ fn dispatch_mcp(sub: McpSubcommand) -> Result<()> {
 /// Connect to an app by optional name or bundle ID.
 ///
 /// Exits with a clear error if neither is provided.
-fn connect_app(
-    name: Option<&str>,
-    bundle_id: Option<&str>,
-) -> Result<axterminator::AXApp> {
+fn connect_app(name: Option<&str>, bundle_id: Option<&str>) -> Result<axterminator::AXApp> {
     if name.is_none() && bundle_id.is_none() {
         anyhow::bail!("Provide --app or --bundle-id to identify the target application");
     }
-    axterminator::AXApp::connect_native(name, bundle_id, None)
-        .map_err(|e| anyhow::anyhow!("{e}"))
+    axterminator::AXApp::connect_native(name, bundle_id, None).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 fn cmd_find(
@@ -263,12 +417,7 @@ fn cmd_find(
     }
 }
 
-fn cmd_click(
-    query: &str,
-    app: Option<&str>,
-    bundle_id: Option<&str>,
-    mode: &str,
-) -> Result<()> {
+fn cmd_click(query: &str, app: Option<&str>, bundle_id: Option<&str>, mode: &str) -> Result<()> {
     let ax_app = connect_app(app, bundle_id)?;
     let el = ax_app
         .find_native(query, Some(5000))
@@ -314,7 +463,11 @@ fn cmd_screenshot(
     if let Some(path) = output {
         std::fs::write(path, &bytes)
             .with_context(|| format!("Failed to write screenshot to {}", path.display()))?;
-        println!("Screenshot saved to {} ({} bytes)", path.display(), bytes.len());
+        println!(
+            "Screenshot saved to {} ({} bytes)",
+            path.display(),
+            bytes.len()
+        );
     } else {
         use base64::Engine as _;
         let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
@@ -370,7 +523,10 @@ fn cmd_apps() -> Result<()> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
     let ax_enabled = axterminator::check_accessibility_enabled();
-    println!("Accessibility: {}", if ax_enabled { "enabled" } else { "DISABLED" });
+    println!(
+        "Accessibility: {}",
+        if ax_enabled { "enabled" } else { "DISABLED" }
+    );
     println!();
 
     let mut procs: Vec<_> = sys.processes().values().collect();
@@ -405,7 +561,9 @@ fn cmd_completions(shell: &str) -> Result<()> {
     use clap_complete::Shell;
 
     let mut cmd = Cli::command();
-    let shell: Shell = shell.parse().map_err(|_| anyhow::anyhow!("Unknown shell: {shell}"))?;
+    let shell: Shell = shell
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Unknown shell: {shell}"))?;
     clap_complete::generate(shell, &mut cmd, "axterminator", &mut std::io::stdout());
     Ok(())
 }
@@ -424,12 +582,30 @@ mod tests {
     }
 
     #[test]
-    fn parses_mcp_serve_stdio() {
+    fn parses_mcp_serve_default_is_stdio() {
+        // GIVEN: no transport flags
         let cli = parse(&["mcp", "serve"]).unwrap();
+        // THEN: http is None (stdio is the default)
         assert!(matches!(
             cli.command,
-            Commands::Mcp { subcommand: McpSubcommand::Serve { http: None, .. } }
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve { http: None, .. }
+            }
         ));
+    }
+
+    #[test]
+    fn parses_mcp_serve_explicit_stdio() {
+        // GIVEN: --stdio flag
+        let cli = parse(&["mcp", "serve", "--stdio"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve { stdio, .. },
+            } => {
+                assert!(stdio);
+            }
+            _ => panic!("wrong variant"),
+        }
     }
 
     #[test]
@@ -437,8 +613,87 @@ mod tests {
         let cli = parse(&["mcp", "serve", "--http", "9000"]).unwrap();
         assert!(matches!(
             cli.command,
-            Commands::Mcp { subcommand: McpSubcommand::Serve { http: Some(9000), .. } }
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve {
+                    http: Some(9000),
+                    ..
+                }
+            }
         ));
+    }
+
+    #[test]
+    fn parses_mcp_serve_http_with_token() {
+        // GIVEN: --http and --token
+        let cli = parse(&["mcp", "serve", "--http", "8741", "--token", "axt_abc"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve { http, token, .. },
+            } => {
+                assert_eq!(http, Some(8741));
+                assert_eq!(token.as_deref(), Some("axt_abc"));
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_serve_http_with_localhost_only() {
+        // GIVEN: --http and --localhost-only
+        let cli = parse(&["mcp", "serve", "--http", "8741", "--localhost-only"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve { localhost_only, .. },
+            } => {
+                assert!(localhost_only);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_serve_http_with_custom_bind() {
+        // GIVEN: --http and --bind
+        let cli = parse(&["mcp", "serve", "--http", "9000", "--bind", "0.0.0.0"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve { bind, .. },
+            } => {
+                assert_eq!(bind, "0.0.0.0");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_serve_both_http_and_stdio() {
+        // GIVEN: both --http and --stdio
+        let cli = parse(&["mcp", "serve", "--http", "8741", "--stdio"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Serve { http, stdio, .. },
+            } => {
+                assert_eq!(http, Some(8741));
+                assert!(stdio);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn token_and_localhost_only_conflict() {
+        // GIVEN: --token and --localhost-only together
+        // THEN: clap returns an error (they conflict)
+        assert!(parse(&[
+            "mcp",
+            "serve",
+            "--http",
+            "8741",
+            "--token",
+            "tok",
+            "--localhost-only"
+        ])
+        .is_err());
     }
 
     #[test]

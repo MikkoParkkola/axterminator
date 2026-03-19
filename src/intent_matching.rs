@@ -133,11 +133,7 @@ fn score_role(node: &SceneNode, ctx: &MatchContext) -> f64 {
 /// Currently rewards nodes whose parent title/label matches a keyword in the
 /// query (e.g., "button in the login dialog" boosts buttons whose parent is a
 /// dialog titled "Login").
-fn score_hierarchical_context(
-    node: &SceneNode,
-    ctx: &MatchContext,
-    scene: &SceneGraph,
-) -> f64 {
+fn score_hierarchical_context(node: &SceneNode, ctx: &MatchContext, scene: &SceneGraph) -> f64 {
     let Some(parent_id) = node.parent else {
         return 0.0;
     };
@@ -251,8 +247,22 @@ pub fn tokenise(query: &str) -> Vec<String> {
 fn is_stop_word(word: &str) -> bool {
     matches!(
         word,
-        "the" | "a" | "an" | "on" | "in" | "at" | "to" | "of" | "and"
-            | "or" | "is" | "it" | "be" | "for" | "by" | "with"
+        "the"
+            | "a"
+            | "an"
+            | "on"
+            | "in"
+            | "at"
+            | "to"
+            | "of"
+            | "and"
+            | "or"
+            | "is"
+            | "it"
+            | "be"
+            | "for"
+            | "by"
+            | "with"
     )
 }
 
@@ -283,28 +293,22 @@ pub fn infer_role_hint(tokens: &[String]) -> Option<&'static str> {
 
 /// Return `true` when the token list contains spatial proximity keywords.
 fn has_spatial_tokens(tokens: &[String]) -> bool {
-    tokens
-        .iter()
-        .any(|t| matches!(t.as_str(), "near" | "next" | "beside" | "below" | "above" | "left" | "right"))
+    tokens.iter().any(|t| {
+        matches!(
+            t.as_str(),
+            "near" | "next" | "beside" | "below" | "above" | "left" | "right"
+        )
+    })
 }
 
 // ── Reason string ──────────────────────────────────────────────────────────────
 
 /// Build a human-readable explanation for why a node was matched.
-fn build_reason(
-    label_score: f64,
-    role_score: f64,
-    context_score: f64,
-    node: &SceneNode,
-) -> String {
+fn build_reason(label_score: f64, role_score: f64, context_score: f64, node: &SceneNode) -> String {
     let mut parts: Vec<String> = Vec::with_capacity(3);
 
     if label_score > 0.0 {
-        let best_label = node
-            .text_labels()
-            .first()
-            .copied()
-            .unwrap_or("<no label>");
+        let best_label = node.text_labels().first().copied().unwrap_or("<no label>");
         parts.push(format!("label match '{best_label}' ({label_score:.2})"));
     }
     if role_score > 0.0 {
@@ -388,7 +392,10 @@ mod tests {
     #[test]
     fn fuzzy_score_completely_different_near_zero() {
         let score = fuzzy_score("aaaa", "zzzz");
-        assert!(score < 0.2, "unrelated strings should score < 0.2, got {score}");
+        assert!(
+            score < 0.2,
+            "unrelated strings should score < 0.2, got {score}"
+        );
     }
 
     #[test]
@@ -434,7 +441,11 @@ mod tests {
     fn infer_role_hint_button_keywords() {
         for kw in &["button", "btn", "click", "press", "tap"] {
             let hint = infer_role_hint(&[kw.to_string()]);
-            assert_eq!(hint, Some("AXButton"), "keyword '{kw}' should hint AXButton");
+            assert_eq!(
+                hint,
+                Some("AXButton"),
+                "keyword '{kw}' should hint AXButton"
+            );
         }
     }
 

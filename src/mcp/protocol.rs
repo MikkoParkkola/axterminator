@@ -1,8 +1,18 @@
 //! MCP 2025-11-05 protocol types.
 //!
-//! Covers the subset of MCP used for Phase 1: initialize handshake,
-//! `tools/list`, and `tools/call`. All types derive `serde::{Serialize, Deserialize}`
-//! so they round-trip cleanly through `serde_json`.
+//! Covers the wire types for Phase 1 and Phase 2:
+//! - `initialize` handshake with resources + prompts capabilities
+//! - `tools/list` and `tools/call`
+//! - `resources/list`, `resources/templates/list`, and `resources/read`
+//! - `prompts/list` and `prompts/get`
+//!
+//! All types derive `serde::{Serialize, Deserialize}` so they round-trip
+//! cleanly through `serde_json`.
+//!
+//! ## Adding new capabilities
+//!
+//! Extend [`ServerCapabilities`] and add the corresponding request/result
+//! types following the existing pattern. Wire the method in `server.rs`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -122,6 +132,36 @@ pub struct ClientCapabilities {
     pub elicitation: Option<Value>,
 }
 
+impl ClientCapabilities {
+    /// Returns `true` when the client advertised elicitation support.
+    ///
+    /// MCP clients that support `elicitation/create` include the `elicitation`
+    /// key in their capabilities object (value may be an empty object `{}`).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use serde_json::json;
+    /// use axterminator::mcp::protocol::ClientCapabilities;
+    ///
+    /// let mut caps = ClientCapabilities::default();
+    /// assert!(!caps.supports_elicitation());
+    ///
+    /// caps.elicitation = Some(json!({}));
+    /// assert!(caps.supports_elicitation());
+    /// ```
+    #[must_use]
+    pub fn supports_elicitation(&self) -> bool {
+        self.elicitation.is_some()
+    }
+
+    /// Returns `true` when the client advertised sampling support.
+    #[must_use]
+    pub fn supports_sampling(&self) -> bool {
+        self.sampling.is_some()
+    }
+}
+
 /// Client identity (name + version).
 #[derive(Debug, Deserialize)]
 pub struct ClientInfo {
@@ -140,21 +180,57 @@ pub struct InitializeResult {
     pub instructions: &'static str,
 }
 
-/// Capabilities the server advertises.
+/// Capabilities the server advertises in the `initialize` response.
+///
+/// Phase 2 adds `resources` and `prompts` alongside the existing `tools`
+/// and `logging` capabilities.
+///
+/// Phase 4 adds `elicitation` — the server can ask the user questions
+/// mid-operation via `elicitation/create`.
 #[derive(Debug, Serialize)]
 pub struct ServerCapabilities {
     pub tools: ToolsCapability,
     pub logging: LoggingCapability,
+    pub resources: ResourcesCapability,
+    pub prompts: PromptsCapability,
+    pub elicitation: ElicitationCapability,
 }
 
+/// Elicitation capability advertised in `initialize`.
+///
+/// Presence signals that the server may send `elicitation/create` requests.
+/// The value is an empty object per the MCP 2025-11-05 spec.
+#[derive(Debug, Serialize)]
+pub struct ElicitationCapability {}
+
+/// Tool list capability.
 #[derive(Debug, Serialize)]
 pub struct ToolsCapability {
     #[serde(rename = "listChanged")]
     pub list_changed: bool,
 }
 
+/// Logging capability (empty — presence signals support).
 #[derive(Debug, Serialize)]
 pub struct LoggingCapability {}
+
+/// Resource capability advertised in `initialize`.
+///
+/// `subscribe: false` — Phase 2 provides static read access only.
+/// Reactive subscriptions are a Phase 3 feature.
+#[derive(Debug, Serialize)]
+pub struct ResourcesCapability {
+    pub subscribe: bool,
+    #[serde(rename = "listChanged")]
+    pub list_changed: bool,
+}
+
+/// Prompt capability advertised in `initialize`.
+#[derive(Debug, Serialize)]
+pub struct PromptsCapability {
+    #[serde(rename = "listChanged")]
+    pub list_changed: bool,
+}
 
 /// Server identity.
 #[derive(Debug, Serialize)]
@@ -269,6 +345,176 @@ impl ToolCallResult {
 #[derive(Debug, Serialize)]
 pub struct PingResult {}
 
+// ---------------------------------------------------------------------------
+// MCP resources — Phase 2
+// ---------------------------------------------------------------------------
+
+/// A single resource descriptor returned by `resources/list`.
+///
+/// Static resources have a concrete `uri`; dynamic resources use
+/// `uri_template` (RFC 6570) and appear in `resources/templates/list`.
+#[derive(Debug, Clone, Serialize)]
+pub struct Resource {
+    pub uri: &'static str,
+    pub name: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    #[serde(rename = "mimeType")]
+    pub mime_type: &'static str,
+}
+
+/// A URI template descriptor returned by `resources/templates/list`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ResourceTemplate {
+    #[serde(rename = "uriTemplate")]
+    pub uri_template: &'static str,
+    pub name: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    #[serde(rename = "mimeType")]
+    pub mime_type: &'static str,
+}
+
+/// `resources/list` result.
+#[derive(Debug, Serialize)]
+pub struct ResourceListResult {
+    pub resources: Vec<Resource>,
+}
+
+/// `resources/templates/list` result.
+#[derive(Debug, Serialize)]
+pub struct ResourceTemplateListResult {
+    #[serde(rename = "resourceTemplates")]
+    pub resource_templates: Vec<ResourceTemplate>,
+}
+
+/// `resources/read` params.
+#[derive(Debug, Deserialize)]
+pub struct ResourceReadParams {
+    pub uri: String,
+}
+
+/// A single resource content item (text or blob).
+///
+/// Text resources carry UTF-8 JSON in `text`.
+/// Binary resources (e.g., PNG screenshots) carry base64 in `blob`.
+#[derive(Debug, Serialize)]
+pub struct ResourceContents {
+    pub uri: String,
+    #[serde(rename = "mimeType")]
+    pub mime_type: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blob: Option<String>,
+}
+
+impl ResourceContents {
+    /// Build a text/JSON resource content item.
+    #[must_use]
+    pub fn text(uri: impl Into<String>, mime_type: &'static str, text: impl Into<String>) -> Self {
+        Self {
+            uri: uri.into(),
+            mime_type,
+            text: Some(text.into()),
+            blob: None,
+        }
+    }
+
+    /// Build a binary (base64) resource content item.
+    #[must_use]
+    pub fn blob(uri: impl Into<String>, mime_type: &'static str, blob: impl Into<String>) -> Self {
+        Self {
+            uri: uri.into(),
+            mime_type,
+            text: None,
+            blob: Some(blob.into()),
+        }
+    }
+}
+
+/// `resources/read` result.
+#[derive(Debug, Serialize)]
+pub struct ResourceReadResult {
+    pub contents: Vec<ResourceContents>,
+}
+
+// ---------------------------------------------------------------------------
+// MCP prompts — Phase 2
+// ---------------------------------------------------------------------------
+
+/// A single prompt descriptor returned by `prompts/list`.
+#[derive(Debug, Clone, Serialize)]
+pub struct Prompt {
+    pub name: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    pub arguments: Vec<PromptArgument>,
+}
+
+/// One argument declared by a prompt.
+#[derive(Debug, Clone, Serialize)]
+pub struct PromptArgument {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub required: bool,
+}
+
+/// `prompts/list` result.
+#[derive(Debug, Serialize)]
+pub struct PromptListResult {
+    pub prompts: Vec<Prompt>,
+}
+
+/// `prompts/get` params.
+#[derive(Debug, Deserialize)]
+pub struct PromptGetParams {
+    pub name: String,
+    #[serde(default)]
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// Role of a prompt message (MCP spec: "user" | "assistant").
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptRole {
+    User,
+    Assistant,
+}
+
+/// A single message in a prompt result.
+#[derive(Debug, Serialize)]
+pub struct PromptMessage {
+    pub role: PromptRole,
+    pub content: PromptContent,
+}
+
+/// Content of a prompt message (text only for Phase 2).
+#[derive(Debug, Serialize)]
+pub struct PromptContent {
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    pub text: String,
+}
+
+impl PromptContent {
+    /// Build a plain-text prompt content item.
+    #[must_use]
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            kind: "text",
+            text: text.into(),
+        }
+    }
+}
+
+/// `prompts/get` result.
+#[derive(Debug, Serialize)]
+pub struct PromptGetResult {
+    pub description: String,
+    pub messages: Vec<PromptMessage>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,5 +583,39 @@ mod tests {
     fn rpc_error_codes_are_correct_jsonrpc_values() {
         assert_eq!(RpcError::PARSE_ERROR, -32_700);
         assert_eq!(RpcError::METHOD_NOT_FOUND, -32_601);
+    }
+
+    // -----------------------------------------------------------------------
+    // ClientCapabilities helpers
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn supports_elicitation_false_by_default() {
+        // GIVEN: empty capabilities
+        let caps = ClientCapabilities::default();
+        // THEN: elicitation not supported
+        assert!(!caps.supports_elicitation());
+    }
+
+    #[test]
+    fn supports_elicitation_true_when_set() {
+        // GIVEN: capabilities with elicitation key
+        let mut caps = ClientCapabilities::default();
+        caps.elicitation = Some(json!({}));
+        // THEN: elicitation supported
+        assert!(caps.supports_elicitation());
+    }
+
+    #[test]
+    fn supports_sampling_false_by_default() {
+        let caps = ClientCapabilities::default();
+        assert!(!caps.supports_sampling());
+    }
+
+    #[test]
+    fn supports_sampling_true_when_set() {
+        let mut caps = ClientCapabilities::default();
+        caps.sampling = Some(json!({"createMessage": {}}));
+        assert!(caps.supports_sampling());
     }
 }

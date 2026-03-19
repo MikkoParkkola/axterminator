@@ -81,10 +81,21 @@ impl AppRegistry {
 // Tool declarations
 // ---------------------------------------------------------------------------
 
-/// All Phase 1 tools in registration order.
+/// All tools (Phase 1 + Phase 3) in registration order.
+///
+/// Phase 1 tools are listed first so existing clients that index by position
+/// are unaffected. Phase 3 tools are appended via [`crate::mcp::tools_extended::extended_tools`].
+///
+/// # Examples
+///
+/// ```
+/// // Phase 1 (12) + Phase 3 (7) = 19 total
+/// let tools = axterminator::mcp::tools::all_tools();
+/// assert_eq!(tools.len(), 19);
+/// ```
 #[must_use]
 pub fn all_tools() -> Vec<Tool> {
-    vec![
+    let mut tools = vec![
         tool_ax_is_accessible(),
         tool_ax_connect(),
         tool_ax_find(),
@@ -97,7 +108,9 @@ pub fn all_tools() -> Vec<Tool> {
         tool_ax_click_at(),
         tool_ax_find_visual(),
         tool_ax_wait_idle(),
-    ]
+    ];
+    tools.extend(crate::mcp::tools_extended::extended_tools());
+    tools
 }
 
 fn tool_ax_is_accessible() -> Tool {
@@ -159,7 +172,8 @@ fn tool_ax_find() -> Tool {
     Tool {
         name: "ax_find",
         title: "Find a UI element",
-        description: "Find a UI element in a connected app using text, role, or attribute queries.\n\
+        description:
+            "Find a UI element in a connected app using text, role, or attribute queries.\n\
             Query syntax:\n\
             - Simple text: \"Save\" (matches title/label/identifier)\n\
             - By role: \"role:AXButton\"\n\
@@ -363,7 +377,8 @@ fn tool_ax_screenshot() -> Tool {
     Tool {
         name: "ax_screenshot",
         title: "Take a screenshot",
-        description: "Capture a screenshot of an app or a specific element without stealing focus. \
+        description:
+            "Capture a screenshot of an app or a specific element without stealing focus. \
             Returns base64-encoded PNG data.",
         input_schema: json!({
             "type": "object",
@@ -452,7 +467,7 @@ fn tool_ax_find_visual() -> Tool {
             },
             "required": ["found"]
         }),
-        annotations: annotations::READ_ONLY,
+        annotations: annotations::OPEN_WORLD,
     }
 }
 
@@ -489,9 +504,23 @@ fn tool_ax_wait_idle() -> Tool {
 
 /// Dispatch a `tools/call` invocation.
 ///
+/// Phase 1 tools are matched directly. Phase 3 tools are dispatched via
+/// [`crate::mcp::tools_extended::call_tool_extended`], which returns `None`
+/// when the name is unrecognised so this function can fall through to the
+/// unknown-tool error.
+///
+/// Progress notifications from Phase 3 tools are written to `stdout` (the
+/// MCP transport channel).  The server holds `stdout_lock` for the lifetime
+/// of each request, so passing a mutable reference here is safe.
+///
 /// The registry is `Arc`-wrapped so the server can share it across async tasks.
 /// Every branch must return `ToolCallResult` — never panic.
-pub fn call_tool(name: &str, args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
+pub fn call_tool<W: std::io::Write>(
+    name: &str,
+    args: &Value,
+    registry: &Arc<AppRegistry>,
+    out: &mut W,
+) -> ToolCallResult {
     match name {
         "ax_is_accessible" => handle_is_accessible(),
         "ax_connect" => handle_connect(args, registry),
@@ -505,7 +534,14 @@ pub fn call_tool(name: &str, args: &Value, registry: &Arc<AppRegistry>) -> ToolC
         "ax_click_at" => handle_click_at(args),
         "ax_find_visual" => handle_find_visual(args, registry),
         "ax_wait_idle" => handle_wait_idle(args, registry),
-        _ => ToolCallResult::error(format!("Unknown tool: {name}")),
+        other => {
+            if let Some(result) =
+                crate::mcp::tools_extended::call_tool_extended(other, args, registry, out)
+            {
+                return result;
+            }
+            ToolCallResult::error(format!("Unknown tool: {other}"))
+        }
     }
 }
 
@@ -601,23 +637,21 @@ fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     let mode = parse_action_mode(mode_str);
 
     registry
-        .with_app(&app_name, |app| {
-            match app.find_native(&query, Some(100)) {
-                Ok(el) => {
-                    let click_result = match click_type {
-                        "double" => el.double_click_native(mode),
-                        "right" => el.right_click_native(mode),
-                        _ => el.click_native(mode),
-                    };
-                    match click_result {
-                        Ok(()) => ToolCallResult::ok(
-                            json!({"clicked": true, "query": query}).to_string(),
-                        ),
-                        Err(e) => ToolCallResult::error(format!("Click failed: {e}")),
+        .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
+            Ok(el) => {
+                let click_result = match click_type {
+                    "double" => el.double_click_native(mode),
+                    "right" => el.right_click_native(mode),
+                    _ => el.click_native(mode),
+                };
+                match click_result {
+                    Ok(()) => {
+                        ToolCallResult::ok(json!({"clicked": true, "query": query}).to_string())
                     }
+                    Err(e) => ToolCallResult::error(format!("Click failed: {e}")),
                 }
-                Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
             }
+            Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -638,9 +672,9 @@ fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => match el.type_text_native(&text, mode) {
-                Ok(()) => ToolCallResult::ok(
-                    json!({"typed": true, "char_count": char_count}).to_string(),
-                ),
+                Ok(()) => {
+                    ToolCallResult::ok(json!({"typed": true, "char_count": char_count}).to_string())
+                }
                 Err(e) => ToolCallResult::error(format!("Type failed: {e}")),
             },
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
@@ -677,9 +711,7 @@ fn handle_get_value(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
-            Ok(el) => ToolCallResult::ok(
-                json!({"found": true, "value": el.value()}).to_string(),
-            ),
+            Ok(el) => ToolCallResult::ok(json!({"found": true, "value": el.value()}).to_string()),
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
         })
         .unwrap_or_else(ToolCallResult::error)
@@ -916,12 +948,12 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn all_tools_returns_twelve_tools() {
-        // GIVEN: Phase 1 tool set
+    fn all_tools_returns_nineteen_tools() {
+        // GIVEN: Phase 1 (12) + Phase 3 (7) tool set
         // WHEN: requesting all tools
         let tools = all_tools();
-        // THEN: exactly 12 tools
-        assert_eq!(tools.len(), 12);
+        // THEN: exactly 19 tools
+        assert_eq!(tools.len(), 19);
     }
 
     #[test]
@@ -934,7 +966,11 @@ mod tests {
     #[test]
     fn all_tools_have_non_empty_descriptions() {
         for tool in all_tools() {
-            assert!(!tool.description.is_empty(), "empty description on {}", tool.name);
+            assert!(
+                !tool.description.is_empty(),
+                "empty description on {}",
+                tool.name
+            );
         }
     }
 
@@ -991,7 +1027,10 @@ mod tests {
 
     #[test]
     fn parse_action_mode_background_is_default() {
-        assert_eq!(parse_action_mode("background"), crate::ActionMode::Background);
+        assert_eq!(
+            parse_action_mode("background"),
+            crate::ActionMode::Background
+        );
         assert_eq!(parse_action_mode("unknown"), crate::ActionMode::Background);
     }
 
@@ -1003,7 +1042,8 @@ mod tests {
     #[test]
     fn call_tool_unknown_name_returns_error() {
         let registry = Arc::new(AppRegistry::default());
-        let result = call_tool("ax_nonexistent", &json!({}), &registry);
+        let mut out = Vec::<u8>::new();
+        let result = call_tool("ax_nonexistent", &json!({}), &registry, &mut out);
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Unknown tool"));
     }
@@ -1012,7 +1052,8 @@ mod tests {
     fn call_tool_is_accessible_returns_result() {
         // ax_is_accessible never requires a connected app
         let registry = Arc::new(AppRegistry::default());
-        let result = call_tool("ax_is_accessible", &json!({}), &registry);
+        let mut out = Vec::<u8>::new();
+        let result = call_tool("ax_is_accessible", &json!({}), &registry, &mut out);
         // Result content is valid JSON
         let parsed: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(parsed.get("enabled").is_some());
@@ -1021,7 +1062,8 @@ mod tests {
     #[test]
     fn call_tool_connect_missing_app_field_is_error() {
         let registry = Arc::new(AppRegistry::default());
-        let result = call_tool("ax_connect", &json!({}), &registry);
+        let mut out = Vec::<u8>::new();
+        let result = call_tool("ax_connect", &json!({}), &registry, &mut out);
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Missing"));
     }
@@ -1029,10 +1071,12 @@ mod tests {
     #[test]
     fn call_tool_find_requires_app_not_connected() {
         let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
         let result = call_tool(
             "ax_find",
             &json!({"app": "NotConnected", "query": "Save"}),
             &registry,
+            &mut out,
         );
         assert!(result.is_error);
         assert!(result.content[0].text.contains("not connected"));

@@ -1,14 +1,45 @@
 //! MCP server implementation for `axterminator`.
 //!
-//! Phase 1: JSON-RPC 2.0 over stdio transport.
-//!   - `initialize` / `initialized` handshake
-//!   - `tools/list` — all 12 Phase 1 tools with annotations and output schemas
-//!   - `tools/call` — dispatches to Rust core functions
-//!   - `ping`
+//! ## Phase 1 (tools)
 //!
-//! Entry point: [`server::run_stdio`].
+//! - `initialize` / `initialized` handshake
+//! - `tools/list` — 12 Phase 1 tools with annotations and output schemas
+//! - `tools/call` — dispatches to Rust core functions
+//! - `ping`
+//!
+//! ## Phase 2 (resources + prompts)
+//!
+//! - `resources/list` — 2 static resources
+//! - `resources/templates/list` — 3 URI templates
+//! - `resources/read` — reads system status, running apps, app tree,
+//!   app screenshot, and app UI state
+//! - `prompts/list` — 4 guided workflow prompts
+//! - `prompts/get` — resolves a prompt with caller-supplied arguments
+//!
+//! ## Phase 3 (extended tools + observability)
+//!
+//! - `tools/list` — 7 additional tools (`ax_scroll`, `ax_key_press`,
+//!   `ax_get_attributes`, `ax_get_tree`, `ax_list_apps`, `ax_drag`, `ax_assert`)
+//! - `notifications/message` — structured per-tool-call log notifications
+//! - `notifications/progress` — incremental progress for long-running tools
+//!
+//! ## Phase 4 (HTTP transport + auth + elicitation)
+//!
+//! - [`transport`] — stdio and Streamable HTTP/SSE transports
+//! - [`auth`] — bearer token and localhost-only authentication for HTTP
+//! - [`elicitation`] — server-initiated user questions (4 key scenarios)
+//!
+//! Entry points: [`server::run_stdio`] (stdio), [`transport::serve`] (any).
 
 pub mod annotations;
+pub mod auth;
+pub mod elicitation;
+pub mod logging;
+pub mod progress;
+pub mod prompts;
 pub mod protocol;
+pub mod resources;
 pub mod server;
 pub mod tools;
+pub mod tools_extended;
+pub mod transport;

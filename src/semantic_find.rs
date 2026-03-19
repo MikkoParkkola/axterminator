@@ -257,7 +257,11 @@ impl QueryHints {
             PositionHint::Left => cx < 400.0,
             PositionHint::Right => cx > 800.0,
         };
-        if matches { POSITION_BONUS } else { 0.0 }
+        if matches {
+            POSITION_BONUS
+        } else {
+            0.0
+        }
     }
 
     /// Compute a size bonus based on the node's bounding rect area.
@@ -273,7 +277,11 @@ impl QueryHints {
             SizeHint::Large => area > 4_000.0,
             SizeHint::Small => area < 600.0,
         };
-        if matches { SIZE_BONUS } else { 0.0 }
+        if matches {
+            SIZE_BONUS
+        } else {
+            0.0
+        }
     }
 }
 
@@ -510,7 +518,11 @@ mod tests {
         let result = finder.find(&scene, &query);
         // THEN: every score in [0, 1]
         for m in &result.matches {
-            assert!((0.0..=1.0).contains(&m.score), "score {} out of range", m.score);
+            assert!(
+                (0.0..=1.0).contains(&m.score),
+                "score {} out of range",
+                m.score
+            );
         }
     }
 
@@ -534,7 +546,7 @@ mod tests {
     fn find_with_position_hint_boosts_top_button() {
         // GIVEN: Two buttons — one at top, one at bottom
         let scene = build_scene_from_nodes(vec![
-            button(0, "Close", (10.0, 5.0, 80.0, 30.0)),   // center cy=20 → top
+            button(0, "Close", (10.0, 5.0, 80.0, 30.0)), // center cy=20 → top
             button(1, "Close", (10.0, 700.0, 80.0, 30.0)), // center cy=715 → bottom
         ]);
         let finder = SemanticFinder;
@@ -553,7 +565,10 @@ mod tests {
             .iter()
             .position(|m| m.bounds == Some((10.0, 700.0, 80.0, 30.0)));
         if let (Some(ti), Some(bi)) = (top_idx, bot_idx) {
-            assert!(ti <= bi, "top button should rank no worse than bottom button");
+            assert!(
+                ti <= bi,
+                "top button should rank no worse than bottom button"
+            );
         }
     }
 

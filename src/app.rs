@@ -177,8 +177,7 @@ impl AXApp {
         bundle_id: Option<&str>,
         pid: Option<u32>,
     ) -> AXResult<Self> {
-        Self::connect(name, bundle_id, pid)
-            .map_err(|e| AXError::SystemError(e.to_string()))
+        Self::connect(name, bundle_id, pid).map_err(|e| AXError::SystemError(e.to_string()))
     }
 
     /// Find element — returns `AXResult` for Rust-native callers (no pyo3 dependency).

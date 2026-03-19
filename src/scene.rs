@@ -213,12 +213,7 @@ const CHECK_PREFIXES: &[&str] = &[
     "check whether ",
     "does the ",
 ];
-const COUNT_PREFIXES: &[&str] = &[
-    "how many ",
-    "count the ",
-    "count all ",
-    "number of ",
-];
+const COUNT_PREFIXES: &[&str] = &["how many ", "count the ", "count all ", "number of "];
 const FIND_PREFIXES: &[&str] = &[
     "find the ",
     "find a ",
@@ -239,9 +234,7 @@ fn is_describe_query(lower: &str) -> bool {
 
 /// Remove the first matching prefix from `s`, returning the remainder.
 fn strip_prefix<'s>(s: &'s str, prefixes: &[&str]) -> Option<&'s str> {
-    prefixes
-        .iter()
-        .find_map(|&prefix| s.strip_prefix(prefix))
+    prefixes.iter().find_map(|&prefix| s.strip_prefix(prefix))
 }
 
 // ── Handler implementations ────────────────────────────────────────────────────
@@ -261,7 +254,11 @@ impl SceneEngine {
             .map(|(score, node)| build_scene_match(score, node, scene))
             .collect();
 
-        SceneResult { matches, confidence, scene_description: None }
+        SceneResult {
+            matches,
+            confidence,
+            scene_description: None,
+        }
     }
 
     /// Handle `DescribeScene` — enumerate top-level elements into prose.
@@ -308,10 +305,7 @@ impl SceneEngine {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /// Score every node in `scene` returning `(score, &node)` pairs.
-fn score_all_nodes<'g>(
-    scene: &'g SceneGraph,
-    ctx: &MatchContext,
-) -> Vec<(f64, &'g SceneNode)> {
+fn score_all_nodes<'g>(scene: &'g SceneGraph, ctx: &MatchContext) -> Vec<(f64, &'g SceneNode)> {
     scene
         .iter()
         .map(|node| {
@@ -381,7 +375,11 @@ fn build_scene_description(scene: &SceneGraph) -> String {
             continue;
         }
         let role = node.role.as_deref().unwrap_or("element");
-        let label = node.text_labels().first().copied().unwrap_or("(unlabelled)");
+        let label = node
+            .text_labels()
+            .first()
+            .copied()
+            .unwrap_or("(unlabelled)");
         parts.push(format!("{role} \"{label}\""));
     }
 
@@ -563,8 +561,7 @@ mod tests {
         // THEN: AXButton ranked first
         assert!(!result.matches.is_empty());
         assert_eq!(
-            result.matches[0].element_role,
-            "AXButton",
+            result.matches[0].element_role, "AXButton",
             "button should outrank text field for 'button' query"
         );
     }
@@ -628,10 +625,7 @@ mod tests {
         // WHEN: Query for the child
         let result = engine().query("confirm button", &scene);
         // THEN: element_path contains ancestor roles
-        let confirm_match = result
-            .matches
-            .iter()
-            .find(|m| m.element_label == "Confirm");
+        let confirm_match = result.matches.iter().find(|m| m.element_label == "Confirm");
         assert!(confirm_match.is_some(), "should find 'Confirm' button");
         let path = &confirm_match.unwrap().element_path;
         assert!(!path.is_empty(), "path should list ancestors");
@@ -660,9 +654,14 @@ mod tests {
         // WHEN: Describe query
         let result = engine().query("what's on screen?", &scene);
         // THEN: Description mentions both labels
-        let desc = result.scene_description.expect("description should be present");
+        let desc = result
+            .scene_description
+            .expect("description should be present");
         assert!(desc.contains("OK"), "should mention 'OK'; got: {desc}");
-        assert!(desc.contains("Cancel"), "should mention 'Cancel'; got: {desc}");
+        assert!(
+            desc.contains("Cancel"),
+            "should mention 'Cancel'; got: {desc}"
+        );
     }
 
     #[test]

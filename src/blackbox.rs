@@ -323,9 +323,7 @@ impl BlackboxTester {
     }
 
     fn step_screenshot(&self, path: &str, result: &mut TestResult) -> bool {
-        let status = Command::new("screencapture")
-            .args(["-x", path])
-            .status();
+        let status = Command::new("screencapture").args(["-x", path]).status();
         match status {
             Ok(s) if s.success() => {
                 result.screenshots.push(path.to_owned());
@@ -349,9 +347,7 @@ impl BlackboxTester {
     fn check_assertions(&self, case: &TestCase, result: &mut TestResult) {
         for assertion in &case.assertions {
             let ok = match assertion {
-                TestAssertion::ElementExists { query } => {
-                    self.assert_element_exists(query, result)
-                }
+                TestAssertion::ElementExists { query } => self.assert_element_exists(query, result),
                 TestAssertion::ElementHasText { query, expected } => {
                     self.assert_element_has_text(query, expected, result)
                 }
@@ -370,7 +366,9 @@ impl BlackboxTester {
         if self.find_element_text(query).is_some() {
             true
         } else {
-            result.fail(format!("ElementExists: '{query}' not in accessibility tree"));
+            result.fail(format!(
+                "ElementExists: '{query}' not in accessibility tree"
+            ));
             false
         }
     }
@@ -479,10 +477,7 @@ impl BlackboxTester {
 /// label contains `query` (case-insensitive).
 ///
 /// Returns the matching text, or `None`.
-fn find_text_in_tree(
-    root: crate::accessibility::AXUIElementRef,
-    query: &str,
-) -> Option<String> {
+fn find_text_in_tree(root: crate::accessibility::AXUIElementRef, query: &str) -> Option<String> {
     use crate::accessibility::{self, attributes, get_attribute};
     use std::collections::VecDeque;
 
@@ -492,7 +487,11 @@ fn find_text_in_tree(
 
     while let Some(elem) = queue.pop_front() {
         // Check title, value, label
-        for attr in &[attributes::AX_TITLE, attributes::AX_VALUE, attributes::AX_LABEL] {
+        for attr in &[
+            attributes::AX_TITLE,
+            attributes::AX_VALUE,
+            attributes::AX_LABEL,
+        ] {
             if let Some(text) = accessibility::get_string_attribute_value(elem, attr) {
                 if text.to_lowercase().contains(&query_lower) {
                     return Some(text);
@@ -530,8 +529,7 @@ fn ax_children_to_vec(
         let mut result = Vec::with_capacity(cf_array.len() as usize);
         for i in 0..cf_array.len() {
             if let Some(element_ref) = cf_array.get(i) {
-                let ptr = element_ref.as_concrete_TypeRef()
-                    as crate::accessibility::AXUIElementRef;
+                let ptr = element_ref.as_concrete_TypeRef() as crate::accessibility::AXUIElementRef;
                 if !ptr.is_null() {
                     let _ = crate::accessibility::retain_cf(ptr as CFTypeRef);
                     result.push(ptr);
@@ -562,8 +560,12 @@ mod tests {
                 query: "Login".into(),
                 timeout_ms: 1000,
             })
-            .with_step(TestStep::FindAndClick { query: "Submit".into() })
-            .with_assertion(TestAssertion::ElementExists { query: "Dashboard".into() });
+            .with_step(TestStep::FindAndClick {
+                query: "Submit".into(),
+            })
+            .with_assertion(TestAssertion::ElementExists {
+                query: "Dashboard".into(),
+            });
 
         // THEN: Two steps, one assertion
         assert_eq!(case.steps.len(), 2);
@@ -683,7 +685,9 @@ mod tests {
     fn test_case_serializes_and_deserializes() {
         // GIVEN: A test case with one step and one assertion
         let case = TestCase::new("serde_test")
-            .with_step(TestStep::Launch { app: "TextEdit".into() })
+            .with_step(TestStep::Launch {
+                app: "TextEdit".into(),
+            })
             .with_step(TestStep::FindAndType {
                 query: "body".into(),
                 text: "hello world".into(),
@@ -706,10 +710,20 @@ mod tests {
         // GIVEN: Every TestStep variant
         let steps = vec![
             TestStep::Launch { app: "App".into() },
-            TestStep::FindAndClick { query: "btn".into() },
-            TestStep::FindAndType { query: "field".into(), text: "text".into() },
-            TestStep::WaitForElement { query: "elem".into(), timeout_ms: 5000 },
-            TestStep::Screenshot { path: "/tmp/shot.png".into() },
+            TestStep::FindAndClick {
+                query: "btn".into(),
+            },
+            TestStep::FindAndType {
+                query: "field".into(),
+                text: "text".into(),
+            },
+            TestStep::WaitForElement {
+                query: "elem".into(),
+                timeout_ms: 5000,
+            },
+            TestStep::Screenshot {
+                path: "/tmp/shot.png".into(),
+            },
         ];
 
         // WHEN / THEN: No panic on serialization
@@ -723,7 +737,10 @@ mod tests {
         // GIVEN: Every TestAssertion variant
         let assertions = vec![
             TestAssertion::ElementExists { query: "A".into() },
-            TestAssertion::ElementHasText { query: "B".into(), expected: "val".into() },
+            TestAssertion::ElementHasText {
+                query: "B".into(),
+                expected: "val".into(),
+            },
             TestAssertion::ElementNotExists { query: "C".into() },
             TestAssertion::ScreenContains { needle: "D".into() },
         ];

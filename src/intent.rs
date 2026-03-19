@@ -97,8 +97,7 @@ impl SceneNode {
     /// Return the center point of the element's bounding rect, if known.
     #[must_use]
     pub fn center(&self) -> Option<(f64, f64)> {
-        self.bounds
-            .map(|(x, y, w, h)| (x + w / 2.0, y + h / 2.0))
+        self.bounds.map(|(x, y, w, h)| (x + w / 2.0, y + h / 2.0))
     }
 }
 
@@ -235,14 +234,10 @@ pub fn scan_scene_bounded(root_element: AXUIElementRef, max_nodes: usize) -> AXR
 }
 
 /// Snapshot a single element into a [`SceneNode`] without retaining any CF refs.
-fn snapshot_element(
-    elem_ref: AXUIElementRef,
-    parent: Option<NodeId>,
-    depth: usize,
-) -> SceneNode {
+fn snapshot_element(elem_ref: AXUIElementRef, parent: Option<NodeId>, depth: usize) -> SceneNode {
     let bounds = read_bounds(elem_ref);
-    let enabled = accessibility::get_bool_attribute_value(elem_ref, attributes::AX_ENABLED)
-        .unwrap_or(true);
+    let enabled =
+        accessibility::get_bool_attribute_value(elem_ref, attributes::AX_ENABLED).unwrap_or(true);
 
     SceneNode {
         id: NodeId(0), // Assigned by SceneGraph::push
@@ -256,10 +251,7 @@ fn snapshot_element(
             elem_ref,
             attributes::AX_DESCRIPTION,
         ),
-        identifier: accessibility::get_string_attribute_value(
-            elem_ref,
-            attributes::AX_IDENTIFIER,
-        ),
+        identifier: accessibility::get_string_attribute_value(elem_ref, attributes::AX_IDENTIFIER),
         bounds,
         enabled,
         depth,
@@ -303,11 +295,7 @@ pub fn extract_intent(scene: &SceneGraph, query: &str) -> Vec<IntentMatch> {
 const MIN_CONFIDENCE: f64 = 0.05;
 
 /// Score a single node and return an [`IntentMatch`] if confidence ≥ threshold.
-fn score_to_match(
-    node: &SceneNode,
-    ctx: &MatchContext,
-    scene: &SceneGraph,
-) -> Option<IntentMatch> {
+fn score_to_match(node: &SceneNode, ctx: &MatchContext, scene: &SceneGraph) -> Option<IntentMatch> {
     let (confidence, reason) = score_node(node, ctx, scene);
     if confidence >= MIN_CONFIDENCE {
         Some(IntentMatch {
@@ -512,10 +500,8 @@ mod tests {
     #[test]
     fn extract_intent_finds_exact_title_match() {
         // GIVEN: Scene with submit button
-        let graph = build_scene_from_nodes(vec![
-            make_button(0, "Submit"),
-            make_button(1, "Cancel"),
-        ]);
+        let graph =
+            build_scene_from_nodes(vec![make_button(0, "Submit"), make_button(1, "Cancel")]);
         // WHEN: Intent targets submit
         let results = extract_intent(&graph, "submit");
         // THEN: Submit is ranked first
@@ -562,10 +548,8 @@ mod tests {
     #[test]
     fn extract_intent_role_hint_boosts_button_for_click_query() {
         // GIVEN: Scene with button and text field labeled "Login"
-        let graph = build_scene_from_nodes(vec![
-            make_button(0, "Login"),
-            make_text_field(1, "Login"),
-        ]);
+        let graph =
+            build_scene_from_nodes(vec![make_button(0, "Login"), make_text_field(1, "Login")]);
         // WHEN: Intent says "click the login button"
         let results = extract_intent(&graph, "click the login button");
         // THEN: Button should rank first (role hint)

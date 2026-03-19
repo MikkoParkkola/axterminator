@@ -60,7 +60,12 @@ impl Rect {
     /// Create a new rect.
     #[must_use]
     pub fn new(x: f64, y: f64, width: f64, height: f64) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Center point of the rect.
@@ -273,10 +278,7 @@ impl ElectronConnection {
             .as_array()
             .ok_or_else(|| AXError::SystemError("AX tree missing 'nodes'".into()))?;
 
-        let elements = nodes
-            .iter()
-            .map(ax_node_to_element)
-            .collect();
+        let elements = nodes.iter().map(ax_node_to_element).collect();
 
         Ok(elements)
     }
@@ -381,10 +383,7 @@ impl ElectronConnection {
     /// Fetch tag, classes, text, and bounds for a single CDP node ID.
     fn enrich_element(&mut self, node_id: i64) -> AXResult<ElectronElement> {
         // Resolve tag + classes from node description
-        let desc = self.execute(
-            "DOM.describeNode",
-            json!({ "nodeId": node_id, "depth": 0 }),
-        )?;
+        let desc = self.execute("DOM.describeNode", json!({ "nodeId": node_id, "depth": 0 }))?;
 
         let tag = desc["node"]["localName"]
             .as_str()
@@ -403,7 +402,13 @@ impl ElectronConnection {
         // Bounding box
         let bounds = self.get_box_model(node_id).ok();
 
-        Ok(ElectronElement { node_id, tag, classes, text, bounds })
+        Ok(ElectronElement {
+            node_id,
+            tag,
+            classes,
+            text,
+            bounds,
+        })
     }
 
     fn get_box_model(&mut self, node_id: i64) -> AXResult<Rect> {
@@ -459,7 +464,9 @@ pub fn probe_cdp_port(port: u16) -> bool {
     let Ok(mut stream) = TcpStream::connect(format!("127.0.0.1:{port}")) else {
         return false;
     };
-    let req = format!("GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    let req = format!(
+        "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+    );
     if stream.write_all(req.as_bytes()).is_err() {
         return false;
     }
@@ -501,19 +508,17 @@ fn parse_class_list(attrs: Option<&Vec<Value>>) -> Vec<String> {
         .chunks(2)
         .find(|pair| pair.first().and_then(Value::as_str) == Some("class"))
         .and_then(|pair| pair.get(1)?.as_str())
-        .map(|classes| {
-            classes
-                .split_whitespace()
-                .map(str::to_string)
-                .collect()
-        })
+        .map(|classes| classes.split_whitespace().map(str::to_string).collect())
         .unwrap_or_default()
 }
 
 /// Convert a CDP `Accessibility.AXNode` JSON object to an [`ElectronElement`].
 fn ax_node_to_element(node: &Value) -> ElectronElement {
     let node_id = node["nodeId"].as_i64().unwrap_or(0);
-    let tag = node["role"]["value"].as_str().unwrap_or("unknown").to_lowercase();
+    let tag = node["role"]["value"]
+        .as_str()
+        .unwrap_or("unknown")
+        .to_lowercase();
     let text = node["name"]["value"].as_str().unwrap_or("").to_string();
 
     ElectronElement {

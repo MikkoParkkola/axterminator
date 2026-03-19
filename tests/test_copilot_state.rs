@@ -175,7 +175,9 @@ fn diff_selected_items_vec_changes() {
 
     // WHEN / THEN
     let changes = diff_states(&old, &new);
-    assert!(changes.iter().any(|c| c.field == "selection.selected_items"));
+    assert!(changes
+        .iter()
+        .any(|c| c.field == "selection.selected_items"));
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +268,10 @@ fn format_for_llm_full_state_contains_all_sections() {
     // THEN
     assert!(text.contains("[App]"), "missing [App]: {text}");
     assert!(text.contains("[Selection]"), "missing [Selection]: {text}");
-    assert!(text.contains("[Navigation]"), "missing [Navigation]: {text}");
+    assert!(
+        text.contains("[Navigation]"),
+        "missing [Navigation]: {text}"
+    );
     assert!(text.contains("[Content]"), "missing [Content]: {text}");
 }
 
@@ -435,8 +440,8 @@ fn live_read_copilot_state_finder() {
         }
     };
 
-    let app_ref = axterminator::create_application_element(pid)
-        .expect("create_application_element failed");
+    let app_ref =
+        axterminator::create_application_element(pid).expect("create_application_element failed");
 
     // WHEN: extract state — should never panic
     let state = axterminator::copilot_state::read_copilot_state(app_ref);

@@ -150,7 +150,12 @@ impl DurableStep {
         max_retries: u32,
         timeout_ms: u64,
     ) -> Self {
-        Self { id: id.into(), action, max_retries, timeout_ms }
+        Self {
+            id: id.into(),
+            action,
+            max_retries,
+            timeout_ms,
+        }
     }
 }
 
@@ -248,7 +253,10 @@ impl DurableRunner {
                         reason,
                     };
                     let last_checkpoint = self.checkpoints.last().map(|c| c.step_index);
-                    return WorkflowResult::Failed { failure, last_checkpoint };
+                    return WorkflowResult::Failed {
+                        failure,
+                        last_checkpoint,
+                    };
                 }
             }
         }
@@ -362,13 +370,19 @@ impl MockExecutor {
     /// Create an executor that always succeeds.
     #[must_use]
     pub fn always_ok() -> Self {
-        Self { results: Vec::new(), received: Vec::new() }
+        Self {
+            results: Vec::new(),
+            received: Vec::new(),
+        }
     }
 
     /// Create an executor from an explicit result sequence.
     #[must_use]
     pub fn from_results(results: Vec<Result<(), String>>) -> Self {
-        Self { results, received: Vec::new() }
+        Self {
+            results,
+            received: Vec::new(),
+        }
     }
 
     /// The actions that have been passed to `execute` so far.
@@ -460,7 +474,10 @@ mod tests {
         // THEN: Success with 3 steps executed, 0 retries
         assert_eq!(
             result,
-            WorkflowResult::Success { steps_executed: 3, total_retries: 0 }
+            WorkflowResult::Success {
+                steps_executed: 3,
+                total_retries: 0
+            }
         );
     }
 
@@ -470,11 +487,11 @@ mod tests {
         let steps = three_step_workflow();
         let mut runner = DurableRunner::new();
         let mut exec = MockExecutor::from_results(vec![
-            Ok(()),                      // step-a succeeds
-            Ok(()),                      // cp-1 succeeds
-            Err("not found".into()),     // step-b fails attempt 1
-            Err("not found".into()),     // step-b fails attempt 2 (retry 1)
-            Err("not found".into()),     // step-b fails attempt 3 (retry 2)
+            Ok(()),                  // step-a succeeds
+            Ok(()),                  // cp-1 succeeds
+            Err("not found".into()), // step-b fails attempt 1
+            Err("not found".into()), // step-b fails attempt 2 (retry 1)
+            Err("not found".into()), // step-b fails attempt 3 (retry 2)
         ]);
 
         // WHEN: Running
@@ -505,7 +522,9 @@ mod tests {
 
         // THEN: last_checkpoint is the checkpoint step index (1)
         match result {
-            WorkflowResult::Failed { last_checkpoint, .. } => {
+            WorkflowResult::Failed {
+                last_checkpoint, ..
+            } => {
                 assert_eq!(last_checkpoint, Some(1));
             }
             other => panic!("expected Failed, got {other:?}"),
@@ -523,8 +542,7 @@ mod tests {
             1,
         )];
         let mut runner = DurableRunner::new();
-        let mut exec =
-            MockExecutor::from_results(vec![Err("transient".into()), Ok(())]);
+        let mut exec = MockExecutor::from_results(vec![Err("transient".into()), Ok(())]);
 
         // WHEN: Running
         let result = runner.run(&steps, &mut exec);
@@ -532,7 +550,10 @@ mod tests {
         // THEN: Success — one retry used
         assert_eq!(
             result,
-            WorkflowResult::Success { steps_executed: 1, total_retries: 1 }
+            WorkflowResult::Success {
+                steps_executed: 1,
+                total_retries: 1
+            }
         );
     }
 
@@ -606,7 +627,10 @@ mod tests {
         // THEN: Only step-3 was executed (index 2 → current_step becomes 3)
         assert_eq!(
             result,
-            WorkflowResult::Success { steps_executed: 3, total_retries: 0 }
+            WorkflowResult::Success {
+                steps_executed: 3,
+                total_retries: 0
+            }
         );
         // exec received only one action
         assert_eq!(exec.received().len(), 1);
@@ -640,7 +664,10 @@ mod tests {
         // THEN: Success with zero steps
         assert_eq!(
             result,
-            WorkflowResult::Success { steps_executed: 0, total_retries: 0 }
+            WorkflowResult::Success {
+                steps_executed: 0,
+                total_retries: 0
+            }
         );
     }
 

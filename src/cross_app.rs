@@ -167,14 +167,22 @@ impl CrossAppTracker {
         let is_first = self.current_app.is_none();
 
         // Defocus previous app
-        if let Some(prev) = &from_app.is_empty().then_some(()).map(|_| None).unwrap_or(Some(from_app.clone())) {
+        if let Some(prev) = &from_app
+            .is_empty()
+            .then_some(())
+            .map(|_| None)
+            .unwrap_or(Some(from_app.clone()))
+        {
             if let Some(state) = self.apps.get_mut(prev) {
                 state.focused = false;
             }
         }
 
         // Ensure destination app entry exists
-        let state = self.apps.entry(app.to_owned()).or_insert_with(|| AppState::new(app));
+        let state = self
+            .apps
+            .entry(app.to_owned())
+            .or_insert_with(|| AppState::new(app));
         state.focused = true;
         state.focus_count += 1;
 
@@ -394,14 +402,22 @@ impl CrossAppTracker {
             if full.iter().zip(apps.iter()).all(|(a, b)| *a == b.as_str()) {
                 let duration = window
                     .last()
-                    .and_then(|last| window.first().map(|first| last.timestamp.saturating_sub(first.timestamp)))
+                    .and_then(|last| {
+                        window
+                            .first()
+                            .map(|first| last.timestamp.saturating_sub(first.timestamp))
+                    })
                     .unwrap_or(0);
                 total = total.saturating_add(duration);
                 count += 1;
             }
         }
 
-        if count == 0 { 0 } else { total / count }
+        if count == 0 {
+            0
+        } else {
+            total / count
+        }
     }
 }
 
@@ -437,7 +453,9 @@ fn automation_description(app: &str, i: usize, total: usize) -> String {
 fn top_transition_pair(transitions: &[AppTransition]) -> Option<(String, String)> {
     let mut counts: HashMap<(&str, &str), u32> = HashMap::new();
     for t in transitions {
-        *counts.entry((t.from_app.as_str(), t.to_app.as_str())).or_insert(0) += 1;
+        *counts
+            .entry((t.from_app.as_str(), t.to_app.as_str()))
+            .or_insert(0) += 1;
     }
     counts
         .into_iter()
@@ -702,8 +720,16 @@ mod tests {
         let steps = CrossAppTracker::suggest_automation(&wf);
 
         // THEN: First = read, last = write
-        assert!(steps[0].description.contains("Read"), "got: {}", steps[0].description);
-        assert!(steps[2].description.contains("Write"), "got: {}", steps[2].description);
+        assert!(
+            steps[0].description.contains("Read"),
+            "got: {}",
+            steps[0].description
+        );
+        assert!(
+            steps[2].description.contains("Write"),
+            "got: {}",
+            steps[2].description
+        );
     }
 
     #[test]
@@ -721,8 +747,16 @@ mod tests {
         let steps = CrossAppTracker::suggest_automation(&wf);
 
         // THEN: Middle steps mention "Transform"
-        assert!(steps[1].description.contains("Transform"), "got: {}", steps[1].description);
-        assert!(steps[2].description.contains("Transform"), "got: {}", steps[2].description);
+        assert!(
+            steps[1].description.contains("Transform"),
+            "got: {}",
+            steps[1].description
+        );
+        assert!(
+            steps[2].description.contains("Transform"),
+            "got: {}",
+            steps[2].description
+        );
     }
 
     // ── stats ─────────────────────────────────────────────────────────────

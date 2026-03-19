@@ -824,8 +824,14 @@ mod tests {
         assert_eq!(profile.app_id, "com.test.App");
         assert_eq!(profile.cdp_port, Some(8888));
         assert!(profile.has_capability(&AppCapability::Browser));
-        assert_eq!(profile.selectors.get("nav").map(String::as_str), Some("nav.main"));
-        assert_eq!(profile.shortcuts.get("quit").map(String::as_str), Some("Meta+Q"));
+        assert_eq!(
+            profile.selectors.get("nav").map(String::as_str),
+            Some("nav.main")
+        );
+        assert_eq!(
+            profile.shortcuts.get("quit").map(String::as_str),
+            Some("Meta+Q")
+        );
     }
 
     // ── is_empty / len ─────────────────────────────────────────────────────

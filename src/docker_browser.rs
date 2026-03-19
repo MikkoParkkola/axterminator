@@ -375,8 +375,8 @@ impl ScreenshotShooter for RealCdpShooter {
         }
 
         let ws_url = format!("ws://127.0.0.1:{cdp_port}/devtools/browser");
-        let (mut socket, _) = ws_connect(&ws_url)
-            .map_err(|e| AXError::SystemError(format!("CDP connect: {e}")))?;
+        let (mut socket, _) =
+            ws_connect(&ws_url).map_err(|e| AXError::SystemError(format!("CDP connect: {e}")))?;
 
         let request = serde_json::json!({
             "id": 1,
@@ -425,10 +425,7 @@ fn base64_decode(input: &str) -> AXResult<Vec<u8>> {
     let mut out = Vec::with_capacity(clean.len() * 3 / 4);
 
     for chunk in clean.chunks(4) {
-        let vals: Vec<u8> = chunk
-            .iter()
-            .map(|&b| lookup[b as usize])
-            .collect();
+        let vals: Vec<u8> = chunk.iter().map(|&b| lookup[b as usize]).collect();
 
         if vals.contains(&255) {
             return Err(AXError::SystemError("Invalid base64 character".into()));
@@ -491,9 +488,10 @@ impl DockerRunner for RealDockerRunner {
             .status()
             .map_err(|e| AXError::SystemError(format!("docker stop: {e}")))?;
 
-        status.success().then_some(()).ok_or_else(|| {
-            AXError::SystemError(format!("docker stop {container_id} failed"))
-        })
+        status
+            .success()
+            .then_some(())
+            .ok_or_else(|| AXError::SystemError(format!("docker stop {container_id} failed")))
     }
 
     fn rm_container(&self, container_id: &str) -> AXResult<()> {
@@ -502,9 +500,10 @@ impl DockerRunner for RealDockerRunner {
             .status()
             .map_err(|e| AXError::SystemError(format!("docker rm: {e}")))?;
 
-        status.success().then_some(()).ok_or_else(|| {
-            AXError::SystemError(format!("docker rm {container_id} failed"))
-        })
+        status
+            .success()
+            .then_some(())
+            .ok_or_else(|| AXError::SystemError(format!("docker rm {container_id} failed")))
     }
 
     fn list_neko_containers(&self) -> AXResult<Vec<String>> {
@@ -978,10 +977,8 @@ mod tests {
     #[test]
     fn docker_manager_cleanup_also_removes_discovered_orphans() {
         // GIVEN: Runner knows about orphan containers not tracked by manager
-        let runner = MockDockerRunner::with_discoverable(vec![
-            "orphan-001".into(),
-            "orphan-002".into(),
-        ]);
+        let runner =
+            MockDockerRunner::with_discoverable(vec!["orphan-001".into(), "orphan-002".into()]);
         let mut mgr = DockerManager::with_runner(Box::new(runner));
         // WHEN: cleanup with zero tracked but two discovered
         let removed = mgr.cleanup();
@@ -1018,7 +1015,9 @@ mod tests {
         assert!(args.contains(&"axterminator.neko=1".into()));
         assert!(args.iter().any(|a| a.contains("9222:9222")));
         assert!(args.iter().any(|a| a.contains("5900:5900")));
-        assert!(args.iter().any(|a| a.contains("ghcr.io/m1k1o/neko/chromium")));
+        assert!(args
+            .iter()
+            .any(|a| a.contains("ghcr.io/m1k1o/neko/chromium")));
     }
 
     #[test]
@@ -1036,7 +1035,9 @@ mod tests {
         assert!(args.iter().any(|a| a.contains("9500:9222")));
         assert!(args.iter().any(|a| a.contains("5950:5900")));
         assert!(args.iter().any(|a| a.contains("1280x720")));
-        assert!(args.iter().any(|a| a.contains("ghcr.io/m1k1o/neko/firefox")));
+        assert!(args
+            .iter()
+            .any(|a| a.contains("ghcr.io/m1k1o/neko/firefox")));
     }
 
     // ── base64_decode ─────────────────────────────────────────────────────

@@ -7,7 +7,9 @@
 //! This module is `pub(crate)`-only; callers should use
 //! [`crate::copilot_state::read_copilot_state`] as the public entry point.
 
-use crate::accessibility::{attributes, get_bool_attribute_value, get_children, get_string_attribute_value, AXUIElementRef};
+use crate::accessibility::{
+    attributes, get_bool_attribute_value, get_children, get_string_attribute_value, AXUIElementRef,
+};
 use crate::copilot_state::{AppContext, ContentContext, NavigationContext, SelectionContext};
 
 // ---------------------------------------------------------------------------
@@ -88,7 +90,11 @@ pub(crate) fn first_window_ref(
             get_string_attribute_value(c, attributes::AX_ROLE).as_deref() == Some("AXWindow")
         })
         .copied()
-        .or(if app_ref.is_null() { None } else { Some(app_ref) })
+        .or(if app_ref.is_null() {
+            None
+        } else {
+            Some(app_ref)
+        })
 }
 
 fn find_active_tab(children: &[AXUIElementRef]) -> Option<String> {
@@ -150,10 +156,7 @@ fn find_selected_text_in(elements: &[AXUIElementRef]) -> Option<String> {
     None
 }
 
-fn find_selected_list_row(
-    win: AXUIElementRef,
-    _children: &[AXUIElementRef],
-) -> Option<usize> {
+fn find_selected_list_row(win: AXUIElementRef, _children: &[AXUIElementRef]) -> Option<usize> {
     let children = get_children(win).ok()?;
     find_list_row_in(children.as_slice())
 }
@@ -209,8 +212,8 @@ fn collect_selected_items_in(elements: &[AXUIElementRef]) -> Vec<String> {
 fn build_breadcrumb(children: &[AXUIElementRef]) -> Vec<String> {
     let mut crumbs = Vec::new();
     for &c in children.iter().take(3) {
-        if let Some(title) = get_string_attribute_value(c, attributes::AX_TITLE)
-            .filter(|t| !t.is_empty())
+        if let Some(title) =
+            get_string_attribute_value(c, attributes::AX_TITLE).filter(|t| !t.is_empty())
         {
             crumbs.push(title);
         }
@@ -275,7 +278,11 @@ fn collect_visible_text(
     let win = window_ref?;
     let kids = get_children(win).ok()?;
     let text = collect_text_in(kids.as_slice(), 256);
-    if text.is_empty() { None } else { Some(text) }
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
 }
 
 fn collect_text_in(elements: &[AXUIElementRef], budget: usize) -> String {
@@ -327,16 +334,16 @@ fn collect_form_fields(
     fields
 }
 
-fn collect_form_fields_in(
-    elements: &[AXUIElementRef],
-    fields: &mut Vec<(String, String)>,
-) {
+fn collect_form_fields_in(elements: &[AXUIElementRef], fields: &mut Vec<(String, String)>) {
     if fields.len() >= 20 {
         return;
     }
     for &el in elements {
         let role = get_string_attribute_value(el, attributes::AX_ROLE);
-        if matches!(role.as_deref(), Some("AXTextField" | "AXTextArea" | "AXComboBox")) {
+        if matches!(
+            role.as_deref(),
+            Some("AXTextField" | "AXTextArea" | "AXComboBox")
+        ) {
             let label = get_string_attribute_value(el, attributes::AX_TITLE)
                 .or_else(|| get_string_attribute_value(el, attributes::AX_DESCRIPTION))
                 .or_else(|| get_string_attribute_value(el, attributes::AX_LABEL))

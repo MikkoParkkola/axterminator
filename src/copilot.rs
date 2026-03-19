@@ -200,29 +200,16 @@ impl DesktopCopilot {
 
 /// Returns `Some((confidence, reason))` when `condition` matches `ctx`,
 /// or `None` when it does not.
-fn evaluate_condition(
-    condition: &RuleCondition,
-    ctx: &CopilotContext,
-) -> Option<(f64, String)> {
+fn evaluate_condition(condition: &RuleCondition, ctx: &CopilotContext) -> Option<(f64, String)> {
     match condition {
-        RuleCondition::AppIs(app) => {
-            matches_app_is(app, ctx)
-        }
-        RuleCondition::WindowTitleContains(substr) => {
-            matches_window_title(substr, ctx)
-        }
-        RuleCondition::ClipboardContains(substr) => {
-            matches_clipboard(substr, ctx)
-        }
-        RuleCondition::IdleFor(threshold_ms) => {
-            matches_idle(*threshold_ms, ctx)
-        }
+        RuleCondition::AppIs(app) => matches_app_is(app, ctx),
+        RuleCondition::WindowTitleContains(substr) => matches_window_title(substr, ctx),
+        RuleCondition::ClipboardContains(substr) => matches_clipboard(substr, ctx),
+        RuleCondition::IdleFor(threshold_ms) => matches_idle(*threshold_ms, ctx),
         RuleCondition::RepeatedAction(action, min_count) => {
             matches_repeated_action(action, *min_count, ctx)
         }
-        RuleCondition::Pattern(pattern) => {
-            matches_pattern(pattern, ctx)
-        }
+        RuleCondition::Pattern(pattern) => matches_pattern(pattern, ctx),
     }
 }
 
@@ -235,7 +222,11 @@ fn matches_app_is(app: &str, ctx: &CopilotContext) -> Option<(f64, String)> {
 }
 
 fn matches_window_title(substr: &str, ctx: &CopilotContext) -> Option<(f64, String)> {
-    if ctx.current_window_title.to_lowercase().contains(&substr.to_lowercase()) {
+    if ctx
+        .current_window_title
+        .to_lowercase()
+        .contains(&substr.to_lowercase())
+    {
         Some((0.9, format!("Window title contains '{substr}'")))
     } else {
         None
@@ -278,10 +269,7 @@ fn matches_repeated_action(
     )
     .unwrap_or(u32::MAX);
     if count >= min_count {
-        Some((
-            0.8,
-            format!("Action '{action}' repeated {count}×"),
-        ))
+        Some((0.8, format!("Action '{action}' repeated {count}×")))
     } else {
         None
     }

@@ -33,6 +33,9 @@ cli = ["dep:clap", "dep:clap_complete"]
 # resolution to the embedding interpreter at runtime.  Must be DISABLED when
 # building the standalone CLI binary (which links Python explicitly via build.rs).
 python-ext = ["pyo3/extension-module"]
+# http-transport: Streamable HTTP + SSE transport (axum, tokio-stream).
+# Feature-gated to keep the default CLI binary lean.
+http-transport = ["dep:axum", "dep:tokio-stream", "dep:rand"]
 
 [dependencies]
 # Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
@@ -43,13 +46,18 @@ pyo3 = { version = "0.22", features = ["abi3-py39"] }
 clap = { version = "4.5", features = ["derive", "wrap_help", "env"], optional = true }
 clap_complete = { version = "4.5", optional = true }
 
+# HTTP transport (feature-gated)
+axum = { version = "0.7", features = ["http1", "http2", "json", "tokio"], optional = true }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+rand = { version = "0.8", optional = true }
+
 # Base64 encoding for screenshot data
 base64 = "0.22"
 
 # macOS accessibility
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
-core-graphics = { version = "0.24", features = ["elcapitan"] }
+core-graphics = { version = "0.24", features = ["elcapitan", "highsierra"] }
 core-graphics-types = "0.2"
 
 # macOS specific

@@ -222,11 +222,7 @@ pub fn read_copilot_state(app_ref: AXUIElementRef) -> CopilotState {
 /// * `interval_ms` – polling interval in milliseconds (minimum 50 ms)
 /// * `callback`    – called on every detected change, receives the new state
 ///   and the diff from the previous state
-pub fn watch_state_changes<F>(
-    app_ref: AXUIElementRef,
-    interval_ms: u64,
-    callback: F,
-) -> WatchHandle
+pub fn watch_state_changes<F>(app_ref: AXUIElementRef, interval_ms: u64, callback: F) -> WatchHandle
 where
     F: Fn(CopilotState, Vec<StateChange>) + Send + 'static,
 {
@@ -264,8 +260,7 @@ pub struct WatchHandle {
 
 impl Drop for WatchHandle {
     fn drop(&mut self) {
-        self.stop
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -286,17 +281,28 @@ fn diff_opt_str(
 
 fn diff_app(old: &AppContext, new: &AppContext, changes: &mut Vec<StateChange>) {
     diff_opt_str("app.name", &old.name, &new.name, changes);
-    diff_opt_str("app.focused_window", &old.focused_window, &new.focused_window, changes);
+    diff_opt_str(
+        "app.focused_window",
+        &old.focused_window,
+        &new.focused_window,
+        changes,
+    );
     diff_opt_str("app.active_tab", &old.active_tab, &new.active_tab, changes);
-    diff_opt_str("app.active_document", &old.active_document, &new.active_document, changes);
+    diff_opt_str(
+        "app.active_document",
+        &old.active_document,
+        &new.active_document,
+        changes,
+    );
 }
 
-fn diff_selection(
-    old: &SelectionContext,
-    new: &SelectionContext,
-    changes: &mut Vec<StateChange>,
-) {
-    diff_opt_str("selection.selected_text", &old.selected_text, &new.selected_text, changes);
+fn diff_selection(old: &SelectionContext, new: &SelectionContext, changes: &mut Vec<StateChange>) {
+    diff_opt_str(
+        "selection.selected_text",
+        &old.selected_text,
+        &new.selected_text,
+        changes,
+    );
     if old.selected_list_row != new.selected_list_row {
         changes.push(StateChange::new(
             "selection.selected_list_row",
@@ -319,7 +325,11 @@ fn diff_navigation(
     changes: &mut Vec<StateChange>,
 ) {
     if old.breadcrumb != new.breadcrumb {
-        changes.push(StateChange::new("navigation.breadcrumb", &old.breadcrumb, &new.breadcrumb));
+        changes.push(StateChange::new(
+            "navigation.breadcrumb",
+            &old.breadcrumb,
+            &new.breadcrumb,
+        ));
     }
     diff_opt_str(
         "navigation.sidebar_selection",
@@ -338,12 +348,13 @@ fn diff_navigation(
     }
 }
 
-fn diff_content(
-    old: &ContentContext,
-    new: &ContentContext,
-    changes: &mut Vec<StateChange>,
-) {
-    diff_opt_str("content.document_title", &old.document_title, &new.document_title, changes);
+fn diff_content(old: &ContentContext, new: &ContentContext, changes: &mut Vec<StateChange>) {
+    diff_opt_str(
+        "content.document_title",
+        &old.document_title,
+        &new.document_title,
+        changes,
+    );
     diff_opt_str(
         "content.visible_text_excerpt",
         &old.visible_text_excerpt,
@@ -351,7 +362,11 @@ fn diff_content(
         changes,
     );
     if old.form_fields != new.form_fields {
-        changes.push(StateChange::new("content.form_fields", &old.form_fields, &new.form_fields));
+        changes.push(StateChange::new(
+            "content.form_fields",
+            &old.form_fields,
+            &new.form_fields,
+        ));
     }
     diff_opt_str(
         "content.focused_element_role",
@@ -524,7 +539,9 @@ mod tests {
 
         // WHEN / THEN
         let changes = diff_states(&old, &new);
-        assert!(changes.iter().any(|c| c.field == "selection.selected_items"));
+        assert!(changes
+            .iter()
+            .any(|c| c.field == "selection.selected_items"));
     }
 
     // -- diff_states: NavigationContext changes -----------------------------

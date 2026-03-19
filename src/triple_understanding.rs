@@ -199,7 +199,11 @@ impl StructuralSignal {
     /// structurally specific and thus carry higher confidence.
     #[must_use]
     pub fn confidence(&self) -> f64 {
-        let parent_score: f64 = if self.parent_role.is_empty() { 0.3 } else { 0.6 };
+        let parent_score: f64 = if self.parent_role.is_empty() {
+            0.3
+        } else {
+            0.6
+        };
         // Leaf nodes are more unique; deep nodes are more specific.
         let leaf_bonus: f64 = if self.child_count == 0 { 0.2 } else { 0.0 };
         let depth_score: f64 = match self.depth {
@@ -348,7 +352,9 @@ impl TripleUnderstanding {
     /// Check if the label contains common loading-state keywords.
     fn label_suggests_loading(label: &str) -> bool {
         let lower = label.to_lowercase();
-        ["loading", "please wait", "spinner"].iter().any(|kw| lower.contains(kw))
+        ["loading", "please wait", "spinner"]
+            .iter()
+            .any(|kw| lower.contains(kw))
     }
 }
 
@@ -361,7 +367,12 @@ mod tests {
     // ── Fixtures ──────────────────────────────────────────────────────────
 
     fn medium_button_bounds() -> Rect {
-        Rect { x: 10.0, y: 20.0, width: 80.0, height: 30.0 }
+        Rect {
+            x: 10.0,
+            y: 20.0,
+            width: 80.0,
+            height: 30.0,
+        }
     }
 
     fn visual_medium() -> VisualSignal {
@@ -394,7 +405,12 @@ mod tests {
     #[test]
     fn rect_center_computes_midpoint() {
         // GIVEN: Rect at (10, 20) with size 80×30
-        let r = Rect { x: 10.0, y: 20.0, width: 80.0, height: 30.0 };
+        let r = Rect {
+            x: 10.0,
+            y: 20.0,
+            width: 80.0,
+            height: 30.0,
+        };
         // WHEN: Computing center
         let (cx, cy) = r.center();
         // THEN: Midpoint is correct
@@ -404,7 +420,12 @@ mod tests {
 
     #[test]
     fn rect_area_is_width_times_height() {
-        let r = Rect { x: 0.0, y: 0.0, width: 50.0, height: 40.0 };
+        let r = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 50.0,
+            height: 40.0,
+        };
         assert_eq!(r.area(), 2_000.0);
     }
 
@@ -413,21 +434,36 @@ mod tests {
     #[test]
     fn size_class_from_rect_classifies_small_correctly() {
         // GIVEN: 30×30 button (area 900 < 1000)
-        let r = Rect { x: 0.0, y: 0.0, width: 30.0, height: 30.0 };
+        let r = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 30.0,
+            height: 30.0,
+        };
         assert_eq!(SizeClass::from_rect(&r), SizeClass::Small);
     }
 
     #[test]
     fn size_class_from_rect_classifies_full_width_correctly() {
         // GIVEN: 1920×1080 screen
-        let r = Rect { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0 };
+        let r = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+        };
         assert_eq!(SizeClass::from_rect(&r), SizeClass::FullWidth);
     }
 
     #[test]
     fn size_class_from_rect_classifies_medium_correctly() {
         // GIVEN: 80×30 button (area 2400)
-        let r = Rect { x: 0.0, y: 0.0, width: 80.0, height: 30.0 };
+        let r = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 80.0,
+            height: 30.0,
+        };
         assert_eq!(SizeClass::from_rect(&r), SizeClass::Medium);
     }
 
@@ -445,12 +481,22 @@ mod tests {
     #[test]
     fn visual_full_width_has_higher_confidence_than_small() {
         let full = VisualSignal {
-            bounds: Rect { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0 },
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 1920.0,
+                height: 1080.0,
+            },
             relative_position: Position::Center,
             size_class: SizeClass::FullWidth,
         };
         let small = VisualSignal {
-            bounds: Rect { x: 0.0, y: 0.0, width: 10.0, height: 10.0 },
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            },
             relative_position: Position::TopLeft,
             size_class: SizeClass::Small,
         };
@@ -461,7 +507,11 @@ mod tests {
 
     #[test]
     fn semantic_empty_role_and_label_has_zero_confidence() {
-        let s = SemanticSignal { role: String::new(), label: String::new(), value: None };
+        let s = SemanticSignal {
+            role: String::new(),
+            label: String::new(),
+            value: None,
+        };
         assert_eq!(s.confidence(), 0.0);
     }
 
@@ -525,11 +575,8 @@ mod tests {
 
     #[test]
     fn combined_confidence_is_in_unit_range() {
-        let understanding = TripleUnderstanding::build(
-            visual_medium(),
-            semantic_button("OK"),
-            structural_leaf(),
-        );
+        let understanding =
+            TripleUnderstanding::build(visual_medium(), semantic_button("OK"), structural_leaf());
         assert!((0.0..=1.0).contains(&understanding.combined_confidence));
     }
 
@@ -568,11 +615,20 @@ mod tests {
         // GIVEN: Visible element with no accessibility role
         let u = TripleUnderstanding::build(
             VisualSignal {
-                bounds: Rect { x: 0.0, y: 0.0, width: 200.0, height: 50.0 },
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 200.0,
+                    height: 50.0,
+                },
                 relative_position: Position::Center,
                 size_class: SizeClass::Medium,
             },
-            SemanticSignal { role: String::new(), label: String::new(), value: None },
+            SemanticSignal {
+                role: String::new(),
+                label: String::new(),
+                value: None,
+            },
             structural_leaf(),
         );
         // THEN: NotInA11yTree detected
@@ -584,7 +640,12 @@ mod tests {
         // GIVEN: Tiny element (visually collapsed) with valid AX role
         let u = TripleUnderstanding::build(
             VisualSignal {
-                bounds: Rect { x: 0.0, y: 0.0, width: 15.0, height: 15.0 },
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 15.0,
+                    height: 15.0,
+                },
                 relative_position: Position::TopLeft,
                 size_class: SizeClass::Small,
             },
@@ -596,6 +657,8 @@ mod tests {
             structural_leaf(),
         );
         // THEN: Visual/a11y disabled mismatch detected
-        assert!(u.inconsistencies.contains(&Inconsistency::VisuallyDisabledButA11yEnabled));
+        assert!(u
+            .inconsistencies
+            .contains(&Inconsistency::VisuallyDisabledButA11yEnabled));
     }
 }

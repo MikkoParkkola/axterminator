@@ -77,8 +77,8 @@ impl AXElement {
             .unwrap_or(false)
     }
 
-    /// Check if the element is focused
-    fn focused(&self) -> bool {
+    /// Check if the element currently has keyboard focus.
+    pub fn focused(&self) -> bool {
         self.get_bool_attribute(attributes::AX_FOCUSED)
             .unwrap_or(false)
     }
@@ -236,9 +236,7 @@ impl AXElement {
     /// Perform click action — returns `AXResult` (no pyo3 dependency).
     fn perform_click_native(&self, mode: ActionMode) -> AXResult<()> {
         match mode {
-            ActionMode::Background => {
-                perform_action(self.element, actions::AX_PRESS)
-            }
+            ActionMode::Background => perform_action(self.element, actions::AX_PRESS),
             ActionMode::Focus => {
                 self.bring_to_focus_internal()?;
                 perform_action(self.element, actions::AX_PRESS)

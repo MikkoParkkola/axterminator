@@ -58,10 +58,7 @@ pub enum RecordedAction {
     /// Text typed into the focused element.
     Type { text: String },
     /// Single key-press with optional modifier keys.
-    KeyPress {
-        key: String,
-        modifiers: Vec<String>,
-    },
+    KeyPress { key: String, modifiers: Vec<String> },
     /// Scroll gesture.
     Scroll { dx: f64, dy: f64 },
     /// Explicit wait injected by the user or recorder heuristic.

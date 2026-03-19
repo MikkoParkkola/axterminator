@@ -259,7 +259,10 @@ fn build_selection_json(state: &CopilotState) -> Value {
         m.insert("selected_list_row".to_owned(), json!(row));
     }
     if !state.selection.selected_items.is_empty() {
-        m.insert("selected_items".to_owned(), json!(state.selection.selected_items));
+        m.insert(
+            "selected_items".to_owned(),
+            json!(state.selection.selected_items),
+        );
     }
     Value::Object(m)
 }
@@ -269,8 +272,16 @@ fn build_navigation_json(state: &CopilotState) -> Value {
     if !state.navigation.breadcrumb.is_empty() {
         m.insert("breadcrumb".to_owned(), json!(state.navigation.breadcrumb));
     }
-    insert_opt(&mut m, "sidebar_selection", &state.navigation.sidebar_selection);
-    insert_opt(&mut m, "tab_bar_selection", &state.navigation.tab_bar_selection);
+    insert_opt(
+        &mut m,
+        "sidebar_selection",
+        &state.navigation.sidebar_selection,
+    );
+    insert_opt(
+        &mut m,
+        "tab_bar_selection",
+        &state.navigation.tab_bar_selection,
+    );
     m.insert("depth".to_owned(), json!(state.navigation.depth));
     Value::Object(m)
 }
@@ -278,8 +289,16 @@ fn build_navigation_json(state: &CopilotState) -> Value {
 fn build_content_json(state: &CopilotState, opts: &FormatOptions) -> Value {
     let mut m = serde_json::Map::new();
     insert_opt(&mut m, "document_title", &state.content.document_title);
-    insert_opt(&mut m, "focused_element_role", &state.content.focused_element_role);
-    insert_opt(&mut m, "focused_element_title", &state.content.focused_element_title);
+    insert_opt(
+        &mut m,
+        "focused_element_role",
+        &state.content.focused_element_role,
+    );
+    insert_opt(
+        &mut m,
+        "focused_element_title",
+        &state.content.focused_element_title,
+    );
 
     // Honour character budget for potentially large excerpt.
     let field_budget = opts.char_budget / 4;
@@ -363,9 +382,7 @@ fn truncate_to_budget(mut s: String, budget: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::copilot_state::{
-        CopilotState, StateChange,
-    };
+    use crate::copilot_state::{CopilotState, StateChange};
 
     fn state_with_app(name: &str) -> CopilotState {
         let mut s = CopilotState::empty();

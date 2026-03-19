@@ -583,8 +583,16 @@ mod tests {
 
     #[test]
     fn fingerprint_is_stable_for_same_inputs() {
-        let fp1 = fingerprint("AXButton", "Save", &["AXWindow".to_string(), "AXToolbar".to_string()]);
-        let fp2 = fingerprint("AXButton", "Save", &["AXWindow".to_string(), "AXToolbar".to_string()]);
+        let fp1 = fingerprint(
+            "AXButton",
+            "Save",
+            &["AXWindow".to_string(), "AXToolbar".to_string()],
+        );
+        let fp2 = fingerprint(
+            "AXButton",
+            "Save",
+            &["AXWindow".to_string(), "AXToolbar".to_string()],
+        );
         assert_eq!(fp1, fp2);
     }
 
