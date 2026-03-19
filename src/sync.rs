@@ -202,13 +202,13 @@ impl EspressoMacClient {
 
             // Add selector
             let selector_key = std::ffi::CString::new("selector").unwrap();
-            let selector_value = std::ffi::CString::new(selector).unwrap();
+            let selector_value = std::ffi::CString::new(selector).unwrap_or_default();
             keys.push(selector_key.as_ptr());
             values.push(xpc_string_create(selector_value.as_ptr()));
 
             // Add arguments
             for (key, value) in args {
-                let key_cstr = std::ffi::CString::new(*key).unwrap();
+                let key_cstr = std::ffi::CString::new(*key).unwrap_or_default();
                 keys.push(key_cstr.as_ptr());
                 values.push(value.to_xpc_object());
             }
@@ -255,7 +255,7 @@ impl MessageValue {
                 MessageValue::Bool(b) => xpc_bool_create(*b),
                 MessageValue::Int(i) => xpc_int64_create(*i),
                 MessageValue::String(s) => {
-                    let cstr = std::ffi::CString::new(s.as_str()).unwrap();
+                    let cstr = std::ffi::CString::new(s.as_str()).unwrap_or_default();
                     xpc_string_create(cstr.as_ptr())
                 }
             }

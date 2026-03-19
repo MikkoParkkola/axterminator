@@ -86,7 +86,15 @@ impl Server {
             return None;
         }
 
-        let id = msg.id.clone().unwrap();
+        let id = match msg.id.clone() {
+            Some(id) => id,
+            None => {
+                return Some(JsonRpcResponse::err(
+                    RequestId::Number(0),
+                    RpcError::new(RpcError::INVALID_REQUEST, "Missing request id".to_string()),
+                ));
+            }
+        };
 
         match msg.method.as_str() {
             "initialize" => Some(self.handle_initialize(id, msg.params.as_ref())),

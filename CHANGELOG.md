@@ -5,6 +5,37 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-19
+
+### Added
+- **MCP server rewrite in Rust** — 13 files, 8163 LOC replacing Python server.py
+  - 12 core tools + 18 extended tools (30 total)
+  - 5 resources (apps, tree, screenshot, state, displays)
+  - 4 guided prompts (test-app, navigate-to, extract-data, accessibility-audit)
+  - 9 elicitation scenarios for destructive/ambiguous operations
+  - Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
+  - Bearer token auth + localhost-only for HTTP transport
+  - Structured MCP logging + progress notifications
+- **Audio capture** (`audio` feature) — CoreAudio microphone/system capture, SFSpeechRecognizer transcription, NSSpeechSynthesizer TTS
+- **Camera + gesture detection** (`camera` feature) — AVFoundation single-frame capture, Vision hand pose detection with 7 gesture types
+- **Virtual desktop management** (`spaces` feature) — CGSSpace private API: list/create/move/switch/destroy
+- **Multi-monitor support** — negative coordinates, Retina scaling
+- Homebrew formula
+- Wiki (7 pages)
+- SECURITY.md, CODE_OF_CONDUCT.md, issue/PR templates
+
+### Fixed
+- Gesture recognition: TIP vs MCP knuckle comparison, confidence filtering (#25)
+- Speech recognition: TCC permission request + 30s timeout (#26)
+- Camera permission request when status undetermined
+- PyO3 extension-module decoupled from CLI binary via `python-ext` feature flag
+- bytes 1.11.0 integer overflow (RUSTSEC-2026-0007)
+
+### Changed
+- README rewritten: MCP server first, no superlatives, honest claims only
+- Audio module split from 1567 LOC monolith to 5-file module (max 436 LOC)
+- Gateway config points to release binary
+
 ## [0.4.0] - 2026-03-19
 
 ### Added

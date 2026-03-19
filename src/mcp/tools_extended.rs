@@ -2328,7 +2328,7 @@ fn handle_ax_gesture_detect(args: &Value) -> ToolCallResult {
     let device_id = args["device_id"].as_str();
     match crate::camera::capture_and_detect(device_id) {
         Ok((frame, detections)) => {
-            let gestures: Vec<_> = detections.iter().map(|d| gesture_to_json(d)).collect();
+            let gestures: Vec<_> = detections.iter().map(gesture_to_json).collect();
             ToolCallResult::ok(
                 json!({ "gestures": gestures, "frame_base64": frame.base64_jpeg() }).to_string(),
             )

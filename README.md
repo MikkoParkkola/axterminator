@@ -16,7 +16,7 @@
 
 ---
 
-30 MCP tools. Background interaction via the macOS Accessibility API. 379us per element access. Audio capture, camera input, virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
+Up to 30 MCP tools (19 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture, camera input, virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
 ## Deploy
 
@@ -43,14 +43,14 @@ Add to MCP config (Claude Code, OpenCode, Cursor):
 }
 ```
 
-Done. Your agent has 30 tools to control any macOS app.
+Done. Your agent has 19 core tools (up to 30 with all feature flags) to control any macOS app.
 
 ## MCP Tools
 
 | Category | Tools | What the agent can do |
 |----------|-------|----------------------|
-| **GUI** | `ax_connect`, `ax_find`, `ax_click`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_scroll`, `ax_drag`, `ax_key_press` | Connect to apps, find elements, interact |
-| **Observe** | `ax_screenshot`, `ax_get_tree`, `ax_get_attributes`, `ax_list_windows`, `ax_list_apps`, `ax_wait_idle` | See UI state, element hierarchy, screenshots |
+| **GUI** | `ax_connect`, `ax_find`, `ax_click`, `ax_click_at`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_scroll`, `ax_drag`, `ax_key_press` | Connect to apps, find elements, interact |
+| **Observe** | `ax_is_accessible`, `ax_screenshot`, `ax_get_tree`, `ax_get_attributes`, `ax_list_windows`, `ax_list_apps`, `ax_wait_idle` | Check permissions, see UI state, screenshots |
 | **Verify** | `ax_assert`, `ax_find_visual` | Assert element state, AI vision fallback |
 | **Audio** | `ax_listen`, `ax_speak`, `ax_audio_devices` | Capture mic/system audio, text-to-speech |
 | **Camera** | `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen` | Camera frames, gesture recognition |
@@ -70,7 +70,7 @@ Agents can browse app state without tool calls:
 
 ### Security
 
-Destructive actions require confirmation via elicitation. HTTP transport requires bearer token auth. Read-only sandbox mode available. The AI has hands, not root.
+Destructive actions require confirmation via elicitation. HTTP transport requires bearer token auth. The AI has hands, not root.
 
 ## CLI
 
@@ -98,8 +98,8 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 | Click, press, read values, screenshots | Yes | Core operations work without focus |
 | Text input | Partial | Some apps need focused text field |
 | Drag, system dialogs | No | Require cursor control / always grab focus |
-| Gesture recognition | Built, calibrating | #25 |
-| Speech transcription | Built, permission fix needed | #26 |
+| Gesture recognition | Built | Camera permission + calibrated heuristics |
+| Speech transcription | Built | Requires Speech Recognition permission |
 
 ## Feature Flags
 
