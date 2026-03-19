@@ -1,7 +1,8 @@
 # AXTerminator MCP Server Design Document
 
 **Status**: Draft | **Version**: 3.0 | **Date**: 2026-03-19
-**Protocol**: MCP 2025-11-25 | **Runtime**: Pure Rust (unified `axterminator` binary)
+**Protocol**: MCP 2025-11-25 | **SDK**: `rmcp` 1.2.0 (official Rust MCP SDK)
+**Runtime**: Pure Rust (unified `axterminator` binary) | **Deprecates**: `server.py` (Python)
 **Author**: Mikko Parkkola
 
 ---
@@ -187,6 +188,403 @@ impl AppConnectionManager {
     fn connected_names(&self) -> Vec<String>;
 }
 ```
+
+---
+
+## 2A. Rust MCP SDK -- `rmcp`
+
+### 2A.1 SDK Selection
+
+After evaluating all available Rust MCP crates (as of 2026-03-19), `rmcp` is the
+clear choice.
+
+| Crate | Version | Downloads | Maintainer | Verdict |
+|-------|---------|-----------|------------|---------|
+| **`rmcp`** | **1.2.0** | **5.7M** | **Official (modelcontextprotocol org)** | **USE THIS** |
+| `rust-mcp-sdk` | 0.9.0 | 92K | Community (rust-mcp-stack) | Third-party, lower adoption |
+| `tower-mcp` | 0.9.1 | 5.8K | Community (joshrotenberg) | Tower-native, interesting but young |
+| `mcp-attr` | 0.0.7 | 6.3K | Community (frozenlib) | Declarative macros, too early |
+| `clap-mcp` | 0.0.3-rc.1 | 187 | Community (canardleteer) | CLI+MCP bridge, alpha quality |
+| `mcp-kit` | 0.4.0 | 118 | Community (KSD-CO) | Plugin system, too early |
+
+**`rmcp` advantages**:
+- Official Rust SDK from the MCP protocol team (`github.com/modelcontextprotocol/rust-sdk`)
+- 5.7M downloads, actively maintained (v1.2.0 released 2026-03-11)
+- Full protocol support: tools, resources, prompts, sampling, completions, logging, tasks
+- Procedural macros via `rmcp-macros` for ergonomic tool definitions (`#[tool]`, `#[prompt_router]`)
+- Tokio async runtime (matches our existing async architecture)
+- Built-in stdio and HTTP/SSE transports
+- OAuth support for HTTP transport
+- Used by production projects: Goose (Block), Apollo GraphQL, Terminator (mediar-ai)
+
+### 2A.2 `rmcp` Feature Flags
+
+```toml
+[dependencies]
+rmcp = { version = "1.2", features = [
+    "server",                # Server-side handler and transport
+    "transport-io",          # stdio transport (stdin/stdout)
+    "transport-sse-server",  # SSE + Streamable HTTP transport
+    "macros",                # #[tool], #[prompt_router], derive macros
+] }
+```
+
+### 2A.3 Server Implementation Pattern
+
+```rust
+use rmcp::{
+    ErrorData as McpError, RoleServer, ServerHandler, ServiceExt,
+    handler::server::router::tool::ToolRouter,
+    model::*,
+    service::RequestContext,
+    tool, tool_router,
+};
+
+#[derive(Clone)]
+pub struct AXTerminatorServer {
+    tool_router: ToolRouter<Self>,
+    state: Arc<ServerState>,
+}
+
+#[tool_router]
+impl AXTerminatorServer {
+    fn new(state: Arc<ServerState>) -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+            state,
+        }
+    }
+
+    #[tool(
+        name = "ax_find",
+        description = "Find UI elements by title, role, description, or combined query.",
+        annotations(
+            title = "Find UI element",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false,
+        )
+    )]
+    async fn find(
+        &self,
+        #[tool(param, description = "Application name, bundle ID, or PID")]
+        app: String,
+        #[tool(param, description = "Element query (title, role, or description)")]
+        query: String,
+    ) -> Result<CallToolResult, McpError> {
+        let conn = self.state.app_manager.get(&app)?;
+        let element = crate::core::find_element(&conn.app, &query)?;
+        Ok(CallToolResult::text(format!("{:?}", element)))
+    }
+
+    // ... remaining tools follow the same pattern
+}
+
+impl ServerHandler for AXTerminatorServer {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            name: "axterminator".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            instructions: Some(SERVER_INSTRUCTIONS.into()),
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .enable_resources_subscribe()
+                .enable_prompts()
+                .enable_logging()
+                .enable_completions()
+                .build(),
+            ..Default::default()
+        }
+    }
+    // ... resource, prompt, completion handlers
+}
+```
+
+### 2A.4 Transport Startup
+
+```rust
+pub async fn serve_stdio(server: AXTerminatorServer) -> anyhow::Result<()> {
+    let transport = (tokio::io::stdin(), tokio::io::stdout());
+    let service = server.serve(transport).await?;
+    service.waiting().await?;
+    Ok(())
+}
+
+pub async fn serve_http(server: AXTerminatorServer, port: u16) -> anyhow::Result<()> {
+    // rmcp's transport-sse-server provides Streamable HTTP
+    // Bind 127.0.0.1 by default, require auth for non-localhost
+    let addr = format!("127.0.0.1:{}", port);
+    // ... HTTP transport setup
+    Ok(())
+}
+```
+
+### 2A.5 Why Not the Alternatives
+
+- **`rust-mcp-sdk`** (92K downloads): Good quality but third-party. Choosing the
+  official SDK ensures protocol compatibility as MCP evolves.
+- **`tower-mcp`** (5.8K): Interesting tower middleware approach but too young for
+  production use. Only 26 releases, no major adopters.
+- **`clap-mcp`** (187 downloads): Attempts to bridge clap and MCP automatically.
+  Too early, alpha quality. We build our own bridge trivially since CLI and MCP
+  both call the same core functions.
+- **Raw JSON-RPC**: Implementing the protocol from scratch with `serde` + `tokio`
+  would work but is unnecessary complexity. `rmcp` handles lifecycle, capability
+  negotiation, progress, cancellation, and all edge cases.
+
+---
+
+## 2B. CLI Design -- `clap` v4
+
+### 2B.1 Subcommand Structure
+
+```
+axterminator mcp serve [--stdio|--http <port>]        # MCP server
+axterminator find <query> [--app <name>]               # Find element
+axterminator click <query> [--app <name>]              # Click element
+axterminator type <text> [--app <name>] [--element <query>]  # Type text
+axterminator screenshot [--app <name>] [--output <path>]     # Screenshot
+axterminator tree [--app <name>] [--depth <n>]         # Element hierarchy
+axterminator apps                                       # List accessible apps
+axterminator check                                      # Verify accessibility permissions
+axterminator record [--app <name>] [--output <path>]   # Record interactions
+axterminator completions <shell>                        # Shell completions
+```
+
+### 2B.2 CLI Derive Structs
+
+```rust
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(name = "axterminator", version, about = "macOS GUI automation for humans and AI")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+
+    /// Output format: text, json, or quiet
+    #[arg(long, global = true, default_value = "text")]
+    format: OutputFormat,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the MCP server
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+    /// Find a UI element
+    Find {
+        query: String,
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Click a UI element
+    Click {
+        query: String,
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Type text into a UI element
+    Type {
+        text: String,
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        element: Option<String>,
+    },
+    /// Capture a screenshot
+    Screenshot {
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Show the accessibility element tree
+    Tree {
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long, default_value = "5")]
+        depth: u32,
+    },
+    /// List all accessible applications
+    Apps,
+    /// Verify accessibility permissions are granted
+    Check,
+    /// Record UI interactions for replay
+    Record {
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Generate shell completions
+    Completions {
+        shell: clap_complete::Shell,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpAction {
+    /// Start the MCP server
+    Serve {
+        #[arg(long, group = "transport")]
+        stdio: bool,
+        #[arg(long, group = "transport")]
+        http: Option<u16>,
+    },
+}
+```
+
+### 2B.3 Output Formats
+
+Every subcommand supports `--format`:
+- `text` (default): Human-readable for terminal
+- `json`: Machine-readable for scripting and piping
+- `quiet`: Exit code only (for CI/CD assertions)
+
+### 2B.4 CLI Examples
+
+```bash
+# Check permissions
+axterminator check
+
+# List running apps
+axterminator apps
+axterminator apps --format json | jq '.[] | select(.accessible)'
+
+# Find an element
+axterminator find "Submit" --app Safari
+axterminator find "URL bar" --app Safari --format json
+
+# Click a button
+axterminator click "Submit" --app Safari
+
+# Type into a field
+axterminator type "hello world" --app TextEdit
+axterminator type "search query" --app Safari --element "URL bar"
+
+# Screenshot
+axterminator screenshot --app Safari --output safari.png
+
+# Element tree
+axterminator tree --app Finder --depth 3
+axterminator tree --app Safari --format json | jq '.children[0]'
+
+# Start MCP server (for AI agents)
+axterminator mcp serve --stdio
+axterminator mcp serve --http 8741
+
+# Shell completions
+axterminator completions zsh > ~/.zfunc/_axterminator
+```
+
+---
+
+## 2C. Distribution
+
+### 2C.1 Single Binary
+
+The `axterminator` binary includes both CLI and MCP server. No separate install,
+no Python runtime required for CLI or MCP use.
+
+### 2C.2 Distribution Channels
+
+| Channel | Command | What You Get |
+|---------|---------|-------------|
+| **Homebrew** | `brew install axterminator` | Single binary (CLI + MCP server) |
+| **Cargo** | `cargo install axterminator` | Single binary (CLI + MCP server) |
+| **PyPI** | `pip install axterminator` | Python bindings + bundled binary |
+
+### 2C.3 MCP Client Configuration
+
+After installation, configure your MCP client to use the binary directly:
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "axterminator",
+      "args": ["mcp", "serve", "--stdio"],
+      "env": {
+        "AXTERMINATOR_LOG_LEVEL": "info",
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}
+```
+
+No `uv run`, no `python`, no virtual environments. Just the binary.
+
+### 2C.4 Homebrew Tap
+
+```ruby
+class Axterminator < Formula
+  desc "macOS GUI automation for humans and AI"
+  homepage "https://github.com/MikkoParkkola/axterminator"
+  url "https://github.com/MikkoParkkola/axterminator/releases/download/v0.5.0/axterminator-0.5.0-aarch64-apple-darwin.tar.gz"
+  sha256 "..."
+  license "MIT OR Apache-2.0"
+
+  def install
+    bin.install "axterminator"
+  end
+
+  test do
+    system "#{bin}/axterminator", "check"
+  end
+end
+```
+
+---
+
+## 2D. `server.py` Deprecation Plan
+
+The existing `server.py` (772 lines, Python, using `mcp` SDK v1.26.0) will be
+deprecated and removed once the Rust MCP server reaches feature parity.
+
+### 2D.1 Migration Phases
+
+| Phase | Action | server.py Status |
+|-------|--------|-----------------|
+| Phase 0 | Build CLI with clap (foundation) | Active (still primary) |
+| Phase 1 | Port MCP tools to Rust via `rmcp` | Deprecated (prints warning) |
+| Phase 2 | Add resources, prompts, completions | Deprecated |
+| Phase 3 | Add elicitation, HTTP transport | Deprecated |
+| Phase 4 | Remove server.py | Removed |
+
+### 2D.2 Phase 0: CLI Foundation
+
+Build the unified binary with all CLI subcommands calling the existing Rust core.
+Add `axterminator mcp serve` as a stub.
+
+### 2D.3 Phase 1: Rust MCP Server
+
+1. Add `rmcp` dependency with `server`, `transport-io`, `macros` features
+2. Implement `AXTerminatorServer` with `#[tool_router]`
+3. Port all tools from `server.py` to Rust `#[tool]` macros
+4. Wire `axterminator mcp serve --stdio` to the Rust MCP server
+5. Add deprecation warning to `server.py` (prints to stderr on startup)
+
+### 2D.4 Phase 4: Removal
+
+1. Remove `server.py` from the repository
+2. Remove Python MCP SDK dependency from `pyproject.toml`
+3. Update `run-mcp.sh` to use the binary
+4. Update all documentation and MCP client configs (no more `uv run`)
+5. Publish to crates.io and Homebrew tap
+
+### 2D.5 Why Deprecate (Not Maintain Both)
+
+Maintaining two MCP servers (Python and Rust) doubles the testing surface, creates
+version skew risk, and confuses users about which to use. The Python API via PyO3
+remains the correct path for Python users; the MCP server should be a single Rust
+binary.
 
 ---
 
@@ -2475,12 +2873,30 @@ Every error includes a suggestion for the agent:
 
 ## 20. Implementation Plan
 
+See also: **Section 2D** for the `server.py` deprecation timeline.
+
+### Phase 0: CLI Foundation (Week 0)
+
+**Goal**: Unified binary with clap subcommands, calling existing Rust core.
+
+1. Add `clap` v4 + `clap_complete` dependencies
+2. Implement `main.rs` with `Commands` enum and dispatch
+3. Implement `axterminator check`, `axterminator apps` (simplest subcommands)
+4. Implement `axterminator find`, `axterminator click`, `axterminator type`
+5. Implement `axterminator screenshot`, `axterminator tree`
+6. Implement `axterminator record` (interaction recorder)
+7. Implement `axterminator completions` (shell completions)
+8. Add output formatting layer (text, json, quiet)
+9. Add `axterminator mcp serve` subcommand (stub)
+
+**Deliverables**: Working CLI binary with all subcommands. MCP server is a stub.
+
 ### Phase 1: Core Tools + Logging + Rust MCP (Week 1-2)
 
-**Goal**: Pure Rust MCP server with stdio transport, all core tools, structured logging.
+**Goal**: Pure Rust MCP server via `rmcp` with stdio transport, all core tools, structured logging.
 
-1. Implement JSON-RPC 2.0 message parsing and dispatch in Rust
-2. Implement MCP lifecycle: initialize, capability negotiation, initialized
+1. Add `rmcp = { version = "1.2", features = ["server", "transport-io", "macros"] }` dependency
+2. Implement `AXTerminatorServer` with `#[tool_router]` (see Section 2A.3)
 3. Implement `tools/list` and `tools/call` with all 19 core tools (connect, find, action, observe)
 4. Add `ToolAnnotations` to all tools
 5. Add `outputSchema` to tools with structured returns
@@ -2491,7 +2907,10 @@ Every error includes a suggestion for the agent:
 10. Add `ServerCapabilities` with tools and logging
 11. Wire up `axterminator mcp serve` CLI subcommand (clap)
 
-**Deliverables**: Working MCP server on stdio with 19 tools, logging, progress.
+12. Add deprecation warning to `server.py` (prints to stderr on startup)
+
+**Deliverables**: Working `rmcp`-based MCP server on stdio with 19 tools, logging,
+progress. `server.py` deprecated but still functional.
 
 ### Phase 2: Resources + Prompts + Subscriptions (Week 3)
 
@@ -2559,7 +2978,14 @@ Every error includes a suggestion for the agent:
 10. Performance benchmarks (MCP overhead, subscription latency)
 11. Update documentation, examples, MCP client configs
 
+12. Remove `server.py` from the repository
+13. Remove Python MCP SDK dependency from `pyproject.toml`
+14. Update `run-mcp.sh` to use the binary instead of Python
+15. Set up Homebrew tap with GitHub Actions release automation
+16. Publish to crates.io
+
 **Deliverables**: Full security model, audit, rate limiting, OAuth, Python API, tests.
+`server.py` removed. Homebrew tap and crates.io published.
 
 ---
 
@@ -2726,9 +3152,27 @@ Complete mapping of every MCP 2025-11-25 capability to our implementation decisi
 | **Session management** | YES | 4 | MCP-Session-Id for HTTP transport |
 | **Resumability** | YES | 4 | SSE event IDs, Last-Event-ID reconnection |
 
-## Appendix B: Wire Protocol Examples
+## Appendix B: Rust MCP SDK Landscape (as of 2026-03-19)
 
-### B.1 Tool Call with Annotations, Logging, and Progress
+Research summary of all Rust MCP crates evaluated. See Section 2A for the selection rationale.
+
+| Crate | Version | Downloads | Repository | Notes |
+|-------|---------|-----------|------------|-------|
+| `rmcp` | 1.2.0 | 5.7M | github.com/modelcontextprotocol/rust-sdk | **Official SDK**. Full protocol, macros, tokio, stdio+HTTP. Used by Goose, Apollo, Terminator. |
+| `rmcp-macros` | (bundled) | -- | (same repo) | Procedural macros for `#[tool]`, `#[prompt_router]` etc. |
+| `rust-mcp-sdk` | 0.9.0 | 92K | github.com/rust-mcp-stack/rust-mcp-sdk | Third-party, async SDK. Good but not official, lower adoption. |
+| `tower-mcp` | 0.9.1 | 5.8K | github.com/joshrotenberg/tower-mcp | Tower-native, interesting middleware approach. Young. |
+| `mcp-attr` | 0.0.7 | 6.3K | github.com/frozenlib/mcp-attr | Declarative attribute macros. Too early. |
+| `clap-mcp` | 0.0.3-rc.1 | 187 | github.com/canardleteer/clap-mcp | CLI+MCP bridge. Alpha, too few downloads. |
+| `mcp-kit` | 0.4.0 | 118 | github.com/KSD-CO/mcp-kit | Plugin system. Too early. |
+| `mcp-gateway` | 2.7.3 | 105 | github.com/MikkoParkkola/mcp-gateway | Meta-MCP multiplexer (our own). |
+
+**Decision**: `rmcp` 1.2.0 is the only viable choice. Official, 5.7M downloads,
+full protocol, used by our Windows counterpart (mediar-ai/terminator).
+
+## Appendix C: Wire Protocol Examples
+
+### C.1Tool Call with Annotations, Logging, and Progress
 
 ```
 --> {"jsonrpc":"2.0","id":1,"method":"tools/list"}
@@ -2772,7 +3216,7 @@ Complete mapping of every MCP 2025-11-25 capability to our implementation decisi
                           "element_ref":"el-a1b2c3"}}}
 ```
 
-### B.2 Resource Subscription with Reactive Update
+### C.2Resource Subscription with Reactive Update
 
 ```
 --> {"jsonrpc":"2.0","id":3,"method":"resources/subscribe",
@@ -2793,7 +3237,7 @@ Complete mapping of every MCP 2025-11-25 capability to our implementation decisi
      }]}}
 ```
 
-### B.3 Elicitation for Destructive Action
+### C.3Elicitation for Destructive Action
 
 ```
 --> {"jsonrpc":"2.0","id":5,"method":"tools/call",
@@ -2823,7 +3267,7 @@ Complete mapping of every MCP 2025-11-25 capability to our implementation decisi
      "content":[{"type":"text","text":"Clicked 'Delete All Data' in Settings"}]}}
 ```
 
-### B.4 Task-Augmented Workflow Execution
+### C.4Task-Augmented Workflow Execution
 
 ```
 --> {"jsonrpc":"2.0","id":6,"method":"tools/call",
