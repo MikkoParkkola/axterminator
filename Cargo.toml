@@ -16,9 +16,25 @@ categories = ["development-tools::testing", "gui", "os::macos-apis"]
 name = "axterminator"
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "axterminator"
+path = "src/bin/axterminator.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+cli = ["dep:clap", "dep:clap_complete"]
+
 [dependencies]
 # Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+
+# CLI (feature-gated so it's only compiled for the binary target)
+clap = { version = "4.5", features = ["derive", "wrap_help", "env"], optional = true }
+clap_complete = { version = "4.5", optional = true }
+
+# Base64 encoding for screenshot data
+base64 = "0.22"
 
 # macOS accessibility
 core-foundation = "0.10"
