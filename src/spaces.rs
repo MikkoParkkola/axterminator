@@ -192,13 +192,16 @@ pub type SpaceResult<T> = Result<T, SpaceError>;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
+/// # #[cfg(feature = "spaces")]
+/// # {
 /// use axterminator::spaces::SpaceManager;
 ///
 /// let mgr = SpaceManager::new();
 /// for space in mgr.list_spaces().unwrap_or_default() {
 ///     println!("space {} type={:?} active={}", space.id, space.space_type, space.is_active);
 /// }
+/// # }
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Space {

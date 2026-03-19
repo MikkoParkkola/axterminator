@@ -53,7 +53,7 @@ camera = []
 [dependencies]
 # Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
 # extension-module is gated via the python-ext feature — see build.rs and [features]
-pyo3 = { version = "0.22", features = ["abi3-py39"] }
+pyo3 = { version = "0.24.2", features = ["abi3-py39"] }
 
 # CLI (feature-gated so it's only compiled for the binary target)
 clap = { version = "4.5", features = ["derive", "wrap_help", "env"], optional = true }
@@ -90,7 +90,7 @@ thiserror = "2.0"
 anyhow = "1.0"
 
 # Caching
-lru = "0.12"
+lru = "0.16"
 
 # Logging
 tracing = "0.1"
@@ -117,7 +117,7 @@ criterion = "0.5"
 tempfile = "3.15"
 
 [build-dependencies]
-pyo3-build-config = "0.22"
+pyo3-build-config = "0.24.2"
 # cc is used by build.rs to compile camera_objc.m when the `camera` feature is enabled.
 cc = "1.2"
 

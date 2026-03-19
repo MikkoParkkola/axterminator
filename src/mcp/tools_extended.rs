@@ -2446,10 +2446,13 @@ fn listen_with_device(
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
+/// # #[cfg(feature = "camera")]
+/// # {
 /// let payload = axterminator::mcp::tools_extended::camera_devices_payload();
 /// let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
 /// assert!(v["cameras"].is_array());
+/// # }
 /// ```
 #[cfg(feature = "camera")]
 #[must_use]

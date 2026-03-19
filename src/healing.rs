@@ -613,11 +613,11 @@ fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement
     // Call Python VLM detector
     let result = Python::with_gil(|py| -> Option<(f64, f64)> {
         // Import the VLM module
-        let vlm_module = py.import_bound("axterminator.vlm").ok()?;
+        let vlm_module = py.import("axterminator.vlm").ok()?;
         let detect_fn = vlm_module.getattr("detect_element_visual").ok()?;
 
         // Create PyBytes from screenshot data
-        let py_bytes = pyo3::types::PyBytes::new_bound(py, &screenshot_data);
+        let py_bytes = pyo3::types::PyBytes::new(py, &screenshot_data);
 
         // Call: detect_element_visual(image_data, description, width, height)
         let result = detect_fn
