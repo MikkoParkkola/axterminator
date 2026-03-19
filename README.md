@@ -38,37 +38,62 @@ calculator.find("=").click()
 
 ## Quick Start
 
-### 1. Install
+### MCP Server (for AI agents)
+
+```bash
+# Build from source
+git clone https://github.com/MikkoParkkola/axterminator
+cd axterminator
+cargo build --release --features cli
+
+# Start the MCP server
+./target/release/axterminator mcp serve
+```
+
+Add to your AI agent's MCP config (Claude Code, OpenCode, Cursor):
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "/path/to/axterminator",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Your agent now has 30 tools to control any macOS app.
+
+### CLI (for developers)
+
+```bash
+axterminator apps                        # List accessible apps
+axterminator find "Save" --app Safari    # Find element
+axterminator click "Save" --app Safari   # Click it
+axterminator screenshot --app Safari     # Capture screenshot
+axterminator tree --app Finder           # Element hierarchy
+```
+
+### Python API (for test engineers)
 
 ```bash
 pip install axterminator
 ```
 
-### 2. Grant accessibility permissions
-
-Open **System Settings > Privacy & Security > Accessibility** and add your terminal app (Terminal, iTerm2, VS Code, etc.).
-
-### 3. Run your first test
-
 ```python
 import axterminator as ax
 
-# Check permissions
-if not ax.is_accessibility_enabled():
-    print("Enable in System Settings > Privacy & Security > Accessibility")
-    exit(1)
-
-# Connect to any running app
 app = ax.app(name="Calculator")
-
-# Interact -- background mode by default
 app.find("7").click()
 app.find("+").click()
 app.find("3").click()
 app.find("=").click()
 ```
 
-That's it. Three lines to connect and interact.
+### Grant Accessibility Permissions
+
+Open **System Settings > Privacy & Security > Accessibility** and add your terminal app. This is required for all three interfaces.
 
 ## Why AXTerminator?
 
@@ -267,43 +292,50 @@ Record browser interactions and generate axterminator code:
 3. Interact with web pages
 4. Copy generated Python code
 
-## Installation Options
+## Installation
 
-```bash
-# Basic
-pip install axterminator
-
-# With VLM backends
-pip install axterminator[vlm]           # Local MLX
-pip install axterminator[vlm-anthropic] # Claude Vision
-pip install axterminator[vlm-openai]    # OpenAI Vision
-pip install axterminator[vlm-gemini]    # Gemini Vision
-pip install axterminator[vlm-ollama]    # Ollama
-pip install axterminator[vlm-all]       # All backends
-```
-
-## Requirements
-
-- **macOS 12+** (Monterey or later)
-- **Python 3.9+**
-- **Accessibility permissions** granted to terminal/IDE
-
-## Building from Source
+### Rust binary (MCP server + CLI)
 
 ```bash
 git clone https://github.com/MikkoParkkola/axterminator
 cd axterminator
+cargo build --release --features cli
 
-# Install Rust (if not already installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# With optional features
+cargo build --release --features "cli,audio,camera,spaces"
+```
 
-# Build
-pip install maturin
-maturin develop
+### Python package (test scripts + pytest plugin)
 
-# Run tests
-cargo test
-pytest python/tests/
+```bash
+pip install axterminator
+
+# With VLM backends
+pip install axterminator[vlm-all]       # All vision backends
+```
+
+### Feature Flags
+
+| Flag | What | Requires |
+|------|------|----------|
+| `cli` | CLI binary + MCP server (default) | |
+| `audio` | Microphone/system audio, speech-to-text | Microphone permission |
+| `camera` | Camera capture, gesture detection | Camera permission |
+| `spaces` | Virtual desktop management | Uses private CGSSpace API |
+| `http-transport` | HTTP MCP transport with auth | axum |
+
+## Requirements
+
+- **macOS 12+** (Monterey or later)
+- **Rust** (for building the binary) or **Python 3.9+** (for pip install)
+- **Accessibility permissions** granted to terminal/IDE
+
+## Running Tests
+
+```bash
+cargo test                    # Rust tests
+cargo clippy --all-targets    # Lint
+pytest python/tests/          # Python tests (requires pip install)
 ```
 
 ## Community
