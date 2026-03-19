@@ -1,0 +1,571 @@
+//! `axterminator` CLI — unified entry point for MCP server and direct commands.
+//!
+//! # Usage
+//!
+//! ```text
+//! axterminator mcp serve [--stdio|--http <port>]
+//! axterminator find <query> [--app <name>] [--bundle-id <id>] [--timeout <ms>]
+//! axterminator click <query> [--app <name>] [--mode background|focus]
+//! axterminator type <text>  [--app <name>] [--element <query>]
+//! axterminator screenshot   [--app <name>] [--output <path>]
+//! axterminator tree         [--app <name>] [--depth <n>]
+//! axterminator apps
+//! axterminator check
+//! axterminator completions <shell>
+//! ```
+
+#![allow(clippy::pedantic)]
+
+use std::path::PathBuf;
+
+use anyhow::{Context, Result};
+use clap::{CommandFactory, Parser, Subcommand};
+
+// ---------------------------------------------------------------------------
+// CLI definition
+// ---------------------------------------------------------------------------
+
+/// AXTerminator — background-first macOS GUI automation.
+///
+/// Use `axterminator mcp serve` to start the MCP server.
+/// Use the subcommands directly for one-shot shell scripting.
+#[derive(Parser, Debug)]
+#[command(
+    author,
+    version,
+    about = "Background-first macOS GUI automation with MCP server support",
+    long_about = None,
+    propagate_version = true
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Start the MCP server.
+    Mcp {
+        #[command(subcommand)]
+        subcommand: McpSubcommand,
+    },
+
+    /// Find a UI element and print its attributes.
+    Find {
+        /// Element query (text, role:AXButton, //AXButton[@AXTitle='Save'])
+        query: String,
+
+        /// Target app name
+        #[arg(long, short)]
+        app: Option<String>,
+
+        /// Target app by bundle ID (e.g. com.apple.Safari)
+        #[arg(long)]
+        bundle_id: Option<String>,
+
+        /// Timeout in milliseconds
+        #[arg(long, default_value = "5000")]
+        timeout: u64,
+    },
+
+    /// Click a UI element.
+    Click {
+        /// Element query
+        query: String,
+
+        /// Target app name
+        #[arg(long, short)]
+        app: Option<String>,
+
+        /// Target app by bundle ID
+        #[arg(long)]
+        bundle_id: Option<String>,
+
+        /// Action mode: background (default, no focus) or focus
+        #[arg(long, default_value = "background", value_parser = ["background", "focus"])]
+        mode: String,
+    },
+
+    /// Type text into a UI element.
+    #[command(name = "type")]
+    TypeText {
+        /// Text to type
+        text: String,
+
+        /// Target app name
+        #[arg(long, short)]
+        app: Option<String>,
+
+        /// Target app by bundle ID
+        #[arg(long)]
+        bundle_id: Option<String>,
+
+        /// Element to type into (defaults to focused element)
+        #[arg(long, short)]
+        element: Option<String>,
+    },
+
+    /// Take a screenshot of an app or element.
+    Screenshot {
+        /// Target app name
+        #[arg(long, short)]
+        app: Option<String>,
+
+        /// Target app by bundle ID
+        #[arg(long)]
+        bundle_id: Option<String>,
+
+        /// Save PNG to this path (default: print base64 to stdout)
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+    },
+
+    /// Dump the accessibility element tree.
+    Tree {
+        /// Target app name
+        #[arg(long, short)]
+        app: Option<String>,
+
+        /// Target app by bundle ID
+        #[arg(long)]
+        bundle_id: Option<String>,
+
+        /// Maximum tree depth
+        #[arg(long, short, default_value = "5")]
+        depth: usize,
+    },
+
+    /// List running applications with accessibility info.
+    Apps,
+
+    /// Check accessibility permissions and system status.
+    Check,
+
+    /// Generate shell completion scripts.
+    Completions {
+        /// Target shell
+        #[arg(value_parser = ["bash", "zsh", "fish", "elvish", "powershell"])]
+        shell: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum McpSubcommand {
+    /// Start the MCP server (stdio transport, default).
+    Serve {
+        /// Use stdio transport (default)
+        #[arg(long, default_value_t = true, conflicts_with = "http")]
+        stdio: bool,
+
+        /// Use HTTP transport on the given port
+        #[arg(long, conflicts_with = "stdio")]
+        http: Option<u16>,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+fn main() -> Result<()> {
+    // Initialise tracing to stderr so stdout stays clean for MCP JSON-RPC.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
+
+    let cli = Cli::parse();
+    dispatch(cli.command)
+}
+
+fn dispatch(cmd: Commands) -> Result<()> {
+    match cmd {
+        Commands::Mcp { subcommand } => dispatch_mcp(subcommand),
+        Commands::Find { query, app, bundle_id, timeout } => {
+            cmd_find(&query, app.as_deref(), bundle_id.as_deref(), timeout)
+        }
+        Commands::Click { query, app, bundle_id, mode } => {
+            cmd_click(&query, app.as_deref(), bundle_id.as_deref(), &mode)
+        }
+        Commands::TypeText { text, app, bundle_id, element } => {
+            cmd_type(&text, app.as_deref(), bundle_id.as_deref(), element.as_deref())
+        }
+        Commands::Screenshot { app, bundle_id, output } => {
+            cmd_screenshot(app.as_deref(), bundle_id.as_deref(), output.as_deref())
+        }
+        Commands::Tree { app, bundle_id, depth } => {
+            cmd_tree(app.as_deref(), bundle_id.as_deref(), depth)
+        }
+        Commands::Apps => cmd_apps(),
+        Commands::Check => cmd_check(),
+        Commands::Completions { shell } => cmd_completions(&shell),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MCP dispatch
+// ---------------------------------------------------------------------------
+
+fn dispatch_mcp(sub: McpSubcommand) -> Result<()> {
+    match sub {
+        McpSubcommand::Serve { http: Some(port), .. } => {
+            eprintln!("HTTP transport on port {port} is not yet implemented. Use --stdio.");
+            std::process::exit(1);
+        }
+        McpSubcommand::Serve { .. } => {
+            axterminator::mcp::server::run_stdio()
+                .context("MCP stdio server failed")
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Direct CLI commands
+// ---------------------------------------------------------------------------
+
+/// Connect to an app by optional name or bundle ID.
+///
+/// Exits with a clear error if neither is provided.
+fn connect_app(
+    name: Option<&str>,
+    bundle_id: Option<&str>,
+) -> Result<axterminator::AXApp> {
+    if name.is_none() && bundle_id.is_none() {
+        anyhow::bail!("Provide --app or --bundle-id to identify the target application");
+    }
+    axterminator::AXApp::connect_native(name, bundle_id, None)
+        .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+fn cmd_find(
+    query: &str,
+    app: Option<&str>,
+    bundle_id: Option<&str>,
+    timeout_ms: u64,
+) -> Result<()> {
+    let ax_app = connect_app(app, bundle_id)?;
+    match ax_app.find_native(query, Some(timeout_ms)) {
+        Ok(el) => {
+            println!("Found:");
+            println!("  role:    {}", el.role().as_deref().unwrap_or("(none)"));
+            println!("  title:   {}", el.title().as_deref().unwrap_or("(none)"));
+            println!("  value:   {}", el.value().as_deref().unwrap_or("(none)"));
+            println!("  enabled: {}", el.enabled());
+            if let Some((x, y, w, h)) = el.bounds() {
+                println!("  bounds:  ({x:.0}, {y:.0}, {w:.0}x{h:.0})");
+            }
+            Ok(())
+        }
+        Err(e) => anyhow::bail!("Element not found: {e}"),
+    }
+}
+
+fn cmd_click(
+    query: &str,
+    app: Option<&str>,
+    bundle_id: Option<&str>,
+    mode: &str,
+) -> Result<()> {
+    let ax_app = connect_app(app, bundle_id)?;
+    let el = ax_app
+        .find_native(query, Some(5000))
+        .map_err(|e| anyhow::anyhow!("Element not found: {e}"))?;
+    let action_mode = if mode == "focus" {
+        axterminator::ActionMode::Focus
+    } else {
+        axterminator::ActionMode::Background
+    };
+    el.click_native(action_mode)
+        .map_err(|e| anyhow::anyhow!("Click failed: {e}"))?;
+    println!("Clicked '{query}' ({mode} mode)");
+    Ok(())
+}
+
+fn cmd_type(
+    text: &str,
+    app: Option<&str>,
+    bundle_id: Option<&str>,
+    element: Option<&str>,
+) -> Result<()> {
+    let ax_app = connect_app(app, bundle_id)?;
+    let target_query = element.unwrap_or("role:AXTextField");
+    let el = ax_app
+        .find_native(target_query, Some(5000))
+        .map_err(|e| anyhow::anyhow!("Element not found: {e}"))?;
+    el.type_text_native(text, axterminator::ActionMode::Focus)
+        .map_err(|e| anyhow::anyhow!("Type failed: {e}"))?;
+    println!("Typed {} chars into '{target_query}'", text.chars().count());
+    Ok(())
+}
+
+fn cmd_screenshot(
+    app: Option<&str>,
+    bundle_id: Option<&str>,
+    output: Option<&std::path::Path>,
+) -> Result<()> {
+    let ax_app = connect_app(app, bundle_id)?;
+    let bytes = ax_app
+        .screenshot_native()
+        .map_err(|e| anyhow::anyhow!("Screenshot failed: {e}"))?;
+
+    if let Some(path) = output {
+        std::fs::write(path, &bytes)
+            .with_context(|| format!("Failed to write screenshot to {}", path.display()))?;
+        println!("Screenshot saved to {} ({} bytes)", path.display(), bytes.len());
+    } else {
+        use base64::Engine as _;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        println!("{b64}");
+    }
+    Ok(())
+}
+
+fn cmd_tree(app: Option<&str>, bundle_id: Option<&str>, depth: usize) -> Result<()> {
+    let ax_app = connect_app(app, bundle_id)?;
+    let windows = ax_app
+        .windows_native()
+        .map_err(|e| anyhow::anyhow!("Failed to get windows: {e}"))?;
+
+    if windows.is_empty() {
+        println!("(no windows)");
+        return Ok(());
+    }
+
+    for (i, win) in windows.iter().enumerate() {
+        let title = win.title().unwrap_or_else(|| format!("Window {i}"));
+        println!("Window[{i}]: {title}");
+        print_element_tree(win, 1, depth);
+    }
+    Ok(())
+}
+
+fn print_element_tree(el: &axterminator::AXElement, indent: usize, max_depth: usize) {
+    if indent > max_depth {
+        return;
+    }
+    let prefix = "  ".repeat(indent);
+    let role = el.role().unwrap_or_else(|| "?".into());
+    let label = el
+        .title()
+        .or_else(|| el.label())
+        .or_else(|| el.value())
+        .unwrap_or_default();
+    let suffix = if label.is_empty() {
+        String::new()
+    } else {
+        format!(" \"{label}\"")
+    };
+    println!("{prefix}{role}{suffix}");
+}
+
+fn cmd_apps() -> Result<()> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+
+    let mut sys = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()),
+    );
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let ax_enabled = axterminator::check_accessibility_enabled();
+    println!("Accessibility: {}", if ax_enabled { "enabled" } else { "DISABLED" });
+    println!();
+
+    let mut procs: Vec<_> = sys.processes().values().collect();
+    procs.sort_by_key(|p| p.name().to_string_lossy().to_lowercase());
+
+    println!("{:<8} Name", "PID");
+    println!("{:-<40}", "");
+    for p in &procs {
+        println!("{:<8} {}", p.pid(), p.name().to_string_lossy());
+    }
+    Ok(())
+}
+
+fn cmd_check() -> Result<()> {
+    let enabled = axterminator::check_accessibility_enabled();
+    if enabled {
+        println!("Accessibility: OK");
+        println!("Version:       {}", env!("CARGO_PKG_VERSION"));
+    } else {
+        eprintln!("Accessibility: DISABLED");
+        eprintln!();
+        eprintln!("To enable:");
+        eprintln!("  1. Open System Settings > Privacy & Security > Accessibility");
+        eprintln!("  2. Add and enable the terminal app (Terminal, iTerm2, etc.)");
+        eprintln!("  3. Restart the terminal");
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn cmd_completions(shell: &str) -> Result<()> {
+    use clap_complete::Shell;
+
+    let mut cmd = Cli::command();
+    let shell: Shell = shell.parse().map_err(|_| anyhow::anyhow!("Unknown shell: {shell}"))?;
+    clap_complete::generate(shell, &mut cmd, "axterminator", &mut std::io::stdout());
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests — CLI parsing only (no macOS API needed)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("axterminator").chain(args.iter().copied()))
+    }
+
+    #[test]
+    fn parses_mcp_serve_stdio() {
+        let cli = parse(&["mcp", "serve"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Mcp { subcommand: McpSubcommand::Serve { http: None, .. } }
+        ));
+    }
+
+    #[test]
+    fn parses_mcp_serve_http_port() {
+        let cli = parse(&["mcp", "serve", "--http", "9000"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Mcp { subcommand: McpSubcommand::Serve { http: Some(9000), .. } }
+        ));
+    }
+
+    #[test]
+    fn parses_find_with_app() {
+        let cli = parse(&["find", "Save", "--app", "Safari"]).unwrap();
+        match cli.command {
+            Commands::Find { query, app, .. } => {
+                assert_eq!(query, "Save");
+                assert_eq!(app.as_deref(), Some("Safari"));
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_find_with_bundle_id() {
+        let cli = parse(&["find", "New Tab", "--bundle-id", "com.apple.Safari"]).unwrap();
+        match cli.command {
+            Commands::Find { bundle_id, .. } => {
+                assert_eq!(bundle_id.as_deref(), Some("com.apple.Safari"));
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_find_default_timeout() {
+        let cli = parse(&["find", "Save", "--app", "Safari"]).unwrap();
+        match cli.command {
+            Commands::Find { timeout, .. } => assert_eq!(timeout, 5000),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_click_default_mode() {
+        let cli = parse(&["click", "OK", "--app", "Safari"]).unwrap();
+        match cli.command {
+            Commands::Click { mode, .. } => assert_eq!(mode, "background"),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_click_focus_mode() {
+        let cli = parse(&["click", "OK", "--app", "Safari", "--mode", "focus"]).unwrap();
+        match cli.command {
+            Commands::Click { mode, .. } => assert_eq!(mode, "focus"),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_type_text() {
+        let cli = parse(&["type", "hello world", "--app", "Safari"]).unwrap();
+        match cli.command {
+            Commands::TypeText { text, .. } => assert_eq!(text, "hello world"),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_screenshot_no_output() {
+        let cli = parse(&["screenshot", "--app", "Safari"]).unwrap();
+        match cli.command {
+            Commands::Screenshot { output, .. } => assert!(output.is_none()),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_screenshot_with_output() {
+        let cli = parse(&["screenshot", "--app", "Safari", "--output", "/tmp/shot.png"]).unwrap();
+        match cli.command {
+            Commands::Screenshot { output, .. } => {
+                assert_eq!(output.unwrap().to_str().unwrap(), "/tmp/shot.png");
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_tree_default_depth() {
+        let cli = parse(&["tree", "--app", "Safari"]).unwrap();
+        match cli.command {
+            Commands::Tree { depth, .. } => assert_eq!(depth, 5),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_tree_custom_depth() {
+        let cli = parse(&["tree", "--app", "Safari", "--depth", "3"]).unwrap();
+        match cli.command {
+            Commands::Tree { depth, .. } => assert_eq!(depth, 3),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn parses_apps_subcommand() {
+        let cli = parse(&["apps"]).unwrap();
+        assert!(matches!(cli.command, Commands::Apps));
+    }
+
+    #[test]
+    fn parses_check_subcommand() {
+        let cli = parse(&["check"]).unwrap();
+        assert!(matches!(cli.command, Commands::Check));
+    }
+
+    #[test]
+    fn parses_completions_zsh() {
+        let cli = parse(&["completions", "zsh"]).unwrap();
+        match cli.command {
+            Commands::Completions { shell } => assert_eq!(shell, "zsh"),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn invalid_subcommand_returns_error() {
+        assert!(parse(&["bogus"]).is_err());
+    }
+
+    #[test]
+    fn mcp_requires_subcommand() {
+        assert!(parse(&["mcp"]).is_err());
+    }
+}

@@ -84,9 +84,8 @@ impl AXApp {
     /// button = app.find(role="AXButton", title="Save")
     /// ```
     #[pyo3(signature = (query, timeout_ms=None))]
-    fn find(&self, query: &str, timeout_ms: Option<u64>) -> PyResult<AXElement> {
-        let timeout = timeout_ms.map(Duration::from_millis);
-        self.find_element(query, timeout)
+    pub fn find(&self, query: &str, timeout_ms: Option<u64>) -> PyResult<AXElement> {
+        self.find_native(query, timeout_ms)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
@@ -127,9 +126,8 @@ impl AXApp {
     /// # Arguments
     /// * `timeout_ms` - Timeout in milliseconds (default: 5000)
     #[pyo3(signature = (timeout_ms=5000))]
-    fn wait_for_idle(&self, timeout_ms: u64) -> bool {
-        self.sync_engine
-            .wait_for_idle(Duration::from_millis(timeout_ms))
+    pub fn wait_for_idle(&self, timeout_ms: u64) -> bool {
+        self.wait_idle_native(timeout_ms)
     }
 
     /// Check if the application is currently idle (non-blocking)
@@ -145,14 +143,14 @@ impl AXApp {
     ///
     /// # Returns
     /// PNG image data as bytes
-    fn screenshot(&self) -> PyResult<Vec<u8>> {
-        self.capture_screenshot()
+    pub fn screenshot(&self) -> PyResult<Vec<u8>> {
+        self.screenshot_native()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Get all windows of the application
-    fn windows(&self) -> PyResult<Vec<AXElement>> {
-        self.get_windows()
+    pub fn windows(&self) -> PyResult<Vec<AXElement>> {
+        self.windows_native()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
@@ -173,6 +171,38 @@ impl AXApp {
 }
 
 impl AXApp {
+    /// Connect to an application — Rust-native version returning `AXResult`.
+    pub fn connect_native(
+        name: Option<&str>,
+        bundle_id: Option<&str>,
+        pid: Option<u32>,
+    ) -> AXResult<Self> {
+        Self::connect(name, bundle_id, pid)
+            .map_err(|e| AXError::SystemError(e.to_string()))
+    }
+
+    /// Find element — returns `AXResult` for Rust-native callers (no pyo3 dependency).
+    pub fn find_native(&self, query: &str, timeout_ms: Option<u64>) -> AXResult<AXElement> {
+        let timeout = timeout_ms.map(Duration::from_millis);
+        self.find_element(query, timeout)
+    }
+
+    /// Wait for idle — returns plain bool for Rust-native callers.
+    pub fn wait_idle_native(&self, timeout_ms: u64) -> bool {
+        self.sync_engine
+            .wait_for_idle(Duration::from_millis(timeout_ms))
+    }
+
+    /// Screenshot — returns `AXResult` for Rust-native callers.
+    pub fn screenshot_native(&self) -> AXResult<Vec<u8>> {
+        self.capture_screenshot()
+    }
+
+    /// Windows — returns `AXResult` for Rust-native callers.
+    pub fn windows_native(&self) -> AXResult<Vec<AXElement>> {
+        self.get_windows()
+    }
+
     /// Connect to an application
     pub fn connect(
         name: Option<&str>,

@@ -6,7 +6,7 @@
 //! ## Key Features
 //!
 //! - **Background Testing**: Test apps without stealing focus
-//! - **Sub-millisecond Access**: ~379 us element access (measured on M1 MacBook Pro)
+//! - **Sub-millisecond Access**: ~379 us element access (measured on M1 `MacBook` Pro)
 //! - **Self-Healing**: 7-strategy fallback for element location
 //! - **Unified API**: Works with Native, Electron, and `WebView` apps
 //!
@@ -29,6 +29,8 @@
 #![allow(clippy::useless_conversion)]
 
 use pyo3::prelude::*;
+
+pub mod mcp;
 
 mod accessibility;
 mod actions;

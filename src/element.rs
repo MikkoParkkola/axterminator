@@ -42,37 +42,37 @@ unsafe impl Sync for AXElement {}
 #[pymethods]
 impl AXElement {
     /// Get the element's role (e.g., "`AXButton`", "`AXTextField`")
-    fn role(&self) -> Option<String> {
+    pub fn role(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_ROLE)
     }
 
     /// Get the element's title
-    fn title(&self) -> Option<String> {
+    pub fn title(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_TITLE)
     }
 
     /// Get the element's value
-    fn value(&self) -> Option<String> {
+    pub fn value(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_VALUE)
     }
 
     /// Get the element's description
-    fn description(&self) -> Option<String> {
+    pub fn description(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_DESCRIPTION)
     }
 
     /// Get the element's label
-    fn label(&self) -> Option<String> {
+    pub fn label(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_LABEL)
     }
 
     /// Get the element's identifier
-    fn identifier(&self) -> Option<String> {
+    pub fn identifier(&self) -> Option<String> {
         self.get_string_attribute(attributes::AX_IDENTIFIER)
     }
 
     /// Check if the element is enabled
-    fn enabled(&self) -> bool {
+    pub fn enabled(&self) -> bool {
         self.get_bool_attribute(attributes::AX_ENABLED)
             .unwrap_or(false)
     }
@@ -89,7 +89,7 @@ impl AXElement {
     }
 
     /// Get the element's bounds (x, y, width, height)
-    fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
+    pub fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
         let position = accessibility::get_position_attribute(self.element)?;
         let size = accessibility::get_size_attribute(self.element)?;
         Some((position.x, position.y, size.width, size.height))
@@ -109,26 +109,22 @@ impl AXElement {
     /// element.click(mode=ax.FOCUS)
     /// ```
     #[pyo3(signature = (mode=None))]
-    fn click(&self, mode: Option<ActionMode>) -> PyResult<()> {
-        let mode = mode.unwrap_or(ActionMode::Background);
-        self.perform_click(mode)
+    pub fn click(&self, mode: Option<ActionMode>) -> PyResult<()> {
+        self.click_native(mode.unwrap_or(ActionMode::Background))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Double-click the element
     #[pyo3(signature = (mode=None))]
-    fn double_click(&self, mode: Option<ActionMode>) -> PyResult<()> {
-        let mode = mode.unwrap_or(ActionMode::Background);
-        self.perform_click(mode)?;
-        std::thread::sleep(Duration::from_millis(50));
-        self.perform_click(mode)
+    pub fn double_click(&self, mode: Option<ActionMode>) -> PyResult<()> {
+        self.double_click_native(mode.unwrap_or(ActionMode::Background))
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Right-click the element
     #[pyo3(signature = (mode=None))]
-    fn right_click(&self, mode: Option<ActionMode>) -> PyResult<()> {
-        let mode = mode.unwrap_or(ActionMode::Background);
-        self.perform_show_menu(mode)
+    pub fn right_click(&self, mode: Option<ActionMode>) -> PyResult<()> {
+        self.right_click_native(mode.unwrap_or(ActionMode::Background))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
@@ -140,26 +136,20 @@ impl AXElement {
     /// * `text` - Text to type
     /// * `mode` - Action mode (FOCUS required for text input)
     #[pyo3(signature = (text, mode=None))]
-    fn type_text(&self, text: &str, mode: Option<ActionMode>) -> PyResult<()> {
-        let mode = mode.unwrap_or(ActionMode::Focus);
-        if mode == ActionMode::Background {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Text input requires FOCUS mode",
-            ));
-        }
-        self.perform_type_text(text)
+    pub fn type_text(&self, text: &str, mode: Option<ActionMode>) -> PyResult<()> {
+        self.type_text_native(text, mode.unwrap_or(ActionMode::Focus))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Set the element's value
-    fn set_value(&self, value: &str) -> PyResult<()> {
-        self.perform_set_value(value)
+    pub fn set_value(&self, value: &str) -> PyResult<()> {
+        self.set_value_native(value)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Take a screenshot of just this element
-    fn screenshot(&self) -> PyResult<Vec<u8>> {
-        self.capture_element_screenshot()
+    pub fn screenshot(&self) -> PyResult<Vec<u8>> {
+        self.screenshot_native()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
@@ -183,6 +173,48 @@ impl AXElement {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Rust-native action methods (no pyo3 dependency — safe to call from
+    // the MCP server and CLI binary without linking Python symbols).
+    // -----------------------------------------------------------------------
+
+    /// Click — returns `AXResult`.
+    pub fn click_native(&self, mode: ActionMode) -> AXResult<()> {
+        self.perform_click_native(mode)
+    }
+
+    /// Double-click — returns `AXResult`.
+    pub fn double_click_native(&self, mode: ActionMode) -> AXResult<()> {
+        self.perform_click_native(mode)?;
+        std::thread::sleep(Duration::from_millis(50));
+        self.perform_click_native(mode)
+    }
+
+    /// Right-click — returns `AXResult`.
+    pub fn right_click_native(&self, mode: ActionMode) -> AXResult<()> {
+        self.perform_show_menu(mode)
+    }
+
+    /// Type text — returns `AXResult`.
+    pub fn type_text_native(&self, text: &str, mode: ActionMode) -> AXResult<()> {
+        if mode == ActionMode::Background {
+            return Err(AXError::BackgroundNotSupported(
+                "Text input requires FOCUS mode".into(),
+            ));
+        }
+        self.perform_type_text(text)
+    }
+
+    /// Set value — returns `AXResult`.
+    pub fn set_value_native(&self, value: &str) -> AXResult<()> {
+        self.perform_set_value(value)
+    }
+
+    /// Screenshot — returns `AXResult`.
+    pub fn screenshot_native(&self) -> AXResult<Vec<u8>> {
+        self.capture_element_screenshot()
+    }
+
     /// Get a string attribute value
     fn get_string_attribute(&self, attribute: &str) -> Option<String> {
         accessibility::get_string_attribute_value(self.element, attribute)
@@ -193,19 +225,23 @@ impl AXElement {
         accessibility::get_bool_attribute_value(self.element, attribute)
     }
 
-    /// Perform click action
+    /// Perform click action (pyo3 wrapper — converts to PyErr).
+    // Called from #[pymethods] block; only visible to Rust when python-ext is active.
+    #[allow(dead_code)]
     fn perform_click(&self, mode: ActionMode) -> PyResult<()> {
+        self.perform_click_native(mode)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Perform click action — returns `AXResult` (no pyo3 dependency).
+    fn perform_click_native(&self, mode: ActionMode) -> AXResult<()> {
         match mode {
             ActionMode::Background => {
-                // Background click via AXUIElementPerformAction on unfocused window
                 perform_action(self.element, actions::AX_PRESS)
-                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
             }
             ActionMode::Focus => {
-                // Focus the element first, then click
-                self.bring_to_focus()?;
+                self.bring_to_focus_internal()?;
                 perform_action(self.element, actions::AX_PRESS)
-                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
             }
         }
     }
@@ -305,6 +341,8 @@ impl AXElement {
     }
 
     /// Bring the element to focus (public wrapper for Python)
+    // Called from #[pymethods] block; only visible to Rust when python-ext is active.
+    #[allow(dead_code)]
     fn bring_to_focus(&self) -> PyResult<()> {
         self.bring_to_focus_internal()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
