@@ -109,6 +109,10 @@ pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError>
 // ---------------------------------------------------------------------------
 
 /// Core capture implementation using `AVAudioEngine` ObjC API.
+///
+/// Captures at the input device's native sample rate (typically 48 kHz)
+/// to avoid format mismatches and downsampling artifacts. The WAV header
+/// reflects the true sample rate so SFSpeechRecognizer processes it correctly.
 fn capture_via_av_audio_engine(duration_secs: f32) -> Result<AudioData, AudioError> {
     let state = Arc::new((
         Mutex::new(CaptureState {
@@ -123,10 +127,13 @@ fn capture_via_av_audio_engine(duration_secs: f32) -> Result<AudioData, AudioErr
     let engine = create_av_audio_engine()
         .ok_or_else(|| AudioError::Framework("Failed to create AVAudioEngine".to_string()))?;
 
+    // Query the native sample rate so we record without resampling.
+    let native_rate = query_input_sample_rate(engine);
+
     let state_clone = Arc::clone(&state);
     install_input_tap(
         engine,
-        SAMPLE_RATE,
+        native_rate,
         CHANNELS,
         move |pcm_samples: &[f32]| {
             let (lock, _cvar) = &*state_clone;
@@ -163,14 +170,30 @@ fn capture_via_av_audio_engine(duration_secs: f32) -> Result<AudioData, AudioErr
         .collect();
 
     #[allow(clippy::cast_precision_loss)]
-    let actual_duration = samples_f32.len() as f32 / SAMPLE_RATE as f32;
+    let actual_duration = samples_f32.len() as f32 / native_rate as f32;
 
     Ok(AudioData {
         samples: samples_f32,
-        sample_rate: SAMPLE_RATE,
+        sample_rate: native_rate,
         channels: CHANNELS,
         duration_secs: actual_duration.min(duration_secs),
     })
+}
+
+/// Query the input node's native sample rate.
+fn query_input_sample_rate(engine: *mut Object) -> u32 {
+    let input_node: *mut Object = unsafe { msg_send![engine, inputNode] };
+    if input_node.is_null() {
+        return SAMPLE_RATE;
+    }
+    let format: *mut Object = unsafe { msg_send![input_node, outputFormatForBus: 0u32] };
+    if format.is_null() {
+        return SAMPLE_RATE;
+    }
+    let rate: f64 = unsafe { msg_send![format, sampleRate] };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let rate_u32 = rate as u32;
+    if rate_u32 == 0 { SAMPLE_RATE } else { rate_u32 }
 }
 
 /// Create an `AVAudioEngine` instance.
@@ -219,7 +242,9 @@ fn install_input_tap(
     })
     .copy();
 
-    // SAFETY: input_node is non-null (checked above); tap_block is a valid ObjC block.
+    // Install tap with null format = capture at device's native sample rate.
+    // The caller (capture_via_av_audio_engine) queries the native rate and
+    // writes the WAV header accordingly.
     unsafe {
         let _: () = msg_send![input_node,
             installTapOnBus: 0u32
