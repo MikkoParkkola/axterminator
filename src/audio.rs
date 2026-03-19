@@ -361,8 +361,15 @@ pub fn check_microphone_permission() -> Result<(), AudioError> {
     //   0 = NotDetermined, 1 = Restricted, 2 = Denied, 3 = Authorized
     let status = query_av_authorization_status();
     match status {
-        1 | 2 => Err(AudioError::PermissionDenied),
-        _ => Ok(()), // 0 (not determined) or 3 (authorized) — proceed
+        3 => Ok(()),
+        0 => {
+            // Not yet determined — proceed and let AVAudioEngine trigger the
+            // system permission dialog on first use. macOS will show the prompt
+            // automatically when we try to access the microphone.
+            debug!("Microphone permission not determined, will prompt on first capture");
+            Ok(())
+        }
+        _ => Err(AudioError::PermissionDenied),
     }
 }
 

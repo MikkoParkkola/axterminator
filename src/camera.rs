@@ -328,11 +328,21 @@ pub fn validate_gesture_names(names: &[&str]) -> Result<Vec<Gesture>, CameraErro
 /// ```
 #[must_use]
 pub fn check_camera_permission() -> bool {
-    // Safety: AVCaptureDevice is a stable macOS API. We call the class method
-    // +authorizationStatusForMediaType: with AVMediaTypeVideo and inspect the
-    // returned AVAuthorizationStatus enum value. No mutable state is touched.
-    unsafe { av_camera_authorization_status() == AV_AUTH_AUTHORIZED }
+    // Safety: AVCaptureDevice is a stable macOS API.
+    let status = unsafe { av_camera_authorization_status() };
+    if status == AV_AUTH_AUTHORIZED {
+        return true;
+    }
+    // If not yet determined, request access (triggers system dialog).
+    if status == AV_AUTH_NOT_DETERMINED {
+        debug!("Camera permission not determined, requesting access");
+        let granted = unsafe { av_request_camera_access() };
+        return granted == 1;
+    }
+    false
 }
+
+const AV_AUTH_NOT_DETERMINED: i32 = 0;
 
 // ---------------------------------------------------------------------------
 // Device enumeration
@@ -712,6 +722,10 @@ extern "C" {
     /// Returns `AVAuthorizationStatus` for `AVMediaTypeVideo` (0-3).
     /// Does NOT trigger a permission dialog.
     fn av_camera_authorization_status() -> i32;
+
+    /// Requests camera access if status is `NotDetermined`. Blocks until
+    /// the user responds (up to 30s timeout). Returns 1 if granted, 0 if denied.
+    fn av_request_camera_access() -> i32;
 
     /// Fills `*count` with the number of video capture devices and returns a
     /// heap-allocated array of `CDeviceInfo`. Caller must call
