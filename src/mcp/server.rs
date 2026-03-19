@@ -590,17 +590,21 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_returns_nineteen_tools() {
-        // GIVEN: initialized server (Phase 1: 12 tools + Phase 3: 7 tools = 19 total)
+    fn tools_list_returns_correct_count_for_feature_set() {
+        // GIVEN: initialized server (base 19; +5 with spaces, +3 audio, +3 camera)
         let mut s = Server::new();
         initialize_server(&mut s);
         // WHEN: tools/list
         let req = make_request(3, "tools/list", None);
         let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
         let v: Value = serde_json::to_value(&resp).unwrap();
-        // THEN: 19 tools
+        // THEN: count is a deterministic function of active features
         let count = v["result"]["tools"].as_array().unwrap().len();
-        assert_eq!(count, 19);
+        let base = 19usize;
+        let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
+        let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+        let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
+        assert_eq!(count, base + extra_spaces + extra_audio + extra_camera);
     }
 
     #[test]

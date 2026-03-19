@@ -89,9 +89,9 @@ impl AppRegistry {
 /// # Examples
 ///
 /// ```
-/// // Phase 1 (12) + Phase 3 (7) = 19 total
+/// // Phase 1 (12) + Phase 3 (7) = 19 total; +5 with `spaces` feature = 24
 /// let tools = axterminator::mcp::tools::all_tools();
-/// assert_eq!(tools.len(), 19);
+/// assert!(tools.len() >= 19);
 /// ```
 #[must_use]
 pub fn all_tools() -> Vec<Tool> {
@@ -948,12 +948,20 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn all_tools_returns_nineteen_tools() {
-        // GIVEN: Phase 1 (12) + Phase 3 (7) tool set
+    fn all_tools_count_matches_feature_set() {
+        // GIVEN: Phase 1 (12) + Phase 3 (7) = 19 base
+        //        +3 camera = 22; +5 spaces = 24/27; +3 audio = 22/25/27/30
         // WHEN: requesting all tools
         let tools = all_tools();
-        // THEN: exactly 19 tools
-        assert_eq!(tools.len(), 19);
+        // THEN: count is a deterministic function of active features
+        let base = 19usize;
+        let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
+        let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+        let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
+        assert_eq!(
+            tools.len(),
+            base + extra_spaces + extra_audio + extra_camera
+        );
     }
 
     #[test]
