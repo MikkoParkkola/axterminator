@@ -30,7 +30,14 @@
 
 use pyo3::prelude::*;
 
+#[cfg(feature = "audio")]
+pub mod audio;
+#[cfg(feature = "camera")]
+pub mod camera;
+pub mod display;
 pub mod mcp;
+#[cfg(feature = "spaces")]
+pub mod spaces;
 
 mod accessibility;
 mod actions;

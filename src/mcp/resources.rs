@@ -9,7 +9,9 @@
 //! | URI | Content |
 //! |-----|---------|
 //! | `axterminator://system/status` | Accessibility enabled, version, connected apps |
+//! | `axterminator://system/displays` | Connected display geometry, scale factors |
 //! | `axterminator://apps` | Running apps with PID, bundle ID, accessibility status |
+//! | `axterminator://spaces` | Virtual desktop layout (requires `spaces` feature) |
 //!
 //! ## Dynamic resource templates (RFC 6570)
 //!
@@ -31,6 +33,7 @@ use base64::Engine as _;
 use serde_json::{json, Value};
 use tracing::debug;
 
+use crate::display;
 use crate::mcp::protocol::{
     Resource, ResourceContents, ResourceListResult, ResourceReadResult, ResourceTemplate,
     ResourceTemplateListResult,
@@ -90,28 +93,71 @@ impl std::fmt::Display for ResourceError {
 /// ```
 /// let resources = axterminator::mcp::resources::static_resources();
 /// assert!(resources.resources.iter().any(|r| r.uri == "axterminator://system/status"));
+/// assert!(resources.resources.iter().any(|r| r.uri == "axterminator://system/displays"));
 /// ```
 #[must_use]
 pub fn static_resources() -> ResourceListResult {
-    ResourceListResult {
-        resources: vec![
-            Resource {
-                uri: "axterminator://system/status",
-                name: "system-status",
-                title: "System Accessibility Status",
-                description: "Accessibility permissions, connected apps count, server version.",
-                mime_type: "application/json",
-            },
-            Resource {
-                uri: "axterminator://apps",
-                name: "running-apps",
-                title: "Running Applications",
-                description:
-                    "All running macOS applications with PIDs, bundle IDs, and accessibility info.",
-                mime_type: "application/json",
-            },
-        ],
-    }
+    // `mut` is required when the `spaces` feature is enabled (push below).
+    #[allow(unused_mut)]
+    let mut resources = vec![
+        Resource {
+            uri: "axterminator://system/status",
+            name: "system-status",
+            title: "System Accessibility Status",
+            description: "Accessibility permissions, connected apps count, server version.",
+            mime_type: "application/json",
+        },
+        Resource {
+            uri: "axterminator://system/displays",
+            name: "system-displays",
+            title: "Connected Displays",
+            description:
+                "All connected displays with id, bounds (global logical-point coordinates), \
+                 scale factor, and is_primary flag. Bounds origin may be negative for secondary \
+                 monitors placed left of or above the primary display.",
+            mime_type: "application/json",
+        },
+        Resource {
+            uri: "axterminator://apps",
+            name: "running-apps",
+            title: "Running Applications",
+            description:
+                "All running macOS applications with PIDs, bundle IDs, and accessibility info.",
+            mime_type: "application/json",
+        },
+    ];
+
+    #[cfg(feature = "spaces")]
+    resources.push(Resource {
+        uri: "axterminator://spaces",
+        name: "virtual-desktops",
+        title: "Virtual Desktops (Spaces)",
+        description: "All macOS virtual desktops (Spaces) with IDs, types, active flag, and \
+             which windows are assigned to each space.",
+        mime_type: "application/json",
+    });
+
+    #[cfg(feature = "audio")]
+    resources.push(Resource {
+        uri: "axterminator://audio/devices",
+        name: "audio-devices",
+        title: "Audio Devices",
+        description: "All CoreAudio input/output devices with name, ID, sample rate, \
+            and default-device status. Requires the `audio` cargo feature.",
+        mime_type: "application/json",
+    });
+
+    #[cfg(feature = "camera")]
+    resources.push(Resource {
+        uri: "axterminator://camera/devices",
+        name: "camera-devices",
+        title: "Available Camera Devices",
+        description: "All video capture devices with device_id, name, position \
+            (front/back/external), and is_default flag. No permission required to list.",
+        mime_type: "application/json",
+    });
+
+    ResourceListResult { resources }
 }
 
 /// All dynamic (RFC 6570 template) resources advertised in
@@ -180,7 +226,14 @@ pub fn read_resource(
 
     match uri {
         "axterminator://system/status" => read_system_status(uri, registry),
+        "axterminator://system/displays" => read_system_displays(uri),
         "axterminator://apps" => read_running_apps(uri, registry),
+        #[cfg(feature = "spaces")]
+        "axterminator://spaces" => read_spaces(uri),
+        #[cfg(feature = "audio")]
+        "axterminator://audio/devices" => read_audio_devices(uri),
+        #[cfg(feature = "camera")]
+        "axterminator://camera/devices" => read_camera_devices(uri),
         other => read_dynamic(other, registry),
     }
 }
@@ -225,6 +278,120 @@ fn read_running_apps(
             "application/json",
             payload.to_string(),
         )],
+    })
+}
+
+/// Read the `axterminator://system/displays` resource.
+///
+/// Returns the complete list of connected displays with id, bounds
+/// (in global logical-point coordinates — may have negative origin for
+/// secondary monitors), scale factor, and is_primary flag.
+fn read_system_displays(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let displays = display::list_displays()
+        .map_err(|e| ResourceError::operation_failed(format!("Display enumeration failed: {e}")))?;
+
+    let display_values: Vec<Value> = displays
+        .iter()
+        .map(|d| {
+            json!({
+                "id": d.id,
+                "bounds": {
+                    "x": d.bounds.x,
+                    "y": d.bounds.y,
+                    "width": d.bounds.width,
+                    "height": d.bounds.height,
+                },
+                "scale_factor": d.scale_factor,
+                "is_primary": d.is_primary,
+            })
+        })
+        .collect();
+
+    let payload = json!({
+        "display_count": display_values.len(),
+        "displays": display_values,
+    });
+
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
+}
+
+/// Read the `axterminator://spaces` virtual desktop resource.
+///
+/// Lists all Spaces with id, type, active flag, and agent-created status.
+/// Requires the `spaces` feature flag.
+#[cfg(feature = "spaces")]
+fn read_spaces(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    use crate::spaces::SpaceManager;
+
+    let mgr = SpaceManager::new();
+    let spaces = mgr
+        .list_spaces()
+        .map_err(|e| ResourceError::operation_failed(format!("Space enumeration failed: {e}")))?;
+
+    let space_values: Vec<Value> = spaces
+        .iter()
+        .map(|s| {
+            json!({
+                "id": s.id,
+                "type": format!("{:?}", s.space_type).to_lowercase(),
+                "is_active": s.is_active,
+                "is_agent_created": s.is_agent_created,
+            })
+        })
+        .collect();
+
+    let payload = json!({
+        "space_count": space_values.len(),
+        "spaces": space_values,
+    });
+
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
+}
+
+/// Read the `axterminator://audio/devices` resource.
+///
+/// Returns all CoreAudio input/output devices with name, ID, sample rate,
+/// and default-device flags. Requires the `audio` cargo feature.
+///
+/// # Errors
+///
+/// Returns [`ResourceError::operation_failed`] when serialization fails
+/// (should never occur in practice).
+#[cfg(feature = "audio")]
+fn read_audio_devices(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let devices = crate::audio::list_audio_devices();
+    let payload = json!({
+        "device_count": devices.len(),
+        "devices": devices,
+    });
+    let body = serde_json::to_string(&payload)
+        .map_err(|e| ResourceError::operation_failed(format!("Serialization failed: {e}")))?;
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "application/json", body)],
+    })
+}
+
+/// Read `axterminator://camera/devices`.
+///
+/// Enumerates available video capture devices via AVFoundation. No TCC permission
+/// is required for device enumeration — only capture operations need it.
+#[cfg(feature = "camera")]
+fn read_camera_devices(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let payload = crate::mcp::tools_extended::camera_devices_payload();
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "application/json", payload)],
     })
 }
 
@@ -298,18 +465,16 @@ fn read_app_state(
     app_name: &str,
     registry: &Arc<AppRegistry>,
 ) -> Result<ResourceReadResult, ResourceError> {
+    // Enumerate displays once so we can annotate each window with its display.
+    let displays = display::list_displays().unwrap_or_default();
+
     registry
         .with_app(app_name, |app| {
             let windows = app
                 .windows_native()
                 .unwrap_or_default()
                 .iter()
-                .map(|w| {
-                    json!({
-                        "title": w.title(),
-                        "role": w.role(),
-                    })
-                })
+                .map(|w| window_state_json(w, &displays))
                 .collect::<Vec<_>>();
 
             let payload = json!({
@@ -328,6 +493,40 @@ fn read_app_state(
             }
         })
         .map_err(|_| ResourceError::not_connected(app_name))
+}
+
+/// Build the JSON state object for a single window, annotated with display info.
+fn window_state_json(w: &crate::element::AXElement, displays: &[display::Display]) -> Value {
+    let bounds = w.bounds();
+
+    let display_id =
+        bounds.and_then(|(x, y, _, _)| display::display_for_point(x, y, displays).map(|d| d.id));
+
+    // For windows spanning multiple displays, include both display IDs.
+    let spanning_displays: Vec<u32> = bounds
+        .map(|(x, y, w_size, h_size)| {
+            let rect = display::Rect {
+                x,
+                y,
+                width: w_size,
+                height: h_size,
+            };
+            display::displays_for_rect(&rect, displays)
+                .iter()
+                .map(|d| d.id)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    json!({
+        "title": w.title(),
+        "role": w.role(),
+        "bounds": bounds.map(|(x, y, w_size, h_size)| json!({
+            "x": x, "y": y, "width": w_size, "height": h_size
+        })),
+        "display_id": display_id,
+        "spanning_displays": spanning_displays,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -638,5 +837,234 @@ mod tests {
         let text = result.contents[0].text.as_ref().unwrap();
         let v: serde_json::Value = serde_json::from_str(text).unwrap();
         assert!(v["server_version"].as_str().is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // system/displays resource
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn static_resources_contains_system_displays() {
+        // GIVEN: static resource list
+        let list = static_resources();
+        // THEN: system/displays is advertised
+        let has_displays = list
+            .resources
+            .iter()
+            .any(|r| r.uri == "axterminator://system/displays");
+        assert!(
+            has_displays,
+            "system/displays must be in static resource list"
+        );
+    }
+
+    #[test]
+    fn read_system_displays_returns_valid_json() {
+        // GIVEN: an empty registry
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading the displays resource
+        let result = read_resource("axterminator://system/displays", &registry)
+            .expect("system/displays must succeed");
+        // THEN: one JSON content item with display_count and displays array
+        assert_eq!(result.contents.len(), 1);
+        assert_eq!(result.contents[0].mime_type, "application/json");
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert!(v["display_count"].as_u64().unwrap_or(0) >= 1);
+        assert!(v["displays"].is_array());
+    }
+
+    #[test]
+    fn read_system_displays_each_entry_has_required_fields() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://system/displays", &registry).unwrap();
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        for display in v["displays"].as_array().unwrap() {
+            assert!(display["id"].is_number(), "id must be present");
+            assert!(display["bounds"].is_object(), "bounds must be object");
+            assert!(display["bounds"]["width"].as_f64().unwrap_or(0.0) > 0.0);
+            assert!(display["bounds"]["height"].as_f64().unwrap_or(0.0) > 0.0);
+            assert!(display["scale_factor"].as_f64().unwrap_or(0.0) >= 1.0);
+            assert!(display["is_primary"].is_boolean());
+        }
+    }
+
+    #[test]
+    fn read_system_displays_exactly_one_primary() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://system/displays", &registry).unwrap();
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        let primary_count = v["displays"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|d| d["is_primary"].as_bool().unwrap_or(false))
+            .count();
+        assert_eq!(primary_count, 1, "exactly one primary display");
+    }
+
+    #[test]
+    fn read_system_displays_primary_has_non_negative_x() {
+        // Primary display is always at (0,0) in macOS coordinate space.
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://system/displays", &registry).unwrap();
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        let primary = v["displays"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["is_primary"].as_bool().unwrap_or(false))
+            .unwrap();
+        assert_eq!(primary["bounds"]["x"].as_f64().unwrap_or(-1.0), 0.0);
+        assert_eq!(primary["bounds"]["y"].as_f64().unwrap_or(-1.0), 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // spaces resource (feature = "spaces")
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "spaces")]
+    #[test]
+    fn static_resources_contains_spaces_when_feature_enabled() {
+        let list = static_resources();
+        let has_spaces = list
+            .resources
+            .iter()
+            .any(|r| r.uri == "axterminator://spaces");
+        assert!(
+            has_spaces,
+            "spaces resource must be in list with spaces feature"
+        );
+    }
+
+    #[cfg(feature = "spaces")]
+    #[test]
+    fn read_spaces_returns_valid_json_with_at_least_one_space() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://spaces", &registry)
+            .expect("spaces resource must succeed");
+        assert_eq!(result.contents.len(), 1);
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert!(v["space_count"].as_u64().unwrap_or(0) >= 1);
+        assert!(v["spaces"].is_array());
+    }
+
+    #[cfg(feature = "spaces")]
+    #[test]
+    fn read_spaces_each_entry_has_required_fields() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://spaces", &registry).unwrap();
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        for space in v["spaces"].as_array().unwrap() {
+            assert!(space["id"].is_number());
+            assert!(space["type"].is_string());
+            assert!(space["is_active"].is_boolean());
+            assert!(space["is_agent_created"].is_boolean());
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // audio/devices resource (feature = "audio")
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn static_resources_contains_audio_devices_when_feature_enabled() {
+        // GIVEN: audio feature is active
+        let list = static_resources();
+        // THEN: audio/devices resource is advertised
+        let has_audio = list
+            .resources
+            .iter()
+            .any(|r| r.uri == "axterminator://audio/devices");
+        assert!(
+            has_audio,
+            "audio/devices must be in static resource list with audio feature"
+        );
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_audio_devices_returns_valid_json() {
+        // GIVEN: running macOS system
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading the audio devices resource
+        let result = read_resource("axterminator://audio/devices", &registry)
+            .expect("audio/devices resource must succeed");
+        // THEN: one JSON content item
+        assert_eq!(result.contents.len(), 1);
+        assert_eq!(result.contents[0].mime_type, "application/json");
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert!(v["device_count"].is_number());
+        assert!(v["devices"].is_array());
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_audio_devices_device_count_matches_array_length() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://audio/devices", &registry).unwrap();
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        let count = v["device_count"].as_u64().unwrap();
+        let arr_len = v["devices"].as_array().unwrap().len() as u64;
+        assert_eq!(
+            count, arr_len,
+            "device_count must match devices array length"
+        );
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_audio_devices_mime_type_is_application_json() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://audio/devices", &registry).unwrap();
+        assert_eq!(result.contents[0].mime_type, "application/json");
+    }
+
+    // -----------------------------------------------------------------------
+    // Camera resource tests (feature-gated)
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "camera")]
+    #[test]
+    fn static_resources_contains_camera_devices_when_feature_enabled() {
+        // GIVEN: camera feature enabled
+        // WHEN: static_resources() is called
+        let list = static_resources();
+        // THEN: camera/devices resource is included
+        let has_camera = list
+            .resources
+            .iter()
+            .any(|r| r.uri == "axterminator://camera/devices");
+        assert!(has_camera, "camera/devices must be advertised");
+    }
+
+    #[cfg(feature = "camera")]
+    #[test]
+    fn read_camera_devices_returns_valid_json() {
+        // GIVEN: an empty registry (device listing needs no connected apps)
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading the camera devices resource
+        let result = read_resource("axterminator://camera/devices", &registry).unwrap();
+        // THEN: one JSON item with a "cameras" array
+        assert_eq!(result.contents.len(), 1);
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert!(v["cameras"].is_array());
+    }
+
+    #[cfg(feature = "camera")]
+    #[test]
+    fn read_camera_devices_mime_type_is_json() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://camera/devices", &registry).unwrap();
+        assert_eq!(result.contents[0].mime_type, "application/json");
     }
 }

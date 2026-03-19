@@ -29,6 +29,9 @@ required-features = ["cli"]
 #   (default features = cli only), which links Python explicitly via build.rs.
 default = ["cli"]
 cli = ["dep:clap", "dep:clap_complete"]
+# spaces: virtual desktop management via CGSSpace private SPI.
+# Off by default — private API, macOS 14+ tested, incompatible with App Store.
+spaces = []
 # python-ext: enables the `extension-module` linker flag that defers Python symbol
 # resolution to the embedding interpreter at runtime.  Must be DISABLED when
 # building the standalone CLI binary (which links Python explicitly via build.rs).
@@ -36,6 +39,15 @@ python-ext = ["pyo3/extension-module"]
 # http-transport: Streamable HTTP + SSE transport (axum, tokio-stream).
 # Feature-gated to keep the default CLI binary lean.
 http-transport = ["dep:axum", "dep:tokio-stream", "dep:rand"]
+# audio: on-device audio capture, speech recognition, and TTS via CoreAudio /
+# Speech.framework / AVFoundation.  Off by default to avoid triggering macOS
+# TCC permission dialogs for users who do not need audio capabilities.
+audio = []
+# camera: single-frame AVFoundation capture + on-device Vision gesture detection.
+# Compiles src/camera_objc.m and links AVFoundation, Vision, CoreImage, ImageIO,
+# CoreMedia, CoreVideo.  Off by default — enables only when camera input is needed
+# to avoid triggering TCC permission dialogs on first run.
+camera = []
 
 [dependencies]
 # Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
@@ -105,6 +117,8 @@ tempfile = "3.15"
 
 [build-dependencies]
 pyo3-build-config = "0.22"
+# cc is used by build.rs to compile camera_objc.m when the `camera` feature is enabled.
+cc = "1.2"
 
 [[bench]]
 name = "element_access"
