@@ -11,4 +11,4 @@ Link to issue or explain motivation.
 - [ ] `cargo test` passes
 - [ ] `cargo clippy --all-targets` clean
 - [ ] Tested on macOS (version: )
-- [ ] Python tests pass (`pytest python/tests/`)
+- [ ] Python tests pass (`pytest python/tests/`) — if Python bindings were changed
