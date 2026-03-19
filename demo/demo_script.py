@@ -50,11 +50,11 @@ def print_result(text):
 
 def main():
     print_header("axterminator Demo")
-    print_slow(f"{BOLD}World's Most Superior macOS GUI Testing Framework{RESET}")
+    print_slow(f"{BOLD}macOS GUI Testing with Background Support{RESET}")
     time.sleep(1)
 
     # Feature 1: Background Testing
-    print_header("🎭 Background Testing (WORLD FIRST)")
+    print_header("Background Testing")
     print_slow("Test macOS apps WITHOUT stealing focus!")
     time.sleep(0.5)
 

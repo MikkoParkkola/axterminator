@@ -1,4 +1,4 @@
-# AXTerminator - World's Most Superior macOS GUI Testing Framework
+# AXTerminator - macOS GUI Testing Framework
 # Re-export from native Rust extension
 
 from axterminator.axterminator import (

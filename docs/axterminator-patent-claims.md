@@ -2,7 +2,7 @@
 
 **Application Date**: 2026-01-10
 **Status**: Draft - Pending Legal Review
-**Priority**: WORLD FIRST capabilities
+**Priority**: Novel capabilities
 
 ---
 
@@ -40,7 +40,7 @@ A method and system for performing automated user interface testing on desktop o
 - **Playwright/Puppeteer**: Web-only, N/A for native apps
 
 ### Novelty Statement
-No existing macOS GUI testing framework has discovered or documented the capability of AXUIElementPerformAction to operate on unfocused windows. This invention represents a world-first capability enabling developers to run automated tests while continuing to work on the same system.
+No existing macOS GUI testing framework documents or uses the capability of AXUIElementPerformAction to operate on unfocused windows. This enables developers to run automated tests while continuing to work on the same system.
 
 ---
 
@@ -183,7 +183,7 @@ No existing solution combines 7 ordered strategies with strict performance budge
 ## Filing Recommendations
 
 ### Priority Order
-1. **Patent 1 (Background Testing)**: Highest priority - WORLD FIRST, immediate commercial value
+1. **Patent 1 (Background Testing)**: Highest priority -- novel capability, immediate commercial value
 2. **Patent 2 (XPC Sync)**: High priority - novel for macOS
 3. **Patent 3 (Unified Router)**: Medium priority - strong but narrower claims
 4. **Patent 4 (Self-Healing)**: Medium priority - incremental over prior art

@@ -34,8 +34,8 @@ gh workflow run demo.yml
 ## Demo Script
 
 `demo_script.py` showcases:
-- Background testing (WORLD FIRST feature)
-- 800-2000× speed advantage
+- Background testing (no focus stealing)
+- Sub-millisecond element access
 - Self-healing locators (7 strategies)
 - AI vision detection (VLM)
 - Installation instructions

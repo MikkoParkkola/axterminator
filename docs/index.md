@@ -2,9 +2,7 @@
 
 <div align="center">
 
-**World's Most Superior macOS GUI Testing Framework**
-
-*Background testing • ~250µs element access • Self-healing locators • AI vision fallback*
+**macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators.**
 
 [![PyPI](https://img.shields.io/pypi/v/axterminator?color=00d4ff)](https://pypi.org/project/axterminator/)
 [![Python](https://img.shields.io/pypi/pyversions/axterminator)](https://pypi.org/project/axterminator/)
@@ -12,17 +10,15 @@
 
 </div>
 
-**World's Most Superior macOS GUI Testing Framework**
-
-AXTerminator enables background GUI testing on macOS without stealing focus, with ~250µs element access times and self-healing locators.
+AXTerminator enables background GUI testing on macOS -- interact with applications without stealing window focus. Element access takes ~379 us (measured on M1 MacBook Pro), and 7 self-healing locator strategies keep tests resilient to UI changes.
 
 ## Features
 
-- **🎯 Background Testing** - Run tests without stealing focus or interrupting your work
-- **⚡ Ultra-Fast** - ~250µs element access (4000× faster than typical UI frameworks)
-- **🔧 Self-Healing Locators** - 7-strategy healing system survives UI changes
-- **🧠 Visual VLM Detection** - AI-powered element detection as ultimate fallback
-- **🦀 Rust Core** - Native performance with Python bindings
+- **Background Testing** -- Run tests without stealing focus or interrupting your work
+- **Sub-millisecond Access** -- ~379 us element access via direct Rust FFI to the Accessibility API
+- **Self-Healing Locators** -- 7-strategy healing system survives UI changes
+- **Visual VLM Detection** -- AI-powered element detection as ultimate fallback
+- **Rust Core** -- Native performance with Python bindings via PyO3
 
 ## Quick Start
 
@@ -31,15 +27,15 @@ pip install axterminator
 ```
 
 ```python
-import axterminator
+import axterminator as ax
 
 # Check accessibility permissions
-if not axterminator.is_accessibility_enabled():
-    print("Enable accessibility in System Preferences")
+if not ax.is_accessibility_enabled():
+    print("Enable accessibility in System Settings > Privacy & Security > Accessibility")
     exit(1)
 
-# Connect to app and interact
-app = axterminator.app(name="Calculator")
+# Connect to app and interact (background mode by default)
+app = ax.app(name="Calculator")
 app.find("5").click()
 app.find("+").click()
 app.find("3").click()
@@ -57,7 +53,7 @@ pip install axterminator
 ### With VLM Support
 
 ```bash
-# Local MLX (recommended - fast, private)
+# Local MLX (recommended -- fast, private)
 pip install axterminator[vlm]
 
 # Cloud APIs
@@ -87,7 +83,7 @@ Connect to a running application.
 # By name
 app = axterminator.app(name="Safari")
 
-# By bundle ID
+# By bundle ID (recommended -- locale-independent)
 app = axterminator.app(bundle_id="com.apple.Safari")
 
 # By PID
@@ -139,10 +135,10 @@ Get the process ID.
 Click the element.
 
 ```python
-# Background click (default) - won't steal focus
+# Background click (default) -- does not steal focus
 element.click()
 
-# Foreground click - brings app to front
+# Foreground click -- brings app to front
 element.click(mode=axterminator.FOCUS)
 ```
 
@@ -186,15 +182,15 @@ axterminator.configure_vlm(backend="gemini", api_key="...")
 
 When an element is found, AXTerminator stores multiple locator strategies:
 
-1. **data_testid** - Custom test identifiers (most stable)
-2. **aria_label** - ARIA accessibility labels
-3. **identifier** - macOS accessibility identifiers
-4. **title** - Element title/text
-5. **xpath** - Structural path in accessibility tree
-6. **position** - Relative position within parent
-7. **visual_vlm** - AI-powered visual detection
+1. **data_testid** -- Custom test identifiers (most stable)
+2. **aria_label** -- ARIA accessibility labels
+3. **identifier** -- macOS accessibility identifiers
+4. **title** -- Element title/text
+5. **xpath** -- Structural path in accessibility tree
+6. **position** -- Relative position within parent
+7. **visual_vlm** -- AI-powered visual detection
 
-If the primary locator fails, the system automatically tries alternatives.
+If the primary locator fails, the system automatically tries alternatives within a configurable time budget (default: 100 ms).
 
 ## Synchronization
 
@@ -210,12 +206,14 @@ button = wait_for_element(app, "Done", timeout_ms=3000)
 
 ## Performance
 
+Measured on Apple M1 MacBook Pro, macOS 14.2:
+
 | Operation | Time |
 |-----------|------|
-| Element access | ~250µs |
-| Click | ~1ms |
-| Type text | ~5ms |
-| Find element | ~10-50ms |
+| Single attribute read | ~54 us |
+| Element access | ~379 us |
+| Perform action | ~20 us |
+| Find element (Python) | ~0.5-1 ms |
 
 ## CLI Tool
 
@@ -263,7 +261,7 @@ Markers: `@pytest.mark.ax_background`, `@pytest.mark.ax_requires_app(name)`, `@p
 Record browser interactions and generate axterminator code:
 
 1. Install from `browser-extension/` folder
-2. Click extension icon → Start Recording
+2. Click extension icon, then Start Recording
 3. Interact with web pages
 4. Stop and copy generated Python code
 
@@ -271,14 +269,14 @@ Record browser interactions and generate axterminator code:
 
 See the `examples/` directory:
 
-- `basic_usage.py` - Calculator automation
-- `system_preferences.py` - System Settings navigation
-- `finder_automation.py` - Finder file operations
-- `notes_app.py` - Notes app automation
-- `textedit_automation.py` - Document creation
-- `pytest_example.py` - pytest integration
-- `self_healing_locators.py` - Locator strategies
-- `vlm_visual_detection.py` - VLM fallback
+- `basic_usage.py` -- Calculator automation
+- `system_preferences.py` -- System Settings navigation
+- `finder_automation.py` -- Finder file operations
+- `notes_app.py` -- Notes app automation
+- `textedit_automation.py` -- Document creation
+- `pytest_example.py` -- pytest integration
+- `self_healing_locators.py` -- Locator strategies
+- `vlm_visual_detection.py` -- VLM fallback
 
 ## License
 

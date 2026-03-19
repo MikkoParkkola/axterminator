@@ -149,7 +149,7 @@ class AXElement:
 
         The default mode is :data:`BACKGROUND` — the action is delivered
         directly via the Accessibility API without raising the application
-        window, making this a **world-first** focus-stealing-free click.
+        window.
 
         Args:
             mode: :data:`BACKGROUND` (default) or :data:`FOCUS`.

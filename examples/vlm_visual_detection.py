@@ -33,7 +33,7 @@ def main():
             configure_vlm(backend="anthropic")
             print("Anthropic backend configured")
 
-        # Option 3: Use OpenAI GPT-5
+        # Option 3: Use OpenAI GPT-4o
         elif os.environ.get("OPENAI_API_KEY"):
             configure_vlm(backend="openai")
             print("OpenAI backend configured")

@@ -21,8 +21,8 @@ element.click()
 element.click(mode=ax.BACKGROUND)
 ```
 
-!!! success "World First Feature"
-    AXTerminator is the first framework to support true background testing on macOS. Your workflow stays uninterrupted while tests run.
+!!! success "Background Testing"
+    AXTerminator uses `AXUIElementPerformAction` on unfocused windows. Your workflow stays uninterrupted while tests run.
 
 ### Focus Mode
 

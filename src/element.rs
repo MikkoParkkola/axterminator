@@ -197,7 +197,7 @@ impl AXElement {
     fn perform_click(&self, mode: ActionMode) -> PyResult<()> {
         match mode {
             ActionMode::Background => {
-                // WORLD FIRST: Background click without focus stealing!
+                // Background click via AXUIElementPerformAction on unfocused window
                 perform_action(self.element, actions::AX_PRESS)
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
             }

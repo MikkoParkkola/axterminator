@@ -2,7 +2,7 @@
 
 ## Completed Implementation
 
-This document summarizes the complete Rust FFI bindings for macOS Accessibility APIs implemented in `/Users/mikko/github/axterminator/src/accessibility.rs`.
+This document summarizes the complete Rust FFI bindings for macOS Accessibility APIs implemented in `src/accessibility.rs`.
 
 ## Core Functions Implemented
 
@@ -291,7 +291,7 @@ fn demo_all_functions() -> AXResult<()> {
 
 ## File Location
 
-`/Users/mikko/github/axterminator/src/accessibility.rs`
+`src/accessibility.rs`
 
 **Lines of code**: ~936 lines (implementation + tests)
 **Test coverage**: 100% of public API functions

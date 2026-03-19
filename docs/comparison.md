@@ -29,14 +29,16 @@ How AXTerminator compares to other macOS GUI automation tools.
 
 ## Speedup vs Competitors
 
-Based on benchmarks (M1 MacBook Pro, macOS 14.2):
+AXTerminator element access measured with Criterion benchmarks on M1 MacBook Pro, macOS 14.2 (Finder.app target). Competitor numbers are estimates based on architecture analysis and community-reported values, not controlled head-to-head benchmarks.
 
-| Competitor | Their Speed | AXTerminator | Speedup |
-|------------|-------------|--------------|---------|
-| XCUITest | ~200ms | 379µs | **528×** |
-| Appium | ~500ms | 379µs | **1,321×** |
-| PyAutoGUI | ~100ms | 379µs | **264×** |
-| SikuliX | ~1000ms | 379µs | **2,639×** |
+| Competitor | Their Typical Speed | AXTerminator | Approximate Speedup |
+|------------|---------------------|--------------|---------------------|
+| XCUITest | ~200 ms (reported) | 379 us (measured) | ~528x |
+| Appium | ~500 ms (reported) | 379 us (measured) | ~1,321x |
+| PyAutoGUI | ~100 ms (reported) | 379 us (measured) | ~264x |
+| SikuliX | ~1000 ms (reported) | 379 us (measured) | ~2,639x |
+
+The speedup is primarily from eliminating HTTP/WebDriver/JSON protocol overhead. AXTerminator calls `AXUIElement` APIs directly via Rust FFI.
 
 ## Why AXTerminator is Faster
 

@@ -311,9 +311,9 @@ except AXError.Timeout as e:
     print(f"Timeout: {e}")
 ```
 
-## World-First Features
+## Background Testing
 
-### Background Testing (No Focus Stealing!)
+### No Focus Stealing
 
 ```python
 # Your workflow stays uninterrupted
@@ -336,7 +336,7 @@ text = app.find("AXRole:AXTextField")
 text.type_text("test", mode=ax.FOCUS)  # Briefly focuses
 ```
 
-This is revolutionary for:
+Background testing enables:
 - CI/CD pipelines (run tests while working)
 - Parallel test execution (no focus conflicts)
 - Developer productivity (test in background)

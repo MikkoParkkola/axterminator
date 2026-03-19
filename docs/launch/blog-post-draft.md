@@ -1,6 +1,6 @@
-# AXTerminator: World's First Background GUI Testing for macOS
+# AXTerminator: Background GUI Testing for macOS
 
-**TL;DR** -- AXTerminator lets you run GUI tests on macOS applications without stealing window focus. Tests execute in the background while you keep working. It is 1,321x faster than Appium, ships as a Python package, and self-heals broken locators with 7 strategies.
+**TL;DR** -- AXTerminator lets you run GUI tests on macOS applications without stealing window focus. Tests execute in the background while you keep working. Element access takes ~379 us (measured on M1 MacBook Pro), and self-healing locators use 7 strategies to survive UI changes.
 
 ---
 
@@ -12,13 +12,15 @@ CI runners partially solve this, but local development iteration still requires 
 
 ## The Discovery
 
-macOS has an Accessibility API (`AXUIElement`) that every testing framework uses. But every framework also calls `AXUIElementPerformAction` only after activating the target application and raising its window. It turns out this activation step is unnecessary. The API works on unfocused windows.
+macOS has an Accessibility API (`AXUIElement`) that every testing framework uses. But every framework also calls `AXUIElementPerformAction` only after activating the target application and raising its window. It turns out this activation step is unnecessary -- the API works on unfocused windows.
 
-AXTerminator exploits this undocumented capability. Button clicks, menu selections, value reads -- they all work while the application sits in the background.
+This is undocumented in Apple's developer documentation, but verified working on macOS 12 through 15. AXTerminator uses this capability to perform button clicks, menu selections, and value reads while the application sits in the background.
+
+We have not found another macOS GUI testing framework that does this. XCUITest, Appium Mac2, PyAutoGUI, Maestro, and SikuliX all require focus. If you know of one that does, please let us know.
 
 ## What You Get
 
-### Background Testing (World First)
+### Background Testing
 
 ```python
 import axterminator as ax
@@ -36,19 +38,20 @@ assert "Example" in title
 
 No window flashing. No focus stealing. Your cursor stays where it is.
 
-### 379 Microsecond Element Access
+### Sub-Millisecond Element Access
 
 AXTerminator talks directly to the Accessibility API through Rust FFI. No HTTP server. No JSON serialization. No WebDriver protocol. The entire path from Python call to AX API response is a single function call through PyO3.
 
-| Framework | Element Access | Relative |
-|-----------|---------------|----------|
-| **AXTerminator** | **379 us** | 1x |
-| PyAutoGUI | ~100 ms | 264x slower |
-| XCUITest | ~200 ms | 528x slower |
-| Maestro | ~300 ms | 792x slower |
-| Appium | ~500 ms | 1,321x slower |
+Benchmarked on Apple M1 MacBook Pro, macOS 14.2, using Criterion:
 
-Access 1,000 elements in 380 ms -- the time it takes Appium to access one.
+| Framework | Element Access | How Measured |
+|-----------|---------------|--------------|
+| **AXTerminator** | **379 us** | Criterion `search_first_button` against Finder.app |
+| PyAutoGUI | ~100 ms | Estimated (coordinate-based, screen capture) |
+| XCUITest | ~200 ms | Apple documentation, typical reported values |
+| Appium | ~500 ms | Estimated (HTTP + WebDriver + XCTest bridge overhead) |
+
+The competitor numbers are estimates based on architecture analysis and community-reported values, not controlled benchmarks. The AXTerminator number is directly measured. The speedup is a function of eliminating HTTP/WebDriver/JSON protocol overhead.
 
 ### 7-Strategy Self-Healing Locators
 
@@ -57,23 +60,12 @@ When a UI element moves, changes label, or gets restructured, AXTerminator tries
 1. **data-testid** -- stable test identifiers set by developers
 2. **aria-label** -- accessibility labels
 3. **identifier** -- AXIdentifier attribute
-4. **title** -- window and button titles
+4. **title** -- window and button titles (fuzzy matching)
 5. **xpath** -- structural tree path
 6. **position** -- spatial location heuristic
-7. **visual-vlm** -- AI vision model fallback (Claude, GPT-4o, Gemini, Ollama)
+7. **visual-vlm** -- AI vision model fallback (local MLX, Ollama, or cloud VLMs)
 
-The healing system runs in under 100 ms by default. Successful heals are cached so subsequent lookups skip failed strategies.
-
-```python
-import axterminator as ax
-
-config = ax.HealingConfig(
-    strategies=["data_testid", "aria_label", "title"],
-    max_heal_time_ms=200,
-    cache_healed=True,
-)
-ax.configure_healing(config)
-```
+The healing system runs within a configurable time budget (default: 100 ms). Successful heals are cached so subsequent lookups skip failed strategies.
 
 ### Python-Native API
 
@@ -96,19 +88,14 @@ save_btn = app.find("//AXButton[@AXTitle='Save']")
 
 # Background interactions
 save_btn.click()                           # No focus steal
-app.find("filename").type_text("doc.txt")  # Focus mode for typing
 app.find("filename").set_value("doc.txt")  # Background mode for value
 
 # Wait for UI state
 app.wait_for_element("Success", timeout_ms=3000)
 app.wait_for_idle(timeout_ms=5000)
-
-# Screenshots (element or full window)
-png_data = save_btn.screenshot()
-window_png = app.screenshot()
 ```
 
-Full type stubs (`.pyi`) ship with the package -- autocomplete and type checking work out of the box in VSCode, PyCharm, and mypy.
+Full type stubs (`.pyi`) ship with the package -- autocomplete and type checking work out of the box in VS Code, PyCharm, and mypy.
 
 ### pytest Plugin
 
@@ -166,19 +153,11 @@ macOS Accessibility API (AXUIElement)
 
 The `abi3-py39` build target produces a single `.so` that works across Python 3.9 through 3.14+ without recompilation.
 
-## Patent Claims
-
-AXTerminator's background testing capability is covered by pending patent claims (application date: 2026-01-10):
-
-- **Patent 1**: Background GUI testing without focus acquisition via AXUIElementPerformAction on unfocused windows
-- **Patent 2**: XPC-based test synchronization for deterministic idle detection
-- **Patent 3**: Self-healing locator system with 7-strategy cascading fallback
-
 ## Who Should Use This
 
 - **macOS developers** who want to run GUI tests without losing their desktop
 - **QA engineers** building automated test suites for native macOS applications
-- **CI/CD teams** who need fast, reliable GUI tests in headless or shared-runner environments
+- **CI/CD teams** who need fast, reliable GUI tests on macOS runners
 - **AI/LLM tool builders** who want to give models real GUI interaction capabilities
 
 ## Getting Started
@@ -187,14 +166,15 @@ AXTerminator's background testing capability is covered by pending patent claims
 pip install axterminator
 ```
 
-Documentation: [mikkoparkkola.github.io/axterminator](https://mikkoparkkola.github.io/axterminator/)
-Source: [github.com/MikkoParkkola/axterminator](https://github.com/MikkoParkkola/axterminator)
-PyPI: [pypi.org/project/axterminator](https://pypi.org/project/axterminator/)
+- Documentation: [mikkoparkkola.github.io/axterminator](https://mikkoparkkola.github.io/axterminator/)
+- Source: [github.com/MikkoParkkola/axterminator](https://github.com/MikkoParkkola/axterminator)
+- PyPI: [pypi.org/project/axterminator](https://pypi.org/project/axterminator/)
+- Discussions: [github.com/MikkoParkkola/axterminator/discussions](https://github.com/MikkoParkkola/axterminator/discussions)
 
 ---
 
 *AXTerminator is dual-licensed under MIT and Apache 2.0.*
 
-## Standing on Shoulders
+## Acknowledgements
 
-AXTerminator was inspired by [Terminator](https://github.com/mediar-ai/terminator) from mediar-ai, which brought accessible GUI automation to Windows. We wanted the same power on macOS — but we also wanted something new: the ability to test apps *without stealing focus from your work*. That became background testing, and it turned out to be a world first.
+AXTerminator was inspired by [Terminator](https://github.com/mediar-ai/terminator) from mediar-ai, which brought accessible desktop GUI automation to Windows. We wanted the same power on macOS, plus the ability to test apps without stealing focus from your work.

@@ -60,8 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial release
-- Background GUI testing (world first)
+- Background GUI testing (no focus stealing)
 - 7-strategy self-healing locators
 - Python bindings via PyO3
 - macOS Accessibility API integration
-- 379us element access (1,321x faster than Appium)
+- ~379 us element access (measured on M1 MacBook Pro)

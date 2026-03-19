@@ -36,6 +36,8 @@
 
 ## Post-release
 
+- [ ] Verify GitHub Discussions is enabled (`gh api repos/MikkoParkkola/axterminator --jq '.has_discussions'`)
+- [ ] Create welcome discussion post in "Announcements" category
 - [ ] GitHub release tag:
   ```bash
   git tag -a v0.3.2 -m "Release v0.3.2: Clippy cleanup, type stubs, doc improvements"

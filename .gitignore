@@ -51,3 +51,9 @@ EspressoMacSDK/Package.resolved
 .mypy_cache/
 .ruff_cache/
 site/
+
+# Accidental home directory
+~/
+
+# Internal tiers
+.tiers/

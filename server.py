@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""AXTerminator MCP Server - World's First Background macOS GUI Testing.
+"""AXTerminator MCP Server - macOS GUI Testing with Background Support.
 
-WORLD FIRST: Test macOS apps without stealing focus - true background testing.
+Test macOS apps without stealing focus using the Accessibility API.
 
-Performance:
-    - Element access: 242µs (vs 500ms-2s competitors)
-    - Full login test: 103ms (vs 6.6s Appium)
-    - 60-100x faster than XCUITest/Appium
+Performance (measured on M1 MacBook Pro, macOS 14.2):
+    - Element access: ~379 us (direct AXUIElement via Rust FFI)
+    - Action overhead: ~20 us
+    - Single attribute: ~54 us
 
 Features:
     - Background testing (no focus stealing!)
@@ -174,10 +174,10 @@ Query syntax:
         ),
         Tool(
             name="ax_click",
-            description="""Click a UI element - IN BACKGROUND (no focus stealing!).
+            description="""Click a UI element in background mode (no focus stealing).
 
-WORLD FIRST: Click without stealing focus from user's active work.
-Use mode=focus only if the element requires it (rare).
+Background clicks use AXUIElementPerformAction on unfocused windows.
+Use mode=focus only when the element requires it (e.g., text input).
 
 Returns: Click result and element state after click.""",
             inputSchema={

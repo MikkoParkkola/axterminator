@@ -1,5 +1,5 @@
 site_name: AXTerminator
-site_description: World's Most Superior macOS GUI Testing Framework
+site_description: macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators
 site_url: https://mikkoparkkola.github.io/axterminator/
 repo_url: https://github.com/MikkoParkkola/axterminator
 repo_name: MikkoParkkola/axterminator
@@ -73,7 +73,7 @@ nav:
     - Benchmarks: performance.md
     - Tool Comparison: comparison.md
   - Architecture:
-    - Design: axterminator-design-doc.md
+    - Design: DESIGN.md
     - Sync Engine: SYNC_ENGINE.md
 
 extra:

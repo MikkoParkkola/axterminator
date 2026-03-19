@@ -10,7 +10,7 @@ use crate::ActionMode;
 pub fn execute_action(element: AXUIElementRef, action: &str, mode: ActionMode) -> AXResult<()> {
     match mode {
         ActionMode::Background => {
-            // WORLD FIRST: Perform action without stealing focus
+            // Background action: AXUIElementPerformAction works on unfocused windows
             perform_action(element, action)
         }
         ActionMode::Focus => {

@@ -23,10 +23,10 @@ if TYPE_CHECKING:
 
 class TestBackgroundClick:
     """
-    Tests for background click - the WORLD FIRST feature.
+    Tests for background click -- AXTerminator's key differentiator.
 
-    This is the most critical test class as background clicking
-    without focus stealing is AXTerminator's key differentiator.
+    Background clicking uses AXUIElementPerformAction on unfocused
+    windows to interact without stealing focus.
     """
 
     @pytest.mark.background

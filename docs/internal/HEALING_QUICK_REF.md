@@ -80,6 +80,6 @@ config = HealingConfig(
 
 ## Files
 
-- `/Users/mikko/github/axterminator/src/healing.rs` - Implementation (855 lines)
-- `/Users/mikko/github/axterminator/HEALING_IMPLEMENTATION.md` - Full docs
-- `/Users/mikko/github/axterminator/HEALING_QUICK_REF.md` - This file
+- `src/healing.rs` - Implementation (855 lines)
+- `HEALING_IMPLEMENTATION.md` - Full docs
+- `HEALING_QUICK_REF.md` - This file

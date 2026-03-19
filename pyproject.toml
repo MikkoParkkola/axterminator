@@ -5,11 +5,11 @@ build-backend = "maturin"
 [project]
 name = "axterminator"
 version = "0.3.2"
-description = "World's most superior macOS GUI testing framework with background testing"
+description = "macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Mikko", email = "mikko@broa.biz" }]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = ["macos", "gui", "testing", "accessibility", "automation", "background"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -71,7 +71,9 @@ axterminator = "axterminator.pytest_plugin"
 
 [project.urls]
 Homepage = "https://github.com/MikkoParkkola/axterminator"
-Documentation = "https://github.com/MikkoParkkola/axterminator#readme"
+Documentation = "https://mikkoparkkola.github.io/axterminator/"
+Changelog = "https://github.com/MikkoParkkola/axterminator/blob/main/CHANGELOG.md"
+Discussions = "https://github.com/MikkoParkkola/axterminator/discussions"
 Repository = "https://github.com/MikkoParkkola/axterminator"
 Issues = "https://github.com/MikkoParkkola/axterminator/issues"
 

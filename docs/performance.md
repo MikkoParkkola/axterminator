@@ -1,6 +1,6 @@
 # Performance Benchmarks
 
-AXTerminator is the fastest macOS GUI testing framework available.
+AXTerminator achieves sub-millisecond element access by calling the macOS Accessibility API directly via Rust FFI, eliminating HTTP/WebDriver overhead.
 
 ## Measured Performance
 
@@ -14,15 +14,15 @@ AXTerminator is the fastest macOS GUI testing framework available.
 
 ## Competitor Comparison
 
+AXTerminator element access is directly measured. Competitor numbers are estimates based on architecture analysis and community-reported values, not controlled head-to-head benchmarks.
+
 | Framework | Element Access | vs AXTerminator | Source |
 |-----------|---------------|-----------------|--------|
-| **AXTerminator** | **379 µs** | 1× (baseline) | Measured |
-| XCUITest | ~200,000 µs | 528× slower | Apple docs |
-| Appium (Mac2) | ~500,000 µs | **1,321× slower** | Estimated |
-| Appium (worst case) | ~2,000,000 µs | 5,283× slower | WebDriver overhead |
+| **AXTerminator** | **379 us** | 1x (baseline) | Criterion benchmark |
+| XCUITest | ~200 ms | ~528x slower | Community-reported typical values |
+| Appium (Mac2) | ~500 ms | ~1,321x slower | Architecture estimate (HTTP + WebDriver + XCTest) |
 
-!!! success "Verified Performance"
-    AXTerminator is **1,321× faster** than Appium for element access.
+The difference is architectural: AXTerminator eliminates all network and serialization overhead.
 
 ## Why So Fast?
 

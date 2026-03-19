@@ -1,11 +1,12 @@
 //! # `AXTerminator` - macOS GUI Testing Framework
 //!
-//! World's most superior macOS GUI testing framework with **WORLD FIRST** background testing.
+//! A macOS GUI testing framework with background testing, sub-millisecond
+//! element access, and self-healing locators.
 //!
 //! ## Key Features
 //!
-//! - **Background Testing**: Test apps without stealing focus (WORLD FIRST)
-//! - **60-100x Faster**: 242µs element access vs 500ms-2s competitors
+//! - **Background Testing**: Test apps without stealing focus
+//! - **Sub-millisecond Access**: ~379 us element access (measured on M1 MacBook Pro)
 //! - **Self-Healing**: 7-strategy fallback for element location
 //! - **Unified API**: Works with Native, Electron, and `WebView` apps
 //!
