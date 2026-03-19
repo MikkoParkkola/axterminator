@@ -224,6 +224,25 @@ The speedup over Appium (~500 ms per element access) comes from eliminating HTTP
 
 *Reproduce: `cargo bench` or compile and run `benches/bench_quick.rs`. See [full benchmarks](https://mikkoparkkola.github.io/axterminator/performance/).*
 
+## Known Limitations
+
+Background testing works for most interactions via `AXUIElementPerformAction()`, but some operations still require or steal window focus:
+
+| Operation | Background? | Why |
+|-----------|:-----------:|-----|
+| Click, press, pick | Yes | AX actions work on unfocused windows |
+| Read attributes/values | Yes | AX queries don't need focus |
+| Screenshots | Yes | `CGWindowListCreateImage` captures any window |
+| **Text input** | **Partial** | Some apps accept AX value setting; others require focused text field + CGEvent keystrokes |
+| **Drag operations** | **No** | Mouse events are global — requires cursor control |
+| **System dialogs** | **No** | Authentication prompts and file pickers always grab focus |
+| **Some Electron apps** | **Partial** | May not respond to background AX actions; use CDP fallback |
+
+**Workarounds:**
+- For text input: prefer `ax_set_value` (AX-based) over `ax_type` (CGEvent-based) when possible
+- For Electron apps: enable CDP integration (`ax_connect` with bundle ID detection)
+- For unavoidable focus stealing: use virtual desktop isolation (planned — [#23](https://github.com/MikkoParkkola/axterminator/issues/23))
+
 ## Examples
 
 See [`examples/`](examples/) for real-world automation:
