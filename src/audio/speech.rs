@@ -268,7 +268,10 @@ fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
         AudioError::Transcription("Failed to create recognition request".to_string())
     })?;
 
-    set_requires_on_device_recognition(request, true);
+    // Prefer on-device but fall back to server-based if on-device model
+    // is not downloaded. requiresOnDeviceRecognition=true causes silent
+    // timeout when the model isn't available.
+    set_requires_on_device_recognition(request, false);
 
     let result_holder: Arc<Mutex<Option<Result<String, AudioError>>>> =
         Arc::new(Mutex::new(None));
@@ -304,7 +307,10 @@ fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
     if timeout.timed_out() {
         warn!("SFSpeechRecognizer timed out after 10s");
         return Err(AudioError::Transcription(
-            "Recognition timed out".to_string(),
+            "Recognition timed out — check that Speech Recognition is enabled in \
+             System Settings > Privacy & Security > Speech Recognition, and that \
+             the on-device dictation model is downloaded (System Settings > Keyboard > Dictation)"
+                .to_string(),
         ));
     }
 
