@@ -1,4 +1,4 @@
 #!/bin/bash
 # MCP Server wrapper for axterminator
-cd /Users/mikko/github/axterminator
+cd "$(dirname "$0")"
 exec uv run python server.py
