@@ -98,8 +98,8 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 | Click, press, read values, screenshots | Yes | Core operations work without focus |
 | Text input | Partial | Some apps need focused text field |
 | Drag, system dialogs | No | Require cursor control / always grab focus |
-| Gesture recognition | Built | Camera permission + calibrated heuristics |
-| Speech transcription | Built | Requires Speech Recognition permission |
+| Gesture recognition | Yes | Verified: thumbs_up at 88.8% confidence |
+| Speech transcription | Yes | Verified: on-device, requires Dictation enabled |
 
 ## Feature Flags
 

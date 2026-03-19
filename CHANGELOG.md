@@ -27,14 +27,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Gesture recognition: TIP vs MCP knuckle comparison, confidence filtering (#25)
 - Speech recognition: TCC permission request + 30s timeout (#26)
+- Speech recognition: pump CFRunLoop for SFSpeechRecognizer callback delivery (#27)
+- Speech recognition: capture at native 48kHz sample rate — was writing 48kHz
+  data with 16kHz WAV header, causing 3x slowdown and unrecognizable audio (#27)
 - Camera permission request when status undetermined
 - PyO3 extension-module decoupled from CLI binary via `python-ext` feature flag
 - bytes 1.11.0 integer overflow (RUSTSEC-2026-0007)
+- Dangerous unwrap() on missing JSON-RPC id, NaN confidence, CString user input
+- Removed Pickle virtual audio drivers intercepting default input device
+
+### Security
+- pyo3 0.22 → 0.24.2 (RUSTSEC-2025-0020: buffer overflow in PyString)
+- lru 0.12 → 0.16.3 (RUSTSEC-2026-0002: IterMut unsoundness)
 
 ### Changed
 - README rewritten: MCP server first, no superlatives, honest claims only
 - Audio module split from 1567 LOC monolith to 5-file module (max 436 LOC)
+- MCP tools_extended.rs (2640 LOC) split into 6 focused modules
+- 5 additional modules split to meet 800 LOC quality gate
+- camera.rs refactored to camera/ module directory
+- Issue/PR templates updated for MCP-first workflow
 - Gateway config points to release binary
+- Published v0.5.0 to crates.io
 
 ## [0.4.0] - 2026-03-19
 
