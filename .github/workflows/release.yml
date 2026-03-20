@@ -19,7 +19,7 @@ jobs:
           # macOS Apple Silicon (ARM64)
           - os: macos-14
             target: aarch64-apple-darwin
-          # macOS Intel (x86_64) - macos-15-intel runner
+          # macOS Intel (x86_64)
           - os: macos-15
             target: x86_64-apple-darwin
 
@@ -32,16 +32,19 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --features cli --target ${{ matrix.target }}
 
-      - name: Rename binary
+      - name: Rename artifacts
         run: |
           cd target/${{ matrix.target }}/release
-          # The library is the main output for this crate
+          # CLI binary
+          if [ -f axterminator ]; then
+            cp axterminator axterminator-${{ matrix.target }}
+          fi
+          # Library
           if [ -f libaxterminator.dylib ]; then
             cp libaxterminator.dylib axterminator-${{ matrix.target }}.dylib
           fi
-          # Also package the rlib if it exists
           if [ -f libaxterminator.rlib ]; then
             cp libaxterminator.rlib axterminator-${{ matrix.target }}.rlib
           fi
@@ -51,6 +54,7 @@ jobs:
         with:
           name: axterminator-${{ matrix.target }}
           path: |
+            target/${{ matrix.target }}/release/axterminator-${{ matrix.target }}
             target/${{ matrix.target }}/release/axterminator-${{ matrix.target }}.*
 
   build-python:
@@ -91,7 +95,7 @@ jobs:
           path: target/wheels/*.whl
 
   release:
-    name: Create Release
+    name: Create GitHub Release
     needs: [build-rust, build-python]
     runs-on: ubuntu-latest
     permissions:
@@ -108,8 +112,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          # Copy all artifacts to release folder
-          find artifacts -type f \( -name "*.dylib" -o -name "*.rlib" -o -name "*.whl" \) -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.dylib" -o -name "*.rlib" -o -name "*.whl" -o -name "axterminator-*-apple-darwin" \) -exec cp {} release/ \;
           cd release
           ls -la
           sha256sum * > checksums-sha256.txt || shasum -a 256 * > checksums-sha256.txt
@@ -121,6 +124,24 @@ jobs:
           generate_release_notes: true
           files: |
             release/*
+
+  publish-crates-io:
+    name: Publish to crates.io
+    needs: [build-rust]
+    runs-on: macos-14
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/axterminator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        run: cargo publish --features cli
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   publish-pypi:
     name: Publish to PyPI
@@ -144,3 +165,60 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+  update-homebrew:
+    name: Update Homebrew tap
+    needs: [release]
+    runs-on: ubuntu-latest
+    environment:
+      name: homebrew
+      url: https://github.com/MikkoParkkola/homebrew-tap
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: MikkoParkkola/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL="https://github.com/MikkoParkkola/axterminator/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          SHA256=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
+
+          cat > Formula/axterminator.rb << FORMULA
+          class Axterminator < Formula
+            desc "Background-first macOS GUI automation with MCP server support"
+            homepage "https://github.com/MikkoParkkola/axterminator"
+            url "$URL"
+            sha256 "$SHA256"
+            version "$VERSION"
+            license "MIT OR Apache-2.0"
+
+            depends_on :macos
+            depends_on "rust" => :build
+
+            def install
+              system "cargo", "install",
+                "--locked",
+                "--features", "cli",
+                "--root", prefix,
+                "--path", "."
+            end
+
+            test do
+              assert_match "accessibility", shell_output("#{bin}/axterminator check")
+            end
+          end
+          FORMULA
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/axterminator.rb
+          git commit -m "axterminator ${GITHUB_REF_NAME}" || echo "No changes"
+          git push
