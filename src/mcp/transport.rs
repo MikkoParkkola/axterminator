@@ -156,8 +156,11 @@ mod http {
 
     use axum::extract::{ConnectInfo, State};
     use axum::http::{HeaderMap, StatusCode};
-    use axum::response::{IntoResponse, Response, Sse};
-    use axum::routing::{get, post};
+    // axum 0.8: `NoContent` is the idiomatic zero-allocation 204 response type.
+    use axum::response::{IntoResponse, NoContent, Response, Sse};
+    // Only `post` is imported — GET is registered via `MethodRouter::get`
+    // (the method, not the routing function), so `axum::routing::get` is unused.
+    use axum::routing::post;
     use axum::{Json, Router};
     use serde_json::Value;
     use tokio::sync::broadcast;
@@ -312,10 +315,9 @@ mod http {
                     StatusCode::INTERNAL_SERVER_ERROR.into_response()
                 }
             },
-            None => {
-                // Notification — no response body.
-                StatusCode::NO_CONTENT.into_response()
-            }
+            // Notification — no response body.
+            // axum 0.8: `NoContent` is the idiomatic zero-allocation 204 type.
+            None => NoContent.into_response(),
         }
     }
 
@@ -360,6 +362,28 @@ mod http {
     }
 
     // -----------------------------------------------------------------------
+    // 405 fallback
+    // -----------------------------------------------------------------------
+
+    /// Return 405 Method Not Allowed with an explicit `Allow` header.
+    ///
+    /// Attached as the `MethodRouter::fallback` on the `/mcp` route so that
+    /// clients using DELETE, PUT, PATCH, etc. receive a precise 405 instead of
+    /// the default bare 405 with no body.
+    ///
+    /// axum 0.8 routes GET+POST on a single `MethodRouter`; when another HTTP
+    /// method is used the framework calls this fallback and automatically
+    /// appends `Allow: GET, POST` to the response via the tower service layer.
+    async fn method_not_allowed() -> Response {
+        (
+            StatusCode::METHOD_NOT_ALLOWED,
+            [("Allow", "GET, POST")],
+            "/mcp only accepts GET (SSE stream) and POST (JSON-RPC)",
+        )
+            .into_response()
+    }
+
+    // -----------------------------------------------------------------------
     // Server startup
     // -----------------------------------------------------------------------
 
@@ -383,9 +407,15 @@ mod http {
         let state = Arc::new(AppState::new(validator));
         let addr = SocketAddr::new(cfg.bind, cfg.port);
 
+        // axum 0.8: merge GET+POST onto one MethodRouter so the framework
+        // emits 405 (not 404) for any other method on /mcp.  The custom
+        // `fallback` enriches the 405 with a human-readable body.
+        let mcp_route = post(post_mcp)
+            .get(get_mcp_sse)
+            .fallback(method_not_allowed);
+
         let app = Router::new()
-            .route("/mcp", post(post_mcp))
-            .route("/mcp", get(get_mcp_sse))
+            .route("/mcp", mcp_route)
             .with_state(state)
             .into_make_service_with_connect_info::<SocketAddr>();
 

@@ -43,7 +43,7 @@ pub enum HealStrategy {
 }
 
 /// Healing configuration
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, Clone)]
 pub struct HealingConfig {
     /// Ordered list of strategies to try
@@ -610,13 +610,15 @@ fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement
     // Get window dimensions for coordinate conversion
     let (width, height) = get_window_dimensions(root)?;
 
-    // Call Python VLM detector
-    let result = Python::with_gil(|py| -> Option<(f64, f64)> {
+    // Call Python VLM detector.
+    // `try_attach` returns None if the interpreter is finalizing, avoiding a
+    // panic that `attach` would raise on interpreter shutdown.
+    let result = Python::try_attach(|py| -> Option<(f64, f64)> {
         // Import the VLM module
         let vlm_module = py.import("axterminator.vlm").ok()?;
         let detect_fn = vlm_module.getattr("detect_element_visual").ok()?;
 
-        // Create PyBytes from screenshot data
+        // Create PyBytes from screenshot data — zero-copy view into our Vec<u8>
         let py_bytes = pyo3::types::PyBytes::new(py, &screenshot_data);
 
         // Call: detect_element_visual(image_data, description, width, height)
@@ -631,7 +633,10 @@ fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement
 
         let coords: (f64, f64) = result.extract().ok()?;
         Some(coords)
-    });
+    })
+    // `try_attach` returns `Option<Option<(f64,f64)>>`: outer None means the
+    // interpreter is finalizing.  Flatten to treat both absent cases as no match.
+    .flatten();
 
     // If we got coordinates, find element at that position
     if let Some((x, y)) = result {

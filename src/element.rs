@@ -12,7 +12,7 @@ use crate::error::{AXError, AXResult};
 use crate::ActionMode;
 
 /// Wrapper for an accessibility element
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug)]
 pub struct AXElement {
     /// Raw accessibility element reference

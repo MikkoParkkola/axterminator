@@ -239,9 +239,10 @@ impl BearerValidator {
 #[cfg(feature = "http-transport")]
 #[must_use]
 pub fn generate_token() -> String {
-    use rand::RngCore as _;
+    use rand::Rng as _;
     let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    // rand 0.10: `rand::rng()` + `Rng::fill_bytes` (RngCore re-exported via Rng).
+    rand::rng().fill_bytes(&mut bytes);
     format!("axt_{}", hex::encode_bytes(&bytes))
 }
 

@@ -80,7 +80,7 @@ pub use router::*;
 pub use sync::*;
 
 /// Action mode for element interactions
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActionMode {
     /// Perform action in background without stealing focus (DEFAULT)
