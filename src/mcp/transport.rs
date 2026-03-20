@@ -410,9 +410,7 @@ mod http {
         // axum 0.8: merge GET+POST onto one MethodRouter so the framework
         // emits 405 (not 404) for any other method on /mcp.  The custom
         // `fallback` enriches the 405 with a human-readable body.
-        let mcp_route = post(post_mcp)
-            .get(get_mcp_sse)
-            .fallback(method_not_allowed);
+        let mcp_route = post(post_mcp).get(get_mcp_sse).fallback(method_not_allowed);
 
         let app = Router::new()
             .route("/mcp", mcp_route)
