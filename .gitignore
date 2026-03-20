@@ -57,3 +57,6 @@ site/
 
 # Internal tiers
 .tiers/
+
+# Claude Code
+.claude/
