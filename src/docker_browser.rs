@@ -385,7 +385,7 @@ impl ScreenshotShooter for RealCdpShooter {
         });
 
         socket
-            .send(tungstenite::Message::Text(request.to_string()))
+            .send(tungstenite::Message::Text(request.to_string().into()))
             .map_err(|e| AXError::SystemError(format!("CDP send: {e}")))?;
 
         loop {

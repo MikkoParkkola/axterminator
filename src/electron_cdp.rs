@@ -195,7 +195,7 @@ impl ElectronConnection {
 
         debug!(method, %id, "CDP request");
         self.socket
-            .send(Message::Text(msg.to_string()))
+            .send(Message::Text(msg.to_string().into()))
             .map_err(|e| AXError::SystemError(format!("CDP send: {e}")))?;
 
         loop {

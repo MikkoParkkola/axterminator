@@ -66,7 +66,7 @@ clap_complete = { version = "4.5", optional = true }
 # HTTP transport (feature-gated)
 axum = { version = "0.7", features = ["http1", "http2", "json", "tokio"], optional = true }
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }
-rand = { version = "0.8", optional = true }
+rand = { version = "0.9", optional = true }
 
 # Base64 encoding for screenshot data
 base64 = "0.22"
@@ -74,7 +74,7 @@ base64 = "0.22"
 # macOS accessibility
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
-core-graphics = { version = "0.24", features = ["elcapitan", "highsierra"] }
+core-graphics = { version = "0.25", features = ["elcapitan", "highsierra"] }
 core-graphics-types = "0.2"
 
 # macOS specific
@@ -103,10 +103,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # WebSocket for Chrome DevTools Protocol
-tungstenite = "0.24"
+tungstenite = "0.29"
 
 # Process inspection
-sysinfo = "0.33"
+sysinfo = "0.38"
 
 # URL parsing
 url = "2.5"
@@ -119,7 +119,7 @@ regex = "1.11"
 once_cell = "1.20"
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.6"
 tempfile = "3.15"
 
 [build-dependencies]

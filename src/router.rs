@@ -152,7 +152,7 @@ impl CDPConnection {
 
         // Send request
         self.socket
-            .send(Message::Text(request.to_string()))
+            .send(Message::Text(request.to_string().into()))
             .map_err(|e| AXError::SystemError(format!("CDP send failed: {e}")))?;
 
         // Read response
