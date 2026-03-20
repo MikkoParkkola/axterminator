@@ -5,6 +5,29 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-20
+
+### Fixed
+- Speech recognition: capture at native 48kHz sample rate (was 16kHz header
+  with 48kHz data, causing garbled audio unrecognizable by SFSpeechRecognizer)
+- Speech recognition: pump CFRunLoop for callback delivery (was blocking RunLoop)
+- Gesture recognition: TIP vs MCP knuckle comparison with confidence filtering
+- Dangerous unwrap() on missing JSON-RPC id, NaN confidence, CString user input
+- 3 doctest feature-gate issues (camera, spaces)
+
+### Security
+- pyo3 0.22 → 0.24.2 (RUSTSEC-2025-0020: buffer overflow)
+- lru 0.12 → 0.16.3 (RUSTSEC-2026-0002: unsoundness)
+- cargo audit: 0 advisories
+
+### Changed
+- Refactored 6 modules to meet 800 LOC quality gate (tools_extended, tools,
+  resources, server, elicitation, camera)
+- Release pipeline: crates.io + Homebrew auto-update on tag push
+- CLI binary now included in GitHub Release assets
+- README badges: crates.io version/downloads, PyPI, dependency status
+- Issue/PR templates updated for MCP-first workflow
+
 ## [0.5.0] - 2026-03-19
 
 ### Added

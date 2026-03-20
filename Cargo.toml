@@ -1,6 +1,6 @@
 [package]
 name = "axterminator"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Mikko Parkkola <mikko.parkkola@iki.fi>"]
 description = "macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators"
