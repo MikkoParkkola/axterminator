@@ -363,8 +363,8 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_audio_devices_dispatches() {
-        use std::sync::Arc;
         use crate::mcp::tools::AppRegistry;
+        use std::sync::Arc;
 
         // GIVEN: running system, no app registry needed
         let registry = Arc::new(AppRegistry::default());
@@ -383,8 +383,8 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_listen_duration_exceeded_returns_error() {
-        use std::sync::Arc;
         use crate::mcp::tools::AppRegistry;
+        use std::sync::Arc;
 
         // GIVEN: duration well over the cap
         let registry = Arc::new(AppRegistry::default());
@@ -404,14 +404,18 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_speak_missing_text_returns_error() {
-        use std::sync::Arc;
         use crate::mcp::tools::AppRegistry;
+        use std::sync::Arc;
 
         // GIVEN: no text field
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
-        let result =
-            crate::mcp::tools_extended::call_tool_extended("ax_speak", &json!({}), &registry, &mut out);
+        let result = crate::mcp::tools_extended::call_tool_extended(
+            "ax_speak",
+            &json!({}),
+            &registry,
+            &mut out,
+        );
         assert!(result.is_some());
         assert!(result.unwrap().is_error);
     }

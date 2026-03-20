@@ -14,8 +14,8 @@ use std::time::Duration;
 use base64::Engine as _;
 
 use super::{
-    validate_duration, validate_gesture_names, CameraDevice, CameraError, CameraPosition,
-    Gesture, GestureDetection, Hand, ImageData,
+    validate_duration, validate_gesture_names, CameraDevice, CameraError, CameraPosition, Gesture,
+    GestureDetection, Hand, ImageData,
 };
 
 // -----------------------------------------------------------------------

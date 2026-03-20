@@ -53,6 +53,8 @@ pub(super) enum Phase {
 pub(super) struct Server {
     pub(super) registry: Arc<AppRegistry>,
     pub(super) phase: Phase,
+    #[cfg(feature = "watch")]
+    pub(super) watch_state: Arc<crate::mcp::tools_watch::WatchState>,
 }
 
 impl Server {
@@ -60,6 +62,8 @@ impl Server {
         Self {
             registry: Arc::new(AppRegistry::default()),
             phase: Phase::Uninitialized,
+            #[cfg(feature = "watch")]
+            watch_state: Arc::new(crate::mcp::tools_watch::WatchState::new()),
         }
     }
 
@@ -216,6 +220,10 @@ impl Default for ServerHandle {
 ///
 /// This is the entry point called by `axterminator mcp serve --stdio`.
 ///
+/// When the `watch` feature is active, the server also drains any pending
+/// watch events from the active watcher channel and emits them as
+/// `notifications/claude/channel` notifications after each request.
+///
 /// # Errors
 ///
 /// Returns an error if stdin or stdout I/O fails, or if JSON serialisation fails
@@ -227,6 +235,8 @@ pub fn run_stdio() -> anyhow::Result<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
     let mut server = Server::new();
+    #[cfg(feature = "watch")]
+    let mut watch_event_rx: Option<tokio::sync::mpsc::Receiver<crate::watch::WatchEvent>> = None;
 
     for line in stdin.lock().lines() {
         let line = line?;
@@ -249,13 +259,58 @@ pub fn run_stdio() -> anyhow::Result<()> {
             }
         };
 
+        // Drain any buffered watch events before processing the next request.
+        #[cfg(feature = "watch")]
+        drain_watch_events(&mut watch_event_rx, &mut stdout_lock);
+
         if let Some(resp) = server.handle(&msg, &mut stdout_lock) {
+            // After ax_watch_start, capture the new event receiver.
+            #[cfg(feature = "watch")]
+            maybe_capture_watch_receiver(&server, &mut watch_event_rx, &msg.method);
+
             write_response(&mut stdout_lock, &resp)?;
         }
+
+        // Drain again after responding to minimise notification latency.
+        #[cfg(feature = "watch")]
+        drain_watch_events(&mut watch_event_rx, &mut stdout_lock);
     }
 
     info!("stdin closed, shutting down");
     Ok(())
+}
+
+/// Drain all pending watch events and emit them as channel notifications.
+#[cfg(feature = "watch")]
+fn drain_watch_events(
+    rx: &mut Option<tokio::sync::mpsc::Receiver<crate::watch::WatchEvent>>,
+    out: &mut impl io::Write,
+) {
+    use crate::mcp::watch_channel::{emit_channel_notification, event_to_channel_notification};
+
+    let Some(receiver) = rx else { return };
+    while let Ok(event) = receiver.try_recv() {
+        if let Some(params) = event_to_channel_notification(&event) {
+            // Best-effort — I/O errors on notifications do not terminate the server.
+            let _ = emit_channel_notification(out, params);
+        }
+    }
+}
+
+/// After any `tools/call`, check whether a new watch event receiver is
+/// pending (set by `ax_watch_start`) and wire it into the drain loop.
+#[cfg(feature = "watch")]
+fn maybe_capture_watch_receiver(
+    server: &Server,
+    rx: &mut Option<tokio::sync::mpsc::Receiver<crate::watch::WatchEvent>>,
+    method: &str,
+) {
+    if method != "tools/call" {
+        return;
+    }
+    if let Some(new_rx) = server.watch_state.take_pending_receiver() {
+        *rx = Some(new_rx);
+    }
 }
 
 /// Serialize a response and write it as a single newline-terminated JSON line.

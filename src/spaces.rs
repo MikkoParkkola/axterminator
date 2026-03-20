@@ -409,13 +409,7 @@ impl SpaceManager {
         // SAFETY: sid is verified to exist; slices are valid for the duration
         // of the call.
         unsafe {
-            CGSAddWindowsToSpaces(
-                inner.cid,
-                window_ids.as_ptr(),
-                wid_count,
-                &raw const sid,
-                1,
-            );
+            CGSAddWindowsToSpaces(inner.cid, window_ids.as_ptr(), wid_count, &raw const sid, 1);
         }
         Ok(window_ids.len())
     }

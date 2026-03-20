@@ -287,7 +287,11 @@ pub fn extract_intent(scene: &SceneGraph, query: &str) -> Vec<IntentMatch> {
         .filter_map(|node| score_to_match(node, &ctx, scene))
         .collect();
 
-    matches.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    matches.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     matches
 }
 

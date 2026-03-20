@@ -22,9 +22,9 @@ use super::{AudioData, AudioError};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SpeechAuthStatus {
     NotDetermined = 0,
-    Denied        = 1,
-    Restricted    = 2,
-    Authorized    = 3,
+    Denied = 1,
+    Restricted = 2,
+    Authorized = 3,
 }
 
 impl SpeechAuthStatus {
@@ -160,9 +160,9 @@ fn request_speech_authorization() -> Result<(), AudioError> {
     }
 
     // Wait up to 30 s for the user to respond.
-    let guard = granted_holder
-        .lock()
-        .map_err(|_| AudioError::Transcription("Lock poisoned waiting for speech auth".to_string()))?;
+    let guard = granted_holder.lock().map_err(|_| {
+        AudioError::Transcription("Lock poisoned waiting for speech auth".to_string())
+    })?;
     let (mut guard, timeout) = cvar
         .wait_timeout(guard, Duration::from_secs(30))
         .map_err(|_| AudioError::Transcription("Condvar wait failed".to_string()))?;
@@ -260,9 +260,8 @@ fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
         ));
     }
 
-    let url = nsurl_from_path(wav_path).ok_or_else(|| {
-        AudioError::Transcription(format!("Cannot create NSURL for: {wav_path}"))
-    })?;
+    let url = nsurl_from_path(wav_path)
+        .ok_or_else(|| AudioError::Transcription(format!("Cannot create NSURL for: {wav_path}")))?;
 
     let request = create_sf_speech_url_recognition_request(url).ok_or_else(|| {
         AudioError::Transcription("Failed to create recognition request".to_string())
@@ -273,8 +272,7 @@ fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
     // timeout when the model isn't available.
     set_requires_on_device_recognition(request, false);
 
-    let result_holder: Arc<Mutex<Option<Result<String, AudioError>>>> =
-        Arc::new(Mutex::new(None));
+    let result_holder: Arc<Mutex<Option<Result<String, AudioError>>>> = Arc::new(Mutex::new(None));
     let cvar = Arc::new(Condvar::new());
 
     let result_clone = Arc::clone(&result_holder);
@@ -341,42 +339,41 @@ fn recognize_async(
     callback: impl Fn(Option<String>, Option<String>) + Send + 'static,
 ) {
     let cb = Arc::new(Mutex::new(callback));
-    let task_block =
-        block::ConcreteBlock::new(move |result: *mut Object, error: *mut Object| {
-            // SAFETY: result is either null (checked) or a valid SFSpeechRecognitionResult.
-            let is_final: bool = if result.is_null() {
-                true
-            } else {
-                unsafe { msg_send![result, isFinal] }
-            };
-            if !is_final {
-                return;
-            }
+    let task_block = block::ConcreteBlock::new(move |result: *mut Object, error: *mut Object| {
+        // SAFETY: result is either null (checked) or a valid SFSpeechRecognitionResult.
+        let is_final: bool = if result.is_null() {
+            true
+        } else {
+            unsafe { msg_send![result, isFinal] }
+        };
+        if !is_final {
+            return;
+        }
 
-            let transcript = if result.is_null() {
+        let transcript = if result.is_null() {
+            None
+        } else {
+            let best: *mut Object = unsafe { msg_send![result, bestTranscription] };
+            if best.is_null() {
                 None
             } else {
-                let best: *mut Object = unsafe { msg_send![result, bestTranscription] };
-                if best.is_null() {
-                    None
-                } else {
-                    let ns: *mut Object = unsafe { msg_send![best, formattedString] };
-                    Some(ns_string_to_rust(ns))
-                }
-            };
-
-            let error_msg = if error.is_null() {
-                None
-            } else {
-                let desc: *mut Object = unsafe { msg_send![error, localizedDescription] };
-                Some(ns_string_to_rust(desc))
-            };
-
-            if let Ok(f) = cb.lock() {
-                f(transcript, error_msg);
+                let ns: *mut Object = unsafe { msg_send![best, formattedString] };
+                Some(ns_string_to_rust(ns))
             }
-        })
-        .copy();
+        };
+
+        let error_msg = if error.is_null() {
+            None
+        } else {
+            let desc: *mut Object = unsafe { msg_send![error, localizedDescription] };
+            Some(ns_string_to_rust(desc))
+        };
+
+        if let Ok(f) = cb.lock() {
+            f(transcript, error_msg);
+        }
+    })
+    .copy();
 
     unsafe {
         let _: *mut Object = msg_send![recognizer,
@@ -540,14 +537,20 @@ mod tests {
 
     #[test]
     fn speech_auth_status_from_raw_not_determined() {
-        assert_eq!(SpeechAuthStatus::from_raw(0), SpeechAuthStatus::NotDetermined);
+        assert_eq!(
+            SpeechAuthStatus::from_raw(0),
+            SpeechAuthStatus::NotDetermined
+        );
     }
 
     #[test]
     fn speech_auth_status_from_raw_unknown_defaults_to_not_determined() {
         // GIVEN: an unknown value (e.g. future SDK variant)
         // THEN: falls back to NotDetermined (safest default)
-        assert_eq!(SpeechAuthStatus::from_raw(99), SpeechAuthStatus::NotDetermined);
+        assert_eq!(
+            SpeechAuthStatus::from_raw(99),
+            SpeechAuthStatus::NotDetermined
+        );
     }
 
     // -----------------------------------------------------------------------

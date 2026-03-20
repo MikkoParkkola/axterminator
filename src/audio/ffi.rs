@@ -124,9 +124,8 @@ pub(super) fn cf_string_to_string(cf_str: *const c_void) -> String {
     }
     use core_foundation::base::TCFType;
     use core_foundation::string::CFStringRef;
-    let cf = unsafe {
-        core_foundation::string::CFString::wrap_under_create_rule(cf_str as CFStringRef)
-    };
+    let cf =
+        unsafe { core_foundation::string::CFString::wrap_under_create_rule(cf_str as CFStringRef) };
     cf.to_string()
 }
 

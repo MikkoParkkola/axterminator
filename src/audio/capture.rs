@@ -8,9 +8,9 @@ use objc::runtime::Object;
 use objc::{msg_send, sel, sel_impl};
 use tracing::debug;
 
-use super::ffi::{ns_string_to_rust, release_objc_object, objc_class};
-use super::{AudioData, AudioError, CHANNELS, MAX_CAPTURE_SECS, SAMPLE_RATE};
 use super::devices::check_microphone_permission;
+use super::ffi::{ns_string_to_rust, objc_class, release_objc_object};
+use super::{AudioData, AudioError, CHANNELS, MAX_CAPTURE_SECS, SAMPLE_RATE};
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -193,7 +193,11 @@ fn query_input_sample_rate(engine: *mut Object) -> u32 {
     let rate: f64 = unsafe { msg_send![format, sampleRate] };
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let rate_u32 = rate as u32;
-    if rate_u32 == 0 { SAMPLE_RATE } else { rate_u32 }
+    if rate_u32 == 0 {
+        SAMPLE_RATE
+    } else {
+        rate_u32
+    }
 }
 
 /// Create an `AVAudioEngine` instance.

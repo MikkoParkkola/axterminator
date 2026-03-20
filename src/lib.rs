@@ -38,6 +38,8 @@ pub mod display;
 pub mod mcp;
 #[cfg(feature = "spaces")]
 pub mod spaces;
+#[cfg(feature = "watch")]
+pub mod watch;
 
 mod accessibility;
 mod actions;

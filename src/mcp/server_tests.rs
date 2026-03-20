@@ -123,7 +123,11 @@ fn tools_list_returns_correct_count_for_feature_set() {
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
     let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
-    assert_eq!(count, base + extra_spaces + extra_audio + extra_camera);
+    let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
+    assert_eq!(
+        count,
+        base + extra_spaces + extra_audio + extra_camera + extra_watch
+    );
 }
 
 #[test]

@@ -9,8 +9,8 @@ use tracing::debug;
 
 use super::{
     av_capture_frame, av_free_camera_list, av_free_frame_result, av_list_cameras,
-    CChar, CDeviceInfo, CFrameResult, CameraDevice, CameraError, CameraPosition, ImageData,
-    check_camera_permission,
+    check_camera_permission, CChar, CDeviceInfo, CFrameResult, CameraDevice, CameraError,
+    CameraPosition, ImageData,
 };
 
 // ---------------------------------------------------------------------------
@@ -105,14 +105,9 @@ pub fn capture_frame(device_id: Option<&str>) -> Result<ImageData, CameraError> 
 ///
 /// Returns the `CString` so it lives long enough for the FFI call, along with
 /// the raw pointer (null when `device_id` is `None`).
-fn build_id_ptr(
-    device_id: Option<&str>,
-) -> Result<Option<std::ffi::CString>, CameraError> {
+fn build_id_ptr(device_id: Option<&str>) -> Result<Option<std::ffi::CString>, CameraError> {
     device_id
-        .map(|id| {
-            std::ffi::CString::new(id)
-                .map_err(|e| CameraError::CaptureFailed(e.to_string()))
-        })
+        .map(|id| std::ffi::CString::new(id).map_err(|e| CameraError::CaptureFailed(e.to_string())))
         .transpose()
 }
 
@@ -149,7 +144,11 @@ unsafe fn invoke_capture_frame(
     let height = result.height;
     av_free_frame_result(std::ptr::addr_of_mut!(result));
 
-    Ok(ImageData { width, height, jpeg_data })
+    Ok(ImageData {
+        width,
+        height,
+        jpeg_data,
+    })
 }
 
 /// Convert a nullable C error string pointer to an `Option<String>`.

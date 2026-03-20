@@ -9,12 +9,12 @@ use std::time::Duration;
 
 use tracing::debug;
 
-use super::{
-    vn_detect_gestures, vn_free_gesture_list, CGestureItem, CGestureList, CameraError,
-    GestureDetection, Gesture, Hand, ImageData, check_camera_permission,
-    validate_duration, validate_gesture_names,
-};
 use super::capture::capture_frame;
+use super::{
+    check_camera_permission, validate_duration, validate_gesture_names, vn_detect_gestures,
+    vn_free_gesture_list, CGestureItem, CGestureList, CameraError, Gesture, GestureDetection, Hand,
+    ImageData,
+};
 
 // ---------------------------------------------------------------------------
 // Gesture detection
@@ -43,7 +43,11 @@ use super::capture::capture_frame;
 /// }
 /// ```
 pub fn detect_gestures(image: &ImageData) -> Result<Vec<GestureDetection>, CameraError> {
-    debug!(width = image.width, height = image.height, "detecting gestures");
+    debug!(
+        width = image.width,
+        height = image.height,
+        "detecting gestures"
+    );
 
     // Safety: vn_detect_gestures reads the jpeg bytes and writes into an
     // allocated CGestureList which we free after copying into Rust types.
@@ -110,9 +114,7 @@ pub fn gesture_listen(
 ///
 /// `image.jpeg_data` must be a valid slice for the duration of the call.
 /// `vn_detect_gestures` fills a `CGestureList` that we own and free.
-unsafe fn invoke_detect_gestures(
-    image: &ImageData,
-) -> Result<Vec<GestureDetection>, CameraError> {
+unsafe fn invoke_detect_gestures(image: &ImageData) -> Result<Vec<GestureDetection>, CameraError> {
     let mut list = CGestureList {
         items: std::ptr::null_mut(),
         count: 0,
@@ -129,7 +131,9 @@ unsafe fn invoke_detect_gestures(
         let msg = if list.error_msg.is_null() {
             "Vision framework error".to_string()
         } else {
-            CStr::from_ptr(list.error_msg).to_string_lossy().into_owned()
+            CStr::from_ptr(list.error_msg)
+                .to_string_lossy()
+                .into_owned()
         };
         vn_free_gesture_list(std::ptr::addr_of_mut!(list));
         return Err(CameraError::CaptureFailed(msg));
@@ -186,5 +190,9 @@ fn c_gesture_to_rust(item: &CGestureItem) -> Option<GestureDetection> {
         2 => Hand::Face,
         _ => Hand::Unknown,
     };
-    Some(GestureDetection { gesture, confidence: item.confidence, hand })
+    Some(GestureDetection {
+        gesture,
+        confidence: item.confidence,
+        hand,
+    })
 }

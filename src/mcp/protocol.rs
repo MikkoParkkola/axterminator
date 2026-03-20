@@ -187,6 +187,9 @@ pub struct InitializeResult {
 ///
 /// Phase 4 adds `elicitation` — the server can ask the user questions
 /// mid-operation via `elicitation/create`.
+///
+/// The `experimental` field carries non-standard capabilities such as
+/// `claude/channel` for push notifications to Claude Code sessions.
 #[derive(Debug, Serialize)]
 pub struct ServerCapabilities {
     pub tools: ToolsCapability,
@@ -194,6 +197,10 @@ pub struct ServerCapabilities {
     pub resources: ResourcesCapability,
     pub prompts: PromptsCapability,
     pub elicitation: ElicitationCapability,
+    /// Experimental capabilities map.  Present only when the `watch` feature
+    /// is enabled; omitted entirely otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experimental: Option<Value>,
 }
 
 /// Elicitation capability advertised in `initialize`.

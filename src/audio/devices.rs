@@ -14,9 +14,8 @@ use super::ffi::{
     K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN, K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
     K_AUDIO_OBJECT_PROPERTY_SCOPE_INPUT, K_AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT,
     K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEFAULT_INPUT,
-    K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEFAULT_OUTPUT,
-    K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEVICES, K_AUDIO_OBJECT_PROPERTY_SELECTOR_NAME,
-    K_AUDIO_OBJECT_PROPERTY_SELECTOR_NOMINAL_SAMPLE_RATE,
+    K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEFAULT_OUTPUT, K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEVICES,
+    K_AUDIO_OBJECT_PROPERTY_SELECTOR_NAME, K_AUDIO_OBJECT_PROPERTY_SELECTOR_NOMINAL_SAMPLE_RATE,
     K_AUDIO_OBJECT_PROPERTY_SELECTOR_STREAMS, K_AUDIO_OBJECT_SYSTEM_OBJECT,
 };
 use super::AudioError;
@@ -250,9 +249,8 @@ fn device_has_streams(device_id: u32, scope: u32) -> bool {
         element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
     };
     let mut size: u32 = 0;
-    let status = unsafe {
-        AudioObjectGetPropertyDataSize(device_id, &addr, 0, std::ptr::null(), &mut size)
-    };
+    let status =
+        unsafe { AudioObjectGetPropertyDataSize(device_id, &addr, 0, std::ptr::null(), &mut size) };
     status == 0 && size > 0
 }
 

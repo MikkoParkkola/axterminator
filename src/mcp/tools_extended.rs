@@ -39,6 +39,10 @@ pub use crate::mcp::tools_camera::camera_tools;
 #[cfg(feature = "spaces")]
 pub use crate::mcp::tools_spaces::spaces_tools;
 
+// Re-export watch tools and state.
+#[cfg(feature = "watch")]
+pub use crate::mcp::tools_watch::{watch_tools, WatchState};
+
 // ---------------------------------------------------------------------------
 // Tool registry
 // ---------------------------------------------------------------------------
@@ -46,7 +50,7 @@ pub use crate::mcp::tools_spaces::spaces_tools;
 /// All Phase 3 tools in registration order.
 #[must_use]
 pub fn extended_tools() -> Vec<Tool> {
-    // `mut` required when any feature-gated tool sets (spaces, audio, camera) are enabled.
+    // `mut` required when any feature-gated tool sets (spaces, audio, camera, watch) are enabled.
     #[allow(unused_mut)]
     let mut tools = vec![
         crate::mcp::tools_gui::tool_ax_scroll(),
@@ -63,6 +67,8 @@ pub fn extended_tools() -> Vec<Tool> {
     tools.extend(crate::mcp::tools_audio::audio_tools());
     #[cfg(feature = "camera")]
     tools.extend(camera_tools());
+    #[cfg(feature = "watch")]
+    tools.extend(watch_tools());
     tools
 }
 
@@ -89,9 +95,7 @@ pub fn call_tool_extended<W: Write>(
     match name {
         "ax_scroll" => Some(crate::mcp::tools_gui::handle_scroll(args, registry)),
         "ax_key_press" => Some(crate::mcp::tools_gui::handle_key_press(args, registry)),
-        "ax_get_attributes" => {
-            Some(crate::mcp::tools_gui::handle_get_attributes(args, registry))
-        }
+        "ax_get_attributes" => Some(crate::mcp::tools_gui::handle_get_attributes(args, registry)),
         "ax_get_tree" => Some(crate::mcp::tools_gui::handle_get_tree(args, registry, out)),
         "ax_list_apps" => Some(crate::mcp::tools_gui::handle_list_apps()),
         "ax_drag" => Some(crate::mcp::tools_gui::handle_drag(args, registry)),
@@ -101,9 +105,9 @@ pub fn call_tool_extended<W: Write>(
         #[cfg(feature = "spaces")]
         "ax_create_space" => Some(crate::mcp::tools_spaces::handle_ax_create_space()),
         #[cfg(feature = "spaces")]
-        "ax_move_to_space" => {
-            Some(crate::mcp::tools_spaces::handle_ax_move_to_space(args, registry))
-        }
+        "ax_move_to_space" => Some(crate::mcp::tools_spaces::handle_ax_move_to_space(
+            args, registry,
+        )),
         #[cfg(feature = "spaces")]
         "ax_switch_space" => Some(crate::mcp::tools_spaces::handle_ax_switch_space(args)),
         #[cfg(feature = "spaces")]
@@ -115,17 +119,14 @@ pub fn call_tool_extended<W: Write>(
         #[cfg(feature = "audio")]
         "ax_audio_devices" => Some(crate::mcp::tools_audio::handle_ax_audio_devices()),
         #[cfg(feature = "camera")]
-        "ax_camera_capture" => {
-            Some(crate::mcp::tools_camera::handle_ax_camera_capture(args))
-        }
+        "ax_camera_capture" => Some(crate::mcp::tools_camera::handle_ax_camera_capture(args)),
         #[cfg(feature = "camera")]
-        "ax_gesture_detect" => {
-            Some(crate::mcp::tools_camera::handle_ax_gesture_detect(args))
-        }
+        "ax_gesture_detect" => Some(crate::mcp::tools_camera::handle_ax_gesture_detect(args)),
         #[cfg(feature = "camera")]
-        "ax_gesture_listen" => {
-            Some(crate::mcp::tools_camera::handle_ax_gesture_listen(args))
-        }
+        "ax_gesture_listen" => Some(crate::mcp::tools_camera::handle_ax_gesture_listen(args)),
+        // Watch tools require a WatchState which is not available in the stateless
+        // extended dispatcher.  These are dispatched by the server's handle_tools_call
+        // via the Server::call_watch_tool helper instead.
         _ => None,
     }
 }
@@ -141,8 +142,9 @@ mod tests {
     use serde_json::json;
 
     use crate::mcp::tools::AppRegistry;
-    use crate::mcp::tools_gui::{extract_app_query, key_name_to_code, list_running_apps,
-                                scroll_deltas};
+    use crate::mcp::tools_gui::{
+        extract_app_query, key_name_to_code, list_running_apps, scroll_deltas,
+    };
 
     // -----------------------------------------------------------------------
     // Tool registry
@@ -158,7 +160,11 @@ mod tests {
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
-        assert_eq!(tools.len(), base + extra_spaces + extra_audio + extra_camera);
+        let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
+        assert_eq!(
+            tools.len(),
+            base + extra_spaces + extra_audio + extra_camera + extra_watch
+        );
     }
 
     #[test]
@@ -171,7 +177,11 @@ mod tests {
     #[test]
     fn all_extended_tools_have_non_empty_descriptions() {
         for tool in super::extended_tools() {
-            assert!(!tool.description.is_empty(), "empty description on {}", tool.name);
+            assert!(
+                !tool.description.is_empty(),
+                "empty description on {}",
+                tool.name
+            );
         }
     }
 
@@ -196,9 +206,8 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
         // WHEN: dispatching
-        let result = super::call_tool_extended(
-            "ax_nonexistent_phase3", &json!({}), &registry, &mut out,
-        );
+        let result =
+            super::call_tool_extended("ax_nonexistent_phase3", &json!({}), &registry, &mut out);
         // THEN: falls through (None)
         assert!(result.is_none());
     }
@@ -207,8 +216,8 @@ mod tests {
     fn call_tool_extended_list_apps_always_succeeds() {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
-        let result = super::call_tool_extended("ax_list_apps", &json!({}), &registry, &mut out)
-            .unwrap();
+        let result =
+            super::call_tool_extended("ax_list_apps", &json!({}), &registry, &mut out).unwrap();
         assert!(!result.is_error, "ax_list_apps should not error");
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["apps"].is_array(), "apps field must be an array");
@@ -219,7 +228,10 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
         let result = super::call_tool_extended(
-            "ax_scroll", &json!({"direction": "down"}), &registry, &mut out,
+            "ax_scroll",
+            &json!({"direction": "down"}),
+            &registry,
+            &mut out,
         )
         .unwrap();
         assert!(result.is_error);
@@ -230,10 +242,9 @@ mod tests {
     fn call_tool_extended_scroll_missing_direction_returns_error() {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
-        let result = super::call_tool_extended(
-            "ax_scroll", &json!({"app": "Finder"}), &registry, &mut out,
-        )
-        .unwrap();
+        let result =
+            super::call_tool_extended("ax_scroll", &json!({"app": "Finder"}), &registry, &mut out)
+                .unwrap();
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Missing"));
     }
@@ -258,7 +269,10 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
         let result = super::call_tool_extended(
-            "ax_key_press", &json!({"keys": "cmd+s"}), &registry, &mut out,
+            "ax_key_press",
+            &json!({"keys": "cmd+s"}),
+            &registry,
+            &mut out,
         )
         .unwrap();
         assert!(result.is_error);
@@ -269,7 +283,10 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
         let result = super::call_tool_extended(
-            "ax_key_press", &json!({"app": "Safari"}), &registry, &mut out,
+            "ax_key_press",
+            &json!({"app": "Safari"}),
+            &registry,
+            &mut out,
         )
         .unwrap();
         assert!(result.is_error);
@@ -280,7 +297,10 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
         let result = super::call_tool_extended(
-            "ax_get_attributes", &json!({"app": "Finder"}), &registry, &mut out,
+            "ax_get_attributes",
+            &json!({"app": "Finder"}),
+            &registry,
+            &mut out,
         )
         .unwrap();
         assert!(result.is_error);

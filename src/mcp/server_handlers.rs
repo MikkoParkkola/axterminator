@@ -12,10 +12,10 @@ use serde_json::Value;
 use tracing::info;
 
 use crate::mcp::protocol::{
-    ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse,
-    LoggingCapability, PingResult, PromptGetParams, PromptsCapability, RequestId,
-    ResourceReadParams, ResourcesCapability, RpcError, ServerCapabilities, ServerInfo,
-    ToolCallParams, ToolListResult, ToolsCapability,
+    ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse, LoggingCapability,
+    PingResult, PromptGetParams, PromptsCapability, RequestId, ResourceReadParams,
+    ResourcesCapability, RpcError, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
+    ToolsCapability,
 };
 use crate::mcp::tools::call_tool;
 
@@ -93,7 +93,7 @@ impl Server {
                 let args = p
                     .arguments
                     .unwrap_or(Value::Object(serde_json::Map::default()));
-                let tool_result = call_tool(&p.name, &args, &self.registry, out);
+                let tool_result = self.dispatch_tool(&p.name, &args, out);
                 JsonRpcResponse::ok(id, serde_json::to_value(tool_result).unwrap())
             }
             Err(e) => JsonRpcResponse::err(
@@ -192,6 +192,45 @@ impl Server {
             ),
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Tool dispatch helper
+    // -----------------------------------------------------------------------
+
+    /// Dispatch a tool call, routing watch tools to the watch state first.
+    fn dispatch_tool<W: Write>(
+        &self,
+        name: &str,
+        args: &Value,
+        out: &mut W,
+    ) -> crate::mcp::protocol::ToolCallResult {
+        #[cfg(feature = "watch")]
+        {
+            let result = self.call_watch_tool(name, args);
+            if let Some(r) = result {
+                return r;
+            }
+        }
+        call_tool(name, args, &self.registry, out)
+    }
+
+    /// Try to dispatch a watch tool by name; returns `None` for non-watch tools.
+    #[cfg(feature = "watch")]
+    fn call_watch_tool(
+        &self,
+        name: &str,
+        args: &Value,
+    ) -> Option<crate::mcp::protocol::ToolCallResult> {
+        use crate::mcp::tools_watch::{
+            handle_ax_watch_start, handle_ax_watch_status, handle_ax_watch_stop,
+        };
+        match name {
+            "ax_watch_start" => Some(handle_ax_watch_start(args, &self.watch_state)),
+            "ax_watch_stop" => Some(handle_ax_watch_stop(&self.watch_state)),
+            "ax_watch_status" => Some(handle_ax_watch_status(&self.watch_state)),
+            _ => None,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +238,11 @@ impl Server {
 // ---------------------------------------------------------------------------
 
 fn build_initialize_result() -> InitializeResult {
+    #[cfg(feature = "watch")]
+    let experimental = Some(serde_json::json!({ "claude/channel": {} }));
+    #[cfg(not(feature = "watch"))]
+    let experimental = None;
+
     InitializeResult {
         protocol_version: "2025-11-05",
         capabilities: ServerCapabilities {
@@ -214,6 +258,7 @@ fn build_initialize_result() -> InitializeResult {
                 list_changed: false,
             },
             elicitation: ElicitationCapability {},
+            experimental,
         },
         server_info: ServerInfo {
             name: "axterminator",

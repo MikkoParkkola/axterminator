@@ -404,10 +404,7 @@ pub(crate) fn handle_key_press(args: &Value, registry: &Arc<AppRegistry>) -> Too
         .unwrap_or_else(ToolCallResult::error)
 }
 
-pub(crate) fn handle_get_attributes(
-    args: &Value,
-    registry: &Arc<AppRegistry>,
-) -> ToolCallResult {
+pub(crate) fn handle_get_attributes(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     let (app_name, query) = match extract_app_query(args) {
         Ok(v) => v,
         Err(e) => return ToolCallResult::error(e),

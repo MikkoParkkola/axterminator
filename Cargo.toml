@@ -49,6 +49,10 @@ audio = []
 # CoreMedia, CoreVideo.  Off by default — enables only when camera input is needed
 # to avoid triggering TCC permission dialogs on first run.
 camera = []
+# watch: continuous background monitoring — audio VAD + camera gesture detection.
+# Pushes events to Claude Code sessions via MCP notifications/claude/channel.
+# Implies audio + camera + tokio/time. Off by default.
+watch = ["audio", "camera", "dep:tokio-util"]
 
 [dependencies]
 # Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
@@ -80,6 +84,8 @@ block = "0.1"
 
 # Async runtime
 tokio = { version = "1.44", features = ["full"] }
+# CancellationToken for cooperative task shutdown (watch feature)
+tokio-util = { version = "0.7", features = ["rt"], optional = true }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

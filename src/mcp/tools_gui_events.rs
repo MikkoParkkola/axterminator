@@ -261,9 +261,8 @@ pub(super) fn post_drag_event(from: (f64, f64), to: (f64, f64)) -> Result<(), St
     drag.post(core_graphics::event::CGEventTapLocation::HID);
 
     // Mouse-up at destination.
-    let up =
-        CGEvent::new_mouse_event(source, CGEventType::LeftMouseUp, to_pt, CGMouseButton::Left)
-            .map_err(|()| "Failed to create mouse-up event".to_string())?;
+    let up = CGEvent::new_mouse_event(source, CGEventType::LeftMouseUp, to_pt, CGMouseButton::Left)
+        .map_err(|()| "Failed to create mouse-up event".to_string())?;
     up.post(core_graphics::event::CGEventTapLocation::HID);
 
     Ok(())
