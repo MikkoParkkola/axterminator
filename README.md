@@ -2,10 +2,14 @@
 
 <div align="center">
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/MikkoParkkola/axterminator/ci.yml?style=for-the-badge&label=tests)](https://github.com/MikkoParkkola/axterminator/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/MikkoParkkola/axterminator/ci.yml?style=for-the-badge&label=tests)](https://github.com/MikkoParkkola/axterminator/actions)
+[![Crates.io](https://img.shields.io/crates/v/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
+[![Downloads](https://img.shields.io/crates/d/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
+[![PyPI](https://img.shields.io/pypi/v/axterminator?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/axterminator/)
 [![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
 [![Rust](https://img.shields.io/badge/rust-stable-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=for-the-badge)](LICENSE-MIT)
+[![License](https://img.shields.io/crates/l/axterminator?style=for-the-badge)](LICENSE-MIT)
+[![dependency status](https://img.shields.io/librariesio/github/MikkoParkkola/axterminator?style=for-the-badge)](https://deps.rs/repo/github/MikkoParkkola/axterminator)
 [![Discussions](https://img.shields.io/github/discussions/MikkoParkkola/axterminator?style=for-the-badge&color=blue)](https://github.com/MikkoParkkola/axterminator/discussions)
 
 **MCP server that gives AI agents the ability to see and control macOS applications.**
