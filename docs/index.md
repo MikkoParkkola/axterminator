@@ -2,29 +2,123 @@
 
 <div align="center">
 
-**macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators.**
+**MCP server that gives AI agents the ability to see and control macOS applications.**
 
-[![PyPI](https://img.shields.io/pypi/v/axterminator?color=00d4ff)](https://pypi.org/project/axterminator/)
-[![Python](https://img.shields.io/pypi/pyversions/axterminator)](https://pypi.org/project/axterminator/)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](https://github.com/MikkoParkkola/axterminator)
+[![Crates.io](https://img.shields.io/crates/v/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
+[![Downloads](https://img.shields.io/crates/d/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
+[![PyPI](https://img.shields.io/pypi/v/axterminator?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/axterminator/)
+[![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=for-the-badge)](https://github.com/MikkoParkkola/axterminator)
 
 </div>
 
-AXTerminator enables background GUI testing on macOS -- interact with applications without stealing window focus. Element access takes ~379 us (measured on M1 MacBook Pro), and 7 self-healing locator strategies keep tests resilient to UI changes.
+Up to 30 MCP tools (19 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
-## Features
+**Current version: 0.6.1** --- Rust binary is the primary interface; Python bindings available via PyPI.
 
-- **Background Testing** -- Run tests without stealing focus or interrupting your work
-- **Sub-millisecond Access** -- ~379 us element access via direct Rust FFI to the Accessibility API
-- **Self-Healing Locators** -- 7-strategy healing system survives UI changes
-- **Visual VLM Detection** -- AI-powered element detection as ultimate fallback
-- **Rust Core** -- Native performance with Python bindings via PyO3
+## Deploy
 
-## Quick Start
+### Rust Binary (Primary)
+
+```bash
+git clone https://github.com/MikkoParkkola/axterminator
+cd axterminator
+cargo build --release --features cli
+```
+
+Or install from crates.io:
+
+```bash
+cargo install axterminator --features cli
+```
+
+Or via Homebrew:
+
+```bash
+brew install MikkoParkkola/tap/axterminator
+```
+
+Grant accessibility permissions: **System Settings > Privacy & Security > Accessibility** (add your terminal app).
+
+### Connect Your AI Agent
+
+Add to MCP config (Claude Code, OpenCode, Cursor):
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "/path/to/axterminator",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Done. Your agent has 19 core tools (up to 30 with all feature flags) to control any macOS app.
+
+### Python Package (Secondary)
 
 ```bash
 pip install axterminator
 ```
+
+## MCP Tools
+
+| Category | Tools | What the agent can do |
+|----------|-------|----------------------|
+| **GUI** | `ax_connect`, `ax_find`, `ax_click`, `ax_click_at`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_scroll`, `ax_drag`, `ax_key_press` | Connect to apps, find elements, interact |
+| **Observe** | `ax_is_accessible`, `ax_screenshot`, `ax_get_tree`, `ax_get_attributes`, `ax_list_windows`, `ax_list_apps`, `ax_wait_idle` | Check permissions, see UI state, screenshots |
+| **Verify** | `ax_assert`, `ax_find_visual` | Assert element state, AI vision fallback |
+| **Audio** | `ax_listen`, `ax_speak`, `ax_audio_devices` | Capture mic/system audio (48kHz native), text-to-speech |
+| **Camera** | `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen` | Camera frames, gesture recognition |
+| **Spaces** | `ax_list_spaces`, `ax_create_space`, `ax_move_to_space`, `ax_switch_space`, `ax_destroy_space` | Virtual desktop isolation |
+
+### Resources
+
+Agents can browse app state without tool calls:
+
+| Resource | What |
+|----------|------|
+| `axterminator://apps` | Running applications |
+| `axterminator://app/{name}/tree` | Live element hierarchy |
+| `axterminator://app/{name}/screenshot` | Current screenshot |
+| `axterminator://app/{name}/state` | Focused element, window title |
+| `axterminator://system/displays` | Monitor layout |
+
+### Security
+
+Destructive actions require confirmation via elicitation. HTTP transport requires bearer token auth. The AI has hands, not root.
+
+## Feature Flags
+
+Build with optional capabilities:
+
+```bash
+cargo build --release --features "cli,audio,camera,spaces"
+```
+
+| Flag | What |
+|------|------|
+| `cli` | CLI + MCP server (default) |
+| `audio` | Microphone/system audio, speech recognition (48kHz native capture) |
+| `camera` | Camera capture, gesture detection (88.8% thumbs_up verified) |
+| `watch` | Continuous background monitoring (implies audio + camera) |
+| `spaces` | Virtual desktop management (CGSSpace private API) |
+| `http-transport` | Streamable HTTP MCP transport with bearer token auth |
+
+## CLI
+
+```bash
+axterminator apps                        # List accessible apps
+axterminator find "Save" --app Safari    # Find element
+axterminator click "Save" --app Safari   # Click it
+axterminator screenshot --app Safari     # Capture screenshot
+axterminator tree --app Finder           # Element hierarchy
+axterminator mcp serve --http 8080 --token secret  # HTTP transport
+```
+
+## Python API
 
 ```python
 import axterminator as ax
@@ -42,167 +136,15 @@ app.find("3").click()
 app.find("=").click()
 ```
 
-## Installation
+See [API Reference](api/core.md) for full Python docs.
 
-### Basic
+## How It Works
 
-```bash
-pip install axterminator
-```
+AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIElementPerformAction()` works on unfocused windows. Your agent clicks buttons in one app while you work in another. Neither notices.
 
-### With VLM Support
+379us per element access (Criterion, M1 MacBook Pro). Appium needs 500ms for the same thing.
 
-```bash
-# Local MLX (recommended -- fast, private)
-pip install axterminator[vlm]
-
-# Cloud APIs
-pip install axterminator[vlm-anthropic]  # Claude Vision
-pip install axterminator[vlm-openai]     # OpenAI Vision
-pip install axterminator[vlm-gemini]     # Gemini Vision
-
-# All backends
-pip install axterminator[vlm-all]
-```
-
-## Requirements
-
-- macOS 12+ (Monterey or later)
-- Python 3.9+
-- Accessibility permissions granted to your terminal/IDE
-
-## API Reference
-
-### Core Functions
-
-#### `axterminator.app(name=None, bundle_id=None, pid=None)`
-
-Connect to a running application.
-
-```python
-# By name
-app = axterminator.app(name="Safari")
-
-# By bundle ID (recommended -- locale-independent)
-app = axterminator.app(bundle_id="com.apple.Safari")
-
-# By PID
-app = axterminator.app(pid=12345)
-```
-
-#### `axterminator.is_accessibility_enabled()`
-
-Check if accessibility permissions are granted.
-
-```python
-if not axterminator.is_accessibility_enabled():
-    print("Grant accessibility permissions")
-```
-
-### AXApp Class
-
-#### `app.find(query, timeout_ms=5000)`
-
-Find an element by query.
-
-```python
-# By title/label
-button = app.find("Save")
-
-# By role
-text_field = app.find("role:AXTextField")
-
-# Combined query
-save_btn = app.find("role:AXButton title:Save")
-```
-
-#### `app.find_all(query)`
-
-Find all matching elements.
-
-```python
-buttons = app.find_all("role:AXButton")
-```
-
-#### `app.pid`
-
-Get the process ID.
-
-### AXElement Class
-
-#### `element.click(mode=BACKGROUND)`
-
-Click the element.
-
-```python
-# Background click (default) -- does not steal focus
-element.click()
-
-# Foreground click -- brings app to front
-element.click(mode=axterminator.FOCUS)
-```
-
-#### `element.type_text(text)`
-
-Type text into the element.
-
-```python
-text_field.type_text("Hello, World!")
-```
-
-#### `element.value`
-
-Get the element's value attribute.
-
-#### `element.title`
-
-Get the element's title.
-
-#### `element.role`
-
-Get the element's accessibility role.
-
-### VLM Configuration
-
-#### `axterminator.configure_vlm(backend, model=None, api_key=None)`
-
-Configure visual element detection.
-
-```python
-# Local MLX (default)
-axterminator.configure_vlm(backend="mlx")
-
-# Cloud APIs
-axterminator.configure_vlm(backend="anthropic", api_key="sk-...")
-axterminator.configure_vlm(backend="openai", api_key="sk-...")
-axterminator.configure_vlm(backend="gemini", api_key="...")
-```
-
-## Self-Healing Locators
-
-When an element is found, AXTerminator stores multiple locator strategies:
-
-1. **data_testid** -- Custom test identifiers (most stable)
-2. **aria_label** -- ARIA accessibility labels
-3. **identifier** -- macOS accessibility identifiers
-4. **title** -- Element title/text
-5. **xpath** -- Structural path in accessibility tree
-6. **position** -- Relative position within parent
-7. **visual_vlm** -- AI-powered visual detection
-
-If the primary locator fails, the system automatically tries alternatives within a configurable time budget (default: 100 ms).
-
-## Synchronization
-
-```python
-from axterminator.sync import wait_for_idle, wait_for_element
-
-# Wait for app to settle
-wait_for_idle(app, timeout_ms=5000)
-
-# Wait for element to appear
-button = wait_for_element(app, "Done", timeout_ms=3000)
-```
+7-strategy self-healing locators survive UI changes: data_testid, aria_label, identifier, title, xpath, position, visual_vlm.
 
 ## Performance
 
@@ -215,68 +157,24 @@ Measured on Apple M1 MacBook Pro, macOS 14.2:
 | Perform action | ~20 us |
 | Find element (Python) | ~0.5-1 ms |
 
-## CLI Tool
+## Known Limitations
 
-```bash
-# Check accessibility permissions
-axterminator check
+| Operation | Background? | Notes |
+|-----------|:-----------:|-------|
+| Click, press, read values, screenshots | Yes | Core operations work without focus |
+| Text input | Partial | Some apps need focused text field |
+| Drag, system dialogs | No | Require cursor control / always grab focus |
+| Gesture recognition | Yes | Verified: thumbs_up at 88.8% confidence |
+| Speech transcription | Yes | On-device, 48kHz native capture, requires Dictation enabled |
 
-# List running apps
-axterminator list-apps
+## Release Channels
 
-# Find an element
-axterminator find Calculator "5"
-
-# Click an element
-axterminator click Calculator "+"
-
-# Type text
-axterminator type Calculator "textfield" "123"
-
-# Record interactions
-axterminator record Calculator
-```
-
-## pytest Integration
-
-```python
-import pytest
-
-@pytest.mark.ax_requires_app("Calculator")
-def test_addition(ax_app, ax_wait):
-    app = ax_app("Calculator")
-    app.find("7").click()
-    app.find("+").click()
-    app.find("3").click()
-    app.find("=").click()
-    ax_wait(0.1)
-```
-
-Available fixtures: `ax_app`, `ax_wait`, `ax_calculator`, `ax_finder`
-
-Markers: `@pytest.mark.ax_background`, `@pytest.mark.ax_requires_app(name)`, `@pytest.mark.ax_slow`
-
-## Browser Extension
-
-Record browser interactions and generate axterminator code:
-
-1. Install from `browser-extension/` folder
-2. Click extension icon, then Start Recording
-3. Interact with web pages
-4. Stop and copy generated Python code
-
-## Examples
-
-See the `examples/` directory:
-
-- `basic_usage.py` -- Calculator automation
-- `system_preferences.py` -- System Settings navigation
-- `finder_automation.py` -- Finder file operations
-- `notes_app.py` -- Notes app automation
-- `textedit_automation.py` -- Document creation
-- `pytest_example.py` -- pytest integration
-- `self_healing_locators.py` -- Locator strategies
-- `vlm_visual_detection.py` -- VLM fallback
+| Channel | Package |
+|---------|---------|
+| crates.io | [`axterminator`](https://crates.io/crates/axterminator) |
+| PyPI | [`axterminator`](https://pypi.org/project/axterminator/) |
+| Homebrew | `brew install MikkoParkkola/tap/axterminator` |
+| GitHub Releases | [Binary assets](https://github.com/MikkoParkkola/axterminator/releases) |
 
 ## License
 

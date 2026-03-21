@@ -24,7 +24,7 @@ config = ax.HealingConfig(
         "position",     # Screen position
         "visual_vlm",   # AI vision (slowest)
     ],
-    timeout_budget_ms=5000,  # Total timeout for all strategies
+    max_heal_time_ms=100,  # Total time budget for healing (ms), default: 100
 )
 ```
 

@@ -1,6 +1,6 @@
 # AXTerminator Design Document
 
-**Status**: Implemented | **Version**: 0.3.x | **Last Updated**: 2026-03-18
+**Status**: Implemented | **Version**: 0.6.1 | **Last Updated**: 2026-03-21
 
 ## Overview
 
@@ -218,4 +218,4 @@ Measured on Apple M1 MacBook Pro, macOS 14.2 using Criterion benchmarks:
 
 ---
 
-*Last updated: 2026-03-18*
+*Last updated: 2026-03-21*

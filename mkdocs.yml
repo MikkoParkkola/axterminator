@@ -1,5 +1,5 @@
 site_name: AXTerminator
-site_description: macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators
+site_description: MCP server that gives AI agents the ability to see and control macOS applications
 site_url: https://mikkoparkkola.github.io/axterminator/
 repo_url: https://github.com/MikkoParkkola/axterminator
 repo_name: MikkoParkkola/axterminator
@@ -65,9 +65,13 @@ nav:
     - Actions: guide/actions.md
     - Self-Healing: guide/self-healing.md
     - VLM Vision: guide/vlm.md
+    - Audio & Speech: guide/audio.md
+    - Camera & Gestures: guide/camera.md
+    - Virtual Desktops: guide/spaces.md
   - API Reference:
     - Core API: api/core.md
     - Element API: api/element.md
+    - MCP Tools: api/mcp-tools.md
     - Config: api/config.md
   - Performance:
     - Benchmarks: performance.md

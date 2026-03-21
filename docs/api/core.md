@@ -4,7 +4,7 @@
 
 ### `app()`
 
-Connect to a running application.
+Connect to a running application. Exactly one of `name`, `bundle_id`, or `pid` must be provided.
 
 ```python
 import axterminator as ax
@@ -12,33 +12,24 @@ import axterminator as ax
 # By name
 app = ax.app(name="Calculator")
 
-# By bundle ID
-app = ax.app(bundle_id="com.apple.calculator")
+# By bundle ID (recommended -- locale-independent)
+app = ax.app(bundle_id="com.apple.Safari")
 
 # By PID
 app = ax.app(pid=12345)
-
-# With options
-app = ax.app(
-    name="Notes",
-    launch=True,           # Launch if not running
-    healing_config=config  # Custom healing config
-)
 ```
 
 **Parameters:**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `name` | `str` | Application name |
-| `bundle_id` | `str` | Bundle identifier |
+| `name` | `str` | Application name (e.g., `"Safari"`) |
+| `bundle_id` | `str` | Bundle identifier (e.g., `"com.apple.Safari"`) |
 | `pid` | `int` | Process ID |
-| `launch` | `bool` | Launch if not running (default: False) |
-| `healing_config` | `HealingConfig` | Custom healing configuration |
 
 **Returns:** `AXApp` instance
 
-**Raises:** `RuntimeError` if app not found or not accessible
+**Raises:** `ValueError` if no selector provided; `RuntimeError` if app not found or not accessible
 
 ---
 
@@ -55,20 +46,23 @@ if ax.is_accessibility_enabled():
 
 ---
 
-### `request_accessibility()`
+### `configure_healing()`
 
-Prompt user to grant accessibility permissions.
+Install a `HealingConfig` as the global healing configuration. Call once at startup.
 
 ```python
-ax.request_accessibility()
-# Opens System Settings to Accessibility pane
+config = ax.HealingConfig(
+    strategies=["data_testid", "title", "visual_vlm"],
+    max_heal_time_ms=200,
+)
+ax.configure_healing(config)
 ```
 
 ---
 
 ### `configure_vlm()`
 
-Configure the VLM (Vision Language Model) backend.
+Configure the VLM (Vision Language Model) backend for visual element detection.
 
 ```python
 ax.configure_vlm(
@@ -83,8 +77,8 @@ ax.configure_vlm(
 
 | Name | Type | Description |
 |------|------|-------------|
-| `backend` | `str` | Backend name |
-| `api_key` | `str` | API key (cloud backends) |
+| `backend` | `str` | Backend name (`"mlx"`, `"anthropic"`, `"openai"`, `"gemini"`, `"ollama"`) |
+| `api_key` | `str` | API key (cloud backends only) |
 | `model` | `str` | Model name override |
 | `verbose` | `bool` | Enable verbose logging |
 
@@ -98,23 +92,27 @@ Configuration for self-healing locators.
 
 ```python
 config = ax.HealingConfig(
-    strategies=["data_testid", "title", "visual_vlm"],
-    timeout_budget_ms=5000
+    strategies=["data_testid", "aria_label", "title"],
+    max_heal_time_ms=200,
+    cache_healed=True,
 )
 ```
 
-**Attributes:**
+**Parameters:**
 
-| Name | Type | Default |
-|------|------|---------|
-| `strategies` | `list[str]` | All 7 strategies |
-| `timeout_budget_ms` | `int` | 5000 |
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `strategies` | `list[str] \| None` | All 7 strategies | Ordered list of strategy names |
+| `max_heal_time_ms` | `int` | `100` | Maximum time budget for healing (ms) |
+| `cache_healed` | `bool` | `True` | Cache successful heals |
+
+Valid strategy names: `"data_testid"`, `"aria_label"`, `"identifier"`, `"title"`, `"xpath"`, `"position"`, `"visual_vlm"`.
 
 ---
 
 ### `ActionMode`
 
-Enum for action modes.
+Controls whether an action steals focus.
 
 ```python
 ax.ActionMode.Background  # Default - no focus stealing

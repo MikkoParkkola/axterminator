@@ -527,7 +527,7 @@ No `uv run`, no `python`, no virtual environments. Just the binary.
 class Axterminator < Formula
   desc "macOS GUI automation for humans and AI"
   homepage "https://github.com/MikkoParkkola/axterminator"
-  url "https://github.com/MikkoParkkola/axterminator/releases/download/v0.5.0/axterminator-0.5.0-aarch64-apple-darwin.tar.gz"
+  url "https://github.com/MikkoParkkola/axterminator/releases/download/v0.6.1/axterminator-0.6.1-aarch64-apple-darwin.tar.gz"
   sha256 "..."
   license "MIT OR Apache-2.0"
 
@@ -617,7 +617,7 @@ version if supported, otherwise the latest version we support.
   "serverInfo": {
     "name": "axterminator",
     "title": "AXTerminator - macOS GUI Automation",
-    "version": "0.5.0",
+    "version": "0.6.1",
     "description": "Background-first macOS GUI automation with accessibility API, VLM fallback, and self-healing locators.",
     "websiteUrl": "https://github.com/MikkoParkkola/axterminator",
     "icons": [
@@ -1700,7 +1700,7 @@ Returns:
 ```json
 {
   "accessibility_enabled": true,
-  "server_version": "0.5.0",
+  "server_version": "0.6.1",
   "protocol_version": "2025-11-25",
   "vlm_backend": "anthropic",
   "vlm_available": true,

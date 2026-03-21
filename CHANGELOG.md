@@ -5,6 +5,17 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-03-20
+
+### Changed
+- All dependencies upgraded to latest: pyo3 0.28, axum 0.8, rand 0.10,
+  core-graphics 0.25, tungstenite 0.29, sysinfo 0.38, criterion 0.8
+- Zero outdated dependencies (`cargo outdated` clean)
+
+### Fixed
+- Unused variable in app.rs (CI clippy --all-features)
+- CI clippy failures, unnecessary cast, unused import
+
 ## [0.6.0] - 2026-03-20
 
 ### Fixed

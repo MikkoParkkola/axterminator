@@ -1,56 +1,57 @@
-# AXTerminator v0.3.2 Release Checklist
+# AXTerminator Release Checklist
 
 ## Pre-release Verification
 
-- [ ] Version bumped in `Cargo.toml` (currently `0.3.2`)
-- [ ] Version bumped in `pyproject.toml` (currently `0.3.2`)
-- [ ] CHANGELOG.md updated with v0.3.2 entry
-- [ ] `cargo test` passes (37 passed, 0 failed, 3 ignored)
-- [ ] `cargo clippy` clean (0 warnings)
+- [ ] Version bumped in `Cargo.toml`
+- [ ] Version bumped in `pyproject.toml`
+- [ ] CHANGELOG.md updated with new version entry
+- [ ] `cargo test` passes
+- [ ] `cargo clippy --all-features` clean (0 warnings)
+- [ ] `cargo audit` clean (0 advisories)
 - [ ] Python type stubs present at `python/axterminator/__init__.pyi`
-- [ ] All `#[allow(dead_code)]` annotations documented in CHANGELOG
 
 ## Build and Test
 
-- [ ] `maturin build --release` succeeds (test wheel creation)
+- [ ] `cargo build --release --features cli` succeeds
+- [ ] `cargo build --release --features "cli,audio,camera,spaces"` succeeds
+- [ ] `maturin build --release` succeeds (Python wheel)
 - [ ] Test install in fresh venv:
   ```bash
   python -m venv /tmp/ax-test && source /tmp/ax-test/bin/activate
-  pip install target/wheels/axterminator-0.3.2-*.whl
+  pip install target/wheels/axterminator-*.whl
   python -c "import axterminator as ax; print(ax.__version__)"
   ```
-- [ ] Verify type stubs work in IDE (mypy, pyright, VSCode autocomplete)
-- [ ] Run integration tests with real macOS app (Calculator):
-  ```bash
-  pytest python/tests/ -m "not requires_app" -v
-  ```
+- [ ] Verify type stubs work in IDE (mypy, pyright)
+- [ ] Run tests: `pytest python/tests/ -m "not requires_app" -v`
 
-## Publish
+## Publish (4-Channel Pipeline)
 
-- [ ] `maturin publish` to PyPI
-  ```bash
-  maturin publish --username __token__ --password $PYPI_TOKEN
-  ```
-- [ ] Verify on PyPI: https://pypi.org/project/axterminator/0.3.2/
-- [ ] `pip install axterminator==0.3.2` works from PyPI
+### 1. crates.io
+- [ ] `cargo publish`
+- [ ] Verify: https://crates.io/crates/axterminator
+
+### 2. PyPI
+- [ ] `maturin publish --username __token__ --password $PYPI_TOKEN`
+- [ ] Verify: https://pypi.org/project/axterminator/
+
+### 3. GitHub Release
+- [ ] Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z: ..."`
+- [ ] Push tag: `git push origin vX.Y.Z`
+- [ ] Create GitHub Release with CHANGELOG entry and binary assets
+- [ ] Verify binary download works
+
+### 4. Homebrew
+- [ ] Homebrew formula auto-updated on tag push (CI)
+- [ ] Verify: `brew install MikkoParkkola/tap/axterminator`
 
 ## Post-release
 
-- [ ] Verify GitHub Discussions is enabled (`gh api repos/MikkoParkkola/axterminator --jq '.has_discussions'`)
-- [ ] Create welcome discussion post in "Announcements" category
-- [ ] GitHub release tag:
-  ```bash
-  git tag -a v0.3.2 -m "Release v0.3.2: Clippy cleanup, type stubs, doc improvements"
-  git push origin v0.3.2
-  ```
-- [ ] Create GitHub Release with CHANGELOG entry as body
-- [ ] Blog post draft reviewed and published (see `docs/launch/blog-post-draft.md`)
-- [ ] Post to r/rust, r/python, Hacker News
-- [ ] Update MkDocs site: https://mikkoparkkola.github.io/axterminator/
+- [ ] MkDocs site updated: `mkdocs gh-deploy`
+- [ ] Verify site: https://mikkoparkkola.github.io/axterminator/
 
 ## Verification Matrix
 
-| Target | Python | Status |
+| Target | Python | Format |
 |--------|--------|--------|
 | macOS arm64 | 3.9-3.14 | abi3 wheel |
 | macOS x86_64 | 3.9-3.14 | abi3 wheel (cross-compiled) |

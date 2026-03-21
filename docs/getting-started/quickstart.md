@@ -1,6 +1,59 @@
 # Quick Start
 
-## Your First Test
+## MCP Server (AI Agents)
+
+The primary use case is connecting an AI agent to your Mac via MCP.
+
+### 1. Build or Install
+
+```bash
+cargo install axterminator --features cli
+```
+
+### 2. Configure Your Agent
+
+Add to your MCP config (Claude Code, OpenCode, Cursor):
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "axterminator",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### 3. Grant Permissions
+
+Open **System Settings > Privacy & Security > Accessibility** and add your terminal app.
+
+Your agent now has 19 core tools to control any macOS app.
+
+## CLI
+
+```bash
+# List apps
+axterminator apps
+
+# Find elements
+axterminator find "Save" --app Safari
+
+# Click elements
+axterminator click "Save" --app Safari
+
+# Element hierarchy
+axterminator tree --app Finder
+
+# Screenshots
+axterminator screenshot --app Safari
+
+# HTTP MCP transport
+axterminator mcp serve --http 8080 --token secret
+```
+
+## Python API
 
 ```python
 import axterminator as ax
@@ -36,9 +89,6 @@ app = ax.app(bundle_id="com.apple.Safari")
 
 # By PID
 app = ax.app(pid=12345)
-
-# Launch if not running
-app = ax.app(name="Notes", launch=True)
 ```
 
 ## Finding Elements
@@ -50,8 +100,11 @@ button = app.find("Save")
 # With timeout
 button = app.find("Save", timeout_ms=5000)
 
-# Find all matching
-buttons = app.find_all("role:AXButton")
+# By role
+text_field = app.find("role:AXTextField")
+
+# Combined
+save_btn = app.find("role:AXButton title:Save")
 ```
 
 ## Actions
@@ -67,18 +120,19 @@ element.click(mode=ax.FOCUS)
 element.type_text("Hello World!")
 ```
 
-## CLI Tool
+## pytest Integration
 
-```bash
-# Check permissions
-axterminator check
+```python
+import pytest
 
-# Find elements
-axterminator find Calculator "5"
-
-# Click elements
-axterminator click Calculator "+"
-
-# Record interactions
-axterminator record Calculator
+@pytest.mark.ax_requires_app("Calculator")
+def test_addition(ax_app, ax_wait):
+    app = ax_app("Calculator")
+    app.find("7").click()
+    app.find("+").click()
+    app.find("3").click()
+    app.find("=").click()
+    ax_wait(0.1)
 ```
+
+Available fixtures: `ax_app`, `ax_wait`, `ax_calculator`, `ax_finder`

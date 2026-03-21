@@ -34,10 +34,9 @@ import axterminator as ax
 # Customize strategy order
 config = ax.HealingConfig(
     strategies=["data_testid", "aria_label", "title"],
-    timeout_budget_ms=5000
+    max_heal_time_ms=200,
 )
-
-app = ax.app(name="Calculator", healing_config=config)
+ax.configure_healing(config)
 ```
 
 ## Best Practices
@@ -83,6 +82,7 @@ The timeout is split across strategies:
 ```python
 config = ax.HealingConfig(
     strategies=["data_testid", "title", "visual_vlm"],
-    timeout_budget_ms=3000  # 1000ms per strategy
+    max_heal_time_ms=300,  # Total budget split across strategies
 )
+ax.configure_healing(config)
 ```
