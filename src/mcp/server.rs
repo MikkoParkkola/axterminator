@@ -26,7 +26,9 @@
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(test)]
+use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
 use crate::mcp::protocol::{

@@ -97,7 +97,7 @@ extern "C" {
 pub(super) fn objc_class(name: &str) -> *const Class {
     use std::ffi::CString;
     let c = CString::new(name).unwrap_or_default();
-    unsafe { objc::runtime::objc_getClass(c.as_ptr()) as *const Class }
+    unsafe { objc::runtime::objc_getClass(c.as_ptr()) }
 }
 
 /// Create an `NSString` from a Rust `&str`.
