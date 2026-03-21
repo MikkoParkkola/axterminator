@@ -177,7 +177,7 @@ impl AXApp {
         bundle_id: Option<&str>,
         pid: Option<u32>,
     ) -> AXResult<Self> {
-        Self::connect(name, bundle_id, pid).map_err(|e| AXError::SystemError(e.to_string()))
+        Self::connect_impl(name, bundle_id, pid)
     }
 
     /// Find element — returns `AXResult` for Rust-native callers (no pyo3 dependency).
@@ -202,13 +202,12 @@ impl AXApp {
         self.get_windows()
     }
 
-    /// Connect to an application
-    pub fn connect(
+    /// Core connection logic returning `AXResult` — usable without the Python interpreter.
+    pub fn connect_impl(
         name: Option<&str>,
         bundle_id: Option<&str>,
         pid: Option<u32>,
-    ) -> PyResult<Self> {
-        // Find PID from name or bundle_id if not provided
+    ) -> AXResult<Self> {
         let resolved_pid = if let Some(p) = pid {
             p as i32
         } else if let Some(bid) = bundle_id {
@@ -216,14 +215,12 @@ impl AXApp {
         } else if let Some(n) = name {
             Self::pid_from_name(n)?
         } else {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "Must provide name, bundle_id, or pid",
+            return Err(AXError::InvalidQuery(
+                "Must provide name, bundle_id, or pid".into(),
             ));
         };
 
-        let element = create_application_element(resolved_pid)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-
+        let element = create_application_element(resolved_pid)?;
         let sync_engine = Arc::new(SyncEngine::new(resolved_pid, element));
 
         Ok(Self {
@@ -235,8 +232,18 @@ impl AXApp {
         })
     }
 
+    /// Connect to an application — `PyResult` shim for `#[pymethods]`.
+    pub fn connect(
+        name: Option<&str>,
+        bundle_id: Option<&str>,
+        pid: Option<u32>,
+    ) -> PyResult<Self> {
+        Self::connect_impl(name, bundle_id, pid)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
     /// Get PID from bundle identifier using `NSRunningApplication`
-    fn pid_from_bundle_id(bundle_id: &str) -> PyResult<i32> {
+    fn pid_from_bundle_id(bundle_id: &str) -> AXResult<i32> {
         let output = Command::new("osascript")
             .args([
                 "-e",
@@ -245,41 +252,41 @@ impl AXApp {
                 ),
             ])
             .output()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            .map_err(|e| AXError::SystemError(e.to_string()))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let pid_str = stdout.trim();
 
         if pid_str.is_empty() || pid_str == "missing value" {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            return Err(AXError::AppNotFound(format!(
                 "Application not found: {bundle_id}"
             )));
         }
 
         pid_str
             .parse::<i32>()
-            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Failed to parse PID"))
+            .map_err(|_| AXError::SystemError("Failed to parse PID".into()))
     }
 
     /// Get PID from application name
-    fn pid_from_name(name: &str) -> PyResult<i32> {
+    fn pid_from_name(name: &str) -> AXResult<i32> {
         let output = Command::new("pgrep")
             .args(["-x", name])
             .output()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            .map_err(|e| AXError::SystemError(e.to_string()))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let pid_str = stdout.lines().next().unwrap_or("").trim();
 
         if pid_str.is_empty() {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            return Err(AXError::AppNotFound(format!(
                 "Application not found: {name}"
             )));
         }
 
         pid_str
             .parse::<i32>()
-            .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Failed to parse PID"))
+            .map_err(|_| AXError::SystemError("Failed to parse PID".into()))
     }
 
     /// Find element with optional timeout
@@ -336,7 +343,10 @@ impl AXApp {
     ) -> AXResult<AXElement> {
         let criteria = SearchCriteria {
             role: Some(role.to_string()),
+            text_any: None,
             title: title.map(String::from),
+            description: None,
+            value: None,
             identifier: identifier.map(String::from),
             label: label.map(String::from),
         };
@@ -463,6 +473,26 @@ impl AXApp {
 
     /// Check if element matches search criteria
     fn element_matches(&self, element: AXUIElementRef, criteria: &SearchCriteria) -> bool {
+        // OR-match: simple text query hits any text-bearing attribute
+        if let Some(needle) = &criteria.text_any {
+            let attrs: &[&str] = &[
+                attributes::AX_TITLE,
+                attributes::AX_DESCRIPTION,
+                attributes::AX_VALUE,
+                attributes::AX_LABEL,
+                attributes::AX_IDENTIFIER,
+            ];
+            let found = attrs.iter().any(|attr| {
+                get_attribute(element, attr).is_ok_and(|r| {
+                    let matched = cf_string_to_string(r)
+                        .is_some_and(|s| s.contains(needle.as_str()));
+                    accessibility::release_cf(r);
+                    matched
+                })
+            });
+            return found;
+        }
+
         // Check role
         if let Some(required_role) = &criteria.role {
             if let Ok(role_ref) = get_attribute(element, attributes::AX_ROLE) {
@@ -482,6 +512,34 @@ impl AXApp {
                 let matches =
                     cf_string_to_string(title_ref).is_some_and(|t| t.contains(required_title));
                 accessibility::release_cf(title_ref);
+                if !matches {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Check description
+        if let Some(required_desc) = &criteria.description {
+            if let Ok(desc_ref) = get_attribute(element, attributes::AX_DESCRIPTION) {
+                let matches = cf_string_to_string(desc_ref)
+                    .is_some_and(|d| d.contains(required_desc.as_str()));
+                accessibility::release_cf(desc_ref);
+                if !matches {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Check value
+        if let Some(required_value) = &criteria.value {
+            if let Ok(value_ref) = get_attribute(element, attributes::AX_VALUE) {
+                let matches = cf_string_to_string(value_ref)
+                    .is_some_and(|v| v.contains(required_value.as_str()));
+                accessibility::release_cf(value_ref);
                 if !matches {
                     return false;
                 }
@@ -532,7 +590,12 @@ impl Drop for AXApp {
 #[derive(Debug, Clone)]
 struct SearchCriteria {
     role: Option<String>,
+    /// OR-match: true if ANY text-bearing attribute contains this value.
+    /// Set by simple-text queries; title/identifier/label remain None when this is Some.
+    text_any: Option<String>,
     title: Option<String>,
+    description: Option<String>,
+    value: Option<String>,
     identifier: Option<String>,
     label: Option<String>,
 }
@@ -558,12 +621,15 @@ impl SearchCriteria {
             return Self::parse_key_value(query);
         }
 
-        // Simple text query - match against title, label, or identifier
+        // Simple text query - OR-match against any text-bearing attribute
         Ok(Self {
             role: None,
-            title: Some(query.to_string()),
-            identifier: Some(query.to_string()),
-            label: Some(query.to_string()),
+            text_any: Some(query.to_string()),
+            title: None,
+            description: None,
+            value: None,
+            identifier: None,
+            label: None,
         })
     }
 
@@ -571,7 +637,10 @@ impl SearchCriteria {
     fn parse_xpath(query: &str) -> AXResult<Self> {
         let mut criteria = Self {
             role: None,
+            text_any: None,
             title: None,
+            description: None,
+            value: None,
             identifier: None,
             label: None,
         };
@@ -610,7 +679,10 @@ impl SearchCriteria {
     fn parse_key_value(query: &str) -> AXResult<Self> {
         let mut criteria = Self {
             role: None,
+            text_any: None,
             title: None,
+            description: None,
+            value: None,
             identifier: None,
             label: None,
         };
@@ -620,6 +692,8 @@ impl SearchCriteria {
                 match key.trim() {
                     "role" => criteria.role = Some(value.trim().to_string()),
                     "title" => criteria.title = Some(value.trim().to_string()),
+                    "description" => criteria.description = Some(value.trim().to_string()),
+                    "value" => criteria.value = Some(value.trim().to_string()),
                     "identifier" | "id" => criteria.identifier = Some(value.trim().to_string()),
                     "label" => criteria.label = Some(value.trim().to_string()),
                     _ => return Err(AXError::InvalidQuery(format!("Unknown key: {key}"))),
@@ -690,11 +764,32 @@ mod tests {
         // WHEN: Parsing
         let criteria = SearchCriteria::parse(query).unwrap();
 
-        // THEN: Should match against title, identifier, and label
+        // THEN: OR-match field is set; per-attribute fields remain None
         assert_eq!(criteria.role, None);
-        assert_eq!(criteria.title, Some("Save".to_string()));
-        assert_eq!(criteria.identifier, Some("Save".to_string()));
-        assert_eq!(criteria.label, Some("Save".to_string()));
+        assert_eq!(criteria.text_any, Some("Save".to_string()));
+        assert_eq!(criteria.title, None);
+        assert_eq!(criteria.identifier, None);
+        assert_eq!(criteria.label, None);
+        assert_eq!(criteria.description, None);
+        assert_eq!(criteria.value, None);
+    }
+
+    #[test]
+    fn test_search_criteria_parse_description_and_value_keys() {
+        // GIVEN: key:value query using "description" and "value"
+        let query = "description:Search value:42";
+
+        // WHEN: Parsing
+        let criteria = SearchCriteria::parse(query).unwrap();
+
+        // THEN: description and value are populated; other fields remain None
+        assert_eq!(criteria.text_any, None);
+        assert_eq!(criteria.role, None);
+        assert_eq!(criteria.title, None);
+        assert_eq!(criteria.description, Some("Search".to_string()));
+        assert_eq!(criteria.value, Some("42".to_string()));
+        assert_eq!(criteria.identifier, None);
+        assert_eq!(criteria.label, None);
     }
 
     #[test]

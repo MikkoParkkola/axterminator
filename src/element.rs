@@ -432,20 +432,15 @@ impl AXElement {
 
     /// Search for a child element (single attempt)
     fn search_child(&self, query: &str) -> AXResult<AXElement> {
-        // Parse query - support simple text match or attribute:value format
-        let (attr, value) = if query.contains(':') {
-            let parts: Vec<&str> = query.splitn(2, ':').collect();
-            (parts[0].trim(), parts[1].trim())
-        } else {
-            // Default: search by title
-            (attributes::AX_TITLE, query)
-        };
-
-        // Get children
         let children = accessibility::get_children(self.element)?;
-
-        // Search recursively
-        self.search_in_elements(&children, attr, value)
+        if query.contains(':') {
+            let parts: Vec<&str> = query.splitn(2, ':').collect();
+            let attr = parts[0].trim();
+            let value = parts[1].trim();
+            self.search_in_elements(&children, attr, value)
+        } else {
+            self.search_in_elements_any_text(&children, query)
+        }
     }
 
     /// Recursively search in element list
@@ -472,6 +467,40 @@ impl AXElement {
         }
 
         Err(AXError::ElementNotFound(format!("{attr}:{value}")))
+    }
+
+    /// Recursively search elements, matching query against ANY text-bearing attribute.
+    fn search_in_elements_any_text(
+        &self,
+        elements: &[AXUIElementRef],
+        query: &str,
+    ) -> AXResult<AXElement> {
+        let text_attrs = [
+            attributes::AX_TITLE,
+            attributes::AX_DESCRIPTION,
+            attributes::AX_VALUE,
+            attributes::AX_LABEL,
+            attributes::AX_IDENTIFIER,
+        ];
+
+        for &element in elements {
+            let matches = text_attrs.iter().any(|attr| {
+                accessibility::get_string_attribute_value(element, attr)
+                    .is_some_and(|v| v.contains(query))
+            });
+
+            if matches {
+                return Ok(AXElement::new(element));
+            }
+
+            if let Ok(children) = accessibility::get_children(element) {
+                if let Ok(found) = self.search_in_elements_any_text(&children, query) {
+                    return Ok(found);
+                }
+            }
+        }
+
+        Err(AXError::ElementNotFound(query.to_string()))
     }
 }
 

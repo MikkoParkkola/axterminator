@@ -29,7 +29,7 @@ required-features = ["cli"]
 # - The standalone CLI binary is built with `cargo build --bin axterminator`
 #   (default features = cli only), which links Python explicitly via build.rs.
 default = ["cli"]
-cli = ["dep:clap", "dep:clap_complete"]
+cli = ["dep:clap", "dep:clap_complete", "pyo3/auto-initialize"]
 # spaces: virtual desktop management via CGSSpace private SPI.
 # Off by default — private API, macOS 14+ tested, incompatible with App Store.
 spaces = []
