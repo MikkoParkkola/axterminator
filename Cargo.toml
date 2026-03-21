@@ -131,6 +131,13 @@ cc = "1.2"
 name = "element_access"
 harness = false
 
+[lints.rust]
+# objc 0.2's sel_impl macro emits `cfg(cargo-clippy)` checks that Rust 1.80+
+# flags as unexpected_cfgs.  objc 0.2.7 is the final release in that series
+# and the fix lives upstream; suppress at workspace level until cocoa/objc deps
+# migrate to objc2.
+unexpected_cfgs = "allow"
+
 [profile.release]
 lto = true
 codegen-units = 1
