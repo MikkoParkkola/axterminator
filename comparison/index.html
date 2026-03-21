@@ -10,9 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/comparison/">
       
       
+        <link rel="prev" href="../performance/">
+      
+      
+        <link rel="next" href="../DESIGN/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>Tool Comparison - AXTerminator</title>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#tool-comparison" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              Tool Comparison
             
           </span>
         </div>
@@ -859,8 +863,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -871,13 +877,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
@@ -898,7 +902,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -941,10 +945,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Comparison
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -960,6 +991,220 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#performance-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feature-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#speedup-vs-competitors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Speedup vs Competitors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-axterminator-is-faster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why AXTerminator is Faster
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why AXTerminator is Faster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#direct-api-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct API Access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-http-overhead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No HTTP Overhead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maintenance-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Maintenance Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-what" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use What
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When to Use What">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-axterminator-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use AXTerminator when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-xcuitest-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use XCUITest when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-appium-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Appium when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-pyautogui-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use PyAutoGUI when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-maestro-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Maestro when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-from-other-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration from Other Tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration from Other Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-pyautogui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From PyAutoGUI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-appium" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From Appium
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1109,6 +1354,208 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#performance-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feature-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#speedup-vs-competitors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Speedup vs Competitors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-axterminator-is-faster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why AXTerminator is Faster
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why AXTerminator is Faster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#direct-api-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct API Access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-http-overhead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No HTTP Overhead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maintenance-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Maintenance Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-what" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use What
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When to Use What">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-axterminator-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use AXTerminator when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-xcuitest-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use XCUITest when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-appium-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Appium when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-pyautogui-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use PyAutoGUI when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-maestro-when" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Maestro when:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-from-other-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration from Other Tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration from Other Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-pyautogui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From PyAutoGUI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-appium" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From Appium
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1574,349 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="tool-comparison">Tool Comparison<a class="headerlink" href="#tool-comparison" title="Permanent link">&para;</a></h1>
+<p>How AXTerminator compares to other macOS GUI automation tools.</p>
+<h2 id="performance-comparison">Performance Comparison<a class="headerlink" href="#performance-comparison" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Element Access</th>
+<th>Click</th>
+<th>Focus Stealing</th>
+<th>Language</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AXTerminator</strong></td>
+<td><strong>379µs</strong></td>
+<td>~1ms</td>
+<td><strong>No</strong></td>
+<td>Rust/Python</td>
+</tr>
+<tr>
+<td>XCUITest</td>
+<td>~200ms</td>
+<td>~50ms</td>
+<td>Yes</td>
+<td>Swift</td>
+</tr>
+<tr>
+<td>Appium Mac2</td>
+<td>~500ms</td>
+<td>~100ms</td>
+<td>Yes</td>
+<td>Any</td>
+</tr>
+<tr>
+<td>PyAutoGUI</td>
+<td>~100ms</td>
+<td>~50ms</td>
+<td>Yes</td>
+<td>Python</td>
+</tr>
+<tr>
+<td>Maestro</td>
+<td>~300ms</td>
+<td>~100ms</td>
+<td>Yes</td>
+<td>YAML</td>
+</tr>
+<tr>
+<td>SikuliX</td>
+<td>~1000ms</td>
+<td>~500ms</td>
+<td>Yes</td>
+<td>Java/Python</td>
+</tr>
+<tr>
+<td>Atomac</td>
+<td>~500ms</td>
+<td>~200ms</td>
+<td>Yes</td>
+<td>Python</td>
+</tr>
+</tbody>
+</table>
+<h2 id="feature-comparison">Feature Comparison<a class="headerlink" href="#feature-comparison" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th style="text-align: center;">AXTerminator</th>
+<th style="text-align: center;">XCUITest</th>
+<th style="text-align: center;">Appium</th>
+<th style="text-align: center;">PyAutoGUI</th>
+<th style="text-align: center;">Maestro</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Background testing</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>Self-healing locators</td>
+<td style="text-align: center;">✅ (7)</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">Basic</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>AI vision fallback</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>Cross-app testing</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">Limited</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">Limited</td>
+</tr>
+<tr>
+<td>Python API</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td>No Xcode required</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Electron support</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>WebView support</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">Limited</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+</tr>
+</tbody>
+</table>
+<h2 id="speedup-vs-competitors">Speedup vs Competitors<a class="headerlink" href="#speedup-vs-competitors" title="Permanent link">&para;</a></h2>
+<p>AXTerminator element access measured with Criterion benchmarks on M1 MacBook Pro, macOS 14.2 (Finder.app target). Competitor numbers are estimates based on architecture analysis and community-reported values, not controlled head-to-head benchmarks.</p>
+<table>
+<thead>
+<tr>
+<th>Competitor</th>
+<th>Their Typical Speed</th>
+<th>AXTerminator</th>
+<th>Approximate Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XCUITest</td>
+<td>~200 ms (reported)</td>
+<td>379 us (measured)</td>
+<td>~528x</td>
+</tr>
+<tr>
+<td>Appium</td>
+<td>~500 ms (reported)</td>
+<td>379 us (measured)</td>
+<td>~1,321x</td>
+</tr>
+<tr>
+<td>PyAutoGUI</td>
+<td>~100 ms (reported)</td>
+<td>379 us (measured)</td>
+<td>~264x</td>
+</tr>
+<tr>
+<td>SikuliX</td>
+<td>~1000 ms (reported)</td>
+<td>379 us (measured)</td>
+<td>~2,639x</td>
+</tr>
+</tbody>
+</table>
+<p>The speedup is primarily from eliminating HTTP/WebDriver/JSON protocol overhead. AXTerminator calls <code>AXUIElement</code> APIs directly via Rust FFI.</p>
+<h2 id="why-axterminator-is-faster">Why AXTerminator is Faster<a class="headerlink" href="#why-axterminator-is-faster" title="Permanent link">&para;</a></h2>
+<h3 id="direct-api-access">Direct API Access<a class="headerlink" href="#direct-api-access" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>AXTerminator: Python → Rust FFI → AXUIElement → Element
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                       ↓
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                    ~379µs
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Appium:       Python → HTTP → Node.js → XCTest → AXUIElement → Element
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                       ↓         ↓         ↓
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                    ~50ms    ~100ms    ~350ms = ~500ms total
+</code></pre></div>
+<h3 id="no-http-overhead">No HTTP Overhead<a class="headerlink" href="#no-http-overhead" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Appium</th>
+<th>AXTerminator</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP request</td>
+<td>~50ms</td>
+<td>0</td>
+</tr>
+<tr>
+<td>JSON serialization</td>
+<td>~10ms</td>
+<td>0</td>
+</tr>
+<tr>
+<td>WebDriver protocol</td>
+<td>~100ms</td>
+<td>0</td>
+</tr>
+<tr>
+<td>XCTest bridge</td>
+<td>~300ms</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>Total overhead</strong></td>
+<td><strong>~460ms</strong></td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="maintenance-status">Maintenance Status<a class="headerlink" href="#maintenance-status" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Status</th>
+<th>Last Update</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AXTerminator</strong></td>
+<td>✅ Active</td>
+<td>2026</td>
+<td>New, actively developed</td>
+</tr>
+<tr>
+<td>XCUITest</td>
+<td>✅ Active</td>
+<td>Ongoing</td>
+<td>Apple-maintained</td>
+</tr>
+<tr>
+<td>Appium</td>
+<td>✅ Active</td>
+<td>Ongoing</td>
+<td>Large community</td>
+</tr>
+<tr>
+<td>PyAutoGUI</td>
+<td>✅ Active</td>
+<td>2024</td>
+<td>Slower development</td>
+</tr>
+<tr>
+<td>Maestro</td>
+<td>✅ Active</td>
+<td>2025</td>
+<td>Mobile-focused</td>
+</tr>
+<tr>
+<td>SikuliX</td>
+<td>🟡 Slow</td>
+<td>2023</td>
+<td>Infrequent updates</td>
+</tr>
+<tr>
+<td><strong>Atomac</strong></td>
+<td>❌ Dead</td>
+<td>2017</td>
+<td><strong>Do not use</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="when-to-use-what">When to Use What<a class="headerlink" href="#when-to-use-what" title="Permanent link">&para;</a></h2>
+<h3 id="use-axterminator-when">Use AXTerminator when:<a class="headerlink" href="#use-axterminator-when" title="Permanent link">&para;</a></h3>
+<ul>
+<li>You need <strong>background testing</strong> (unique feature)</li>
+<li>Speed matters (1000+ element operations)</li>
+<li>Testing native macOS apps</li>
+<li>You want Python + pytest integration</li>
+<li>You need self-healing locators</li>
+</ul>
+<h3 id="use-xcuitest-when">Use XCUITest when:<a class="headerlink" href="#use-xcuitest-when" title="Permanent link">&para;</a></h3>
+<ul>
+<li>You're already in the Apple ecosystem</li>
+<li>Testing iOS apps primarily</li>
+<li>You have Xcode set up</li>
+</ul>
+<h3 id="use-appium-when">Use Appium when:<a class="headerlink" href="#use-appium-when" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Cross-platform tests (iOS + Android + macOS)</li>
+<li>Large existing Appium test suite</li>
+<li>Team knows WebDriver protocol</li>
+</ul>
+<h3 id="use-pyautogui-when">Use PyAutoGUI when:<a class="headerlink" href="#use-pyautogui-when" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Simple automation scripts</li>
+<li>Cross-platform (Windows + macOS + Linux)</li>
+<li>Image-based automation is acceptable</li>
+</ul>
+<h3 id="use-maestro-when">Use Maestro when:<a class="headerlink" href="#use-maestro-when" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Mobile-first testing</li>
+<li>YAML preference over code</li>
+<li>Anti-flakiness is priority</li>
+</ul>
+<h2 id="migration-from-other-tools">Migration from Other Tools<a class="headerlink" href="#migration-from-other-tools" title="Permanent link">&para;</a></h2>
+<h3 id="from-pyautogui">From PyAutoGUI<a class="headerlink" href="#from-pyautogui" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Before (PyAutoGUI)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyautogui</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">pyautogui</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">pyautogui</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;Hello&#39;</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># After (AXTerminator)</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="kn">import</span><span class="w"> </span><span class="nn">axterminator</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ax</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">app</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;TextEdit&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">app</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;role:AXTextArea&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">click</span><span class="p">()</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">app</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;role:AXTextArea&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;Hello&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="from-appium">From Appium<a class="headerlink" href="#from-appium" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Before (Appium)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">appium</span><span class="w"> </span><span class="kn">import</span> <span class="n">webdriver</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">driver</span> <span class="o">=</span> <span class="n">webdriver</span><span class="o">.</span><span class="n">Remote</span><span class="p">(</span><span class="n">command_executor</span><span class="o">=</span><span class="s1">&#39;http://127.0.0.1:4723&#39;</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">element</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">find_element</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="s1">&#39;Save&#39;</span><span class="p">)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">element</span><span class="o">.</span><span class="n">click</span><span class="p">()</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># After (AXTerminator)</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="kn">import</span><span class="w"> </span><span class="nn">axterminator</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ax</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">app</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;MyApp&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">app</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;Save&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">click</span><span class="p">()</span>  <span class="c1"># 1,321× faster</span>
+</code></pre></div>
 
 
 

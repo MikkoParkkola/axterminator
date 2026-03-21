@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/guide/vlm/">
       
       
+        <link rel="prev" href="../self-healing/">
+      
+      
+        <link rel="next" href="../audio/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>VLM Vision - AXTerminator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#vlm-vision-detection" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              VLM Vision
             
           </span>
         </div>
@@ -230,7 +234,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -260,7 +264,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -341,7 +345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -369,7 +373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -397,7 +401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/permissions/" class="md-nav__link">
+      <a href="../../getting-started/permissions/" class="md-nav__link">
         
   
   
@@ -429,8 +433,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -441,13 +447,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -468,7 +472,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -486,7 +490,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/finding-elements/" class="md-nav__link">
+      <a href="../finding-elements/" class="md-nav__link">
         
   
   
@@ -514,7 +518,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/actions/" class="md-nav__link">
+      <a href="../actions/" class="md-nav__link">
         
   
   
@@ -542,7 +546,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/self-healing/" class="md-nav__link">
+      <a href="../self-healing/" class="md-nav__link">
         
   
   
@@ -567,10 +571,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../guide/vlm/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VLM Vision
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -586,6 +617,92 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#supported-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Backends
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debugging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debugging
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -598,7 +715,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/audio/" class="md-nav__link">
+      <a href="../audio/" class="md-nav__link">
         
   
   
@@ -626,7 +743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/camera/" class="md-nav__link">
+      <a href="../camera/" class="md-nav__link">
         
   
   
@@ -654,7 +771,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/spaces/" class="md-nav__link">
+      <a href="../spaces/" class="md-nav__link">
         
   
   
@@ -743,7 +860,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/core/" class="md-nav__link">
+      <a href="../../api/core/" class="md-nav__link">
         
   
   
@@ -771,7 +888,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/element/" class="md-nav__link">
+      <a href="../../api/element/" class="md-nav__link">
         
   
   
@@ -799,7 +916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/mcp-tools/" class="md-nav__link">
+      <a href="../../api/mcp-tools/" class="md-nav__link">
         
   
   
@@ -827,7 +944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -916,7 +1033,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../performance/" class="md-nav__link">
+      <a href="../../performance/" class="md-nav__link">
         
   
   
@@ -944,7 +1061,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+      <a href="../../comparison/" class="md-nav__link">
         
   
   
@@ -1033,7 +1150,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DESIGN/" class="md-nav__link">
+      <a href="../../DESIGN/" class="md-nav__link">
         
   
   
@@ -1061,7 +1178,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SYNC_ENGINE/" class="md-nav__link">
+      <a href="../../SYNC_ENGINE/" class="md-nav__link">
         
   
   
@@ -1109,6 +1226,80 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#supported-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Backends
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debugging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debugging
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1318,124 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="vlm-vision-detection">VLM Vision Detection<a class="headerlink" href="#vlm-vision-detection" title="Permanent link">&para;</a></h1>
+<p>When traditional locators fail, AXTerminator can use AI vision models to find elements by natural language description.</p>
+<h2 id="supported-backends">Supported Backends<a class="headerlink" href="#supported-backends" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Speed</th>
+<th>Privacy</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MLX</strong></td>
+<td>Fast (~50ms)</td>
+<td>Local</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong>Ollama</strong></td>
+<td>Medium (~200ms)</td>
+<td>Local</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong>Anthropic</strong></td>
+<td>Slow (~1s)</td>
+<td>Cloud</td>
+<td>$$$</td>
+</tr>
+<tr>
+<td><strong>OpenAI</strong></td>
+<td>Slow (~1s)</td>
+<td>Cloud</td>
+<td>$$$</td>
+</tr>
+<tr>
+<td><strong>Gemini</strong></td>
+<td>Slow (~1s)</td>
+<td>Cloud</td>
+<td>$$</td>
+</tr>
+</tbody>
+</table>
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">axterminator</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ax</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Local MLX (recommended)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">ax</span><span class="o">.</span><span class="n">configure_vlm</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;mlx&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Local Ollama</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">ax</span><span class="o">.</span><span class="n">configure_vlm</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;ollama&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;llava&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Claude Vision</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">ax</span><span class="o">.</span><span class="n">configure_vlm</span><span class="p">(</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;anthropic&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;sk-ant-...&quot;</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="c1"># OpenAI Vision</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">ax</span><span class="o">.</span><span class="n">configure_vlm</span><span class="p">(</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;sk-...&quot;</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="p">)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="c1"># Gemini Vision</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="n">ax</span><span class="o">.</span><span class="n">configure_vlm</span><span class="p">(</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>    <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="p">)</span>
+</code></pre></div>
+<h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Natural language element description</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">button</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;the blue Save button in the toolbar&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Works with complex descriptions</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">menu</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;the dropdown menu showing &#39;File&#39; options&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">icon</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;the red notification badge on the bell icon&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<ol>
+<li>AXTerminator takes a screenshot of the app</li>
+<li>Sends it to the VLM with your description</li>
+<li>VLM returns bounding box coordinates</li>
+<li>AXTerminator maps coordinates to accessibility element</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>[Screenshot] + &quot;Find the blue Save button&quot;
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>        ↓
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    [VLM Model]
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        ↓
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>{x: 450, y: 120, width: 80, height: 30}
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        ↓
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    [Element Mapping]
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        ↓
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    AXButton(&quot;Save&quot;)
+</code></pre></div>
+<h2 id="performance-tips">Performance Tips<a class="headerlink" href="#performance-tips" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Use MLX locally</strong> - 50ms vs 1s for cloud</li>
+<li><strong>Be specific</strong> - "blue Save button in toolbar" &gt; "save button"</li>
+<li><strong>Use as fallback</strong> - Configure after other strategies</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">config</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">HealingConfig</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">strategies</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data_testid&quot;</span><span class="p">,</span> <span class="s2">&quot;title&quot;</span><span class="p">,</span> <span class="s2">&quot;visual_vlm&quot;</span><span class="p">]</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="p">)</span>
+</code></pre></div>
+<h2 id="debugging">Debugging<a class="headerlink" href="#debugging" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Enable verbose VLM logging</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">ax</span><span class="o">.</span><span class="n">configure_vlm</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;mlx&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Manual detection</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">result</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">detect_element_visual</span><span class="p">(</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">app</span><span class="o">.</span><span class="n">screenshot</span><span class="p">(),</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="s2">&quot;the search icon&quot;</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>  <span class="c1"># {&quot;x&quot;: 100, &quot;y&quot;: 50, &quot;confidence&quot;: 0.95}</span>
+</code></pre></div>
 
 
 
@@ -1215,10 +1522,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

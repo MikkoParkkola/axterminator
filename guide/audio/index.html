@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/guide/audio/">
       
       
+        <link rel="prev" href="../vlm/">
+      
+      
+        <link rel="next" href="../camera/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>Audio & Speech - AXTerminator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#audio-speech" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              Audio & Speech
             
           </span>
         </div>
@@ -230,7 +234,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -260,7 +264,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -341,7 +345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -369,7 +373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -397,7 +401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/permissions/" class="md-nav__link">
+      <a href="../../getting-started/permissions/" class="md-nav__link">
         
   
   
@@ -429,8 +433,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -441,13 +447,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -468,7 +472,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -486,7 +490,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/finding-elements/" class="md-nav__link">
+      <a href="../finding-elements/" class="md-nav__link">
         
   
   
@@ -514,7 +518,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/actions/" class="md-nav__link">
+      <a href="../actions/" class="md-nav__link">
         
   
   
@@ -542,7 +546,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/self-healing/" class="md-nav__link">
+      <a href="../self-healing/" class="md-nav__link">
         
   
   
@@ -570,7 +574,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/vlm/" class="md-nav__link">
+      <a href="../vlm/" class="md-nav__link">
         
   
   
@@ -595,10 +599,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../guide/audio/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio & Speech
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -614,6 +645,109 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enable-audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enable Audio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP Tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#speech-recognition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Speech Recognition
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Speech Recognition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#text-to-speech" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text-to-Speech
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audio-devices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audio Devices
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -626,7 +760,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/camera/" class="md-nav__link">
+      <a href="../camera/" class="md-nav__link">
         
   
   
@@ -654,7 +788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/spaces/" class="md-nav__link">
+      <a href="../spaces/" class="md-nav__link">
         
   
   
@@ -743,7 +877,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/core/" class="md-nav__link">
+      <a href="../../api/core/" class="md-nav__link">
         
   
   
@@ -771,7 +905,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/element/" class="md-nav__link">
+      <a href="../../api/element/" class="md-nav__link">
         
   
   
@@ -799,7 +933,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/mcp-tools/" class="md-nav__link">
+      <a href="../../api/mcp-tools/" class="md-nav__link">
         
   
   
@@ -827,7 +961,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -916,7 +1050,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../performance/" class="md-nav__link">
+      <a href="../../performance/" class="md-nav__link">
         
   
   
@@ -944,7 +1078,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+      <a href="../../comparison/" class="md-nav__link">
         
   
   
@@ -1033,7 +1167,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DESIGN/" class="md-nav__link">
+      <a href="../../DESIGN/" class="md-nav__link">
         
   
   
@@ -1061,7 +1195,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SYNC_ENGINE/" class="md-nav__link">
+      <a href="../../SYNC_ENGINE/" class="md-nav__link">
         
   
   
@@ -1109,6 +1243,97 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enable-audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enable Audio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP Tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#speech-recognition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Speech Recognition
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Speech Recognition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#text-to-speech" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Text-to-Speech
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audio-devices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audio Devices
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1352,63 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="audio-speech">Audio &amp; Speech<a class="headerlink" href="#audio-speech" title="Permanent link">&para;</a></h1>
+<p>AXTerminator includes on-device audio capture and speech recognition via the <code>audio</code> feature flag.</p>
+<h2 id="enable-audio">Enable Audio<a class="headerlink" href="#enable-audio" title="Permanent link">&para;</a></h2>
+<p>Build with the <code>audio</code> feature:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span><span class="s2">&quot;cli,audio&quot;</span>
+</code></pre></div>
+<h2 id="mcp-tools">MCP Tools<a class="headerlink" href="#mcp-tools" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_listen</code></td>
+<td>Capture microphone or system audio, transcribe via SFSpeechRecognizer</td>
+</tr>
+<tr>
+<td><code>ax_speak</code></td>
+<td>Text-to-speech via NSSpeechSynthesizer</td>
+</tr>
+<tr>
+<td><code>ax_audio_devices</code></td>
+<td>List available audio input/output devices</td>
+</tr>
+</tbody>
+</table>
+<h2 id="speech-recognition">Speech Recognition<a class="headerlink" href="#speech-recognition" title="Permanent link">&para;</a></h2>
+<p>AXTerminator captures audio at <strong>native 48kHz sample rate</strong> and transcribes on-device using Apple's SFSpeechRecognizer. No cloud API required.</p>
+<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Dictation</strong> must be enabled: System Settings &gt; Keyboard &gt; Dictation</li>
+<li><strong>Microphone permission</strong> granted to your terminal app</li>
+</ul>
+<h3 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
+<ol>
+<li>CoreAudio captures from the default input device at 48kHz</li>
+<li>Audio is buffered and written as a WAV file</li>
+<li>SFSpeechRecognizer transcribes on-device</li>
+<li>CFRunLoop is pumped for callback delivery</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">48kHz Native Capture</p>
+<p>Earlier versions captured at 48kHz but wrote 16kHz WAV headers, causing garbled audio. v0.6.0 fixed this to write correct 48kHz headers, resolving speech recognition accuracy.</p>
+</div>
+<h2 id="text-to-speech">Text-to-Speech<a class="headerlink" href="#text-to-speech" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Via CLI</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>axterminator<span class="w"> </span>speak<span class="w"> </span><span class="s2">&quot;Hello from AXTerminator&quot;</span>
+</code></pre></div>
+<p>Uses NSSpeechSynthesizer with the system default voice.</p>
+<h2 id="audio-devices">Audio Devices<a class="headerlink" href="#audio-devices" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># List input/output devices</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>axterminator<span class="w"> </span>audio-devices
+</code></pre></div>
+<p>Lists all CoreAudio devices with their sample rates and channel counts.</p>
 
 
 
@@ -1215,10 +1495,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

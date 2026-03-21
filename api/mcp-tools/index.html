@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/api/mcp-tools/">
       
       
+        <link rel="prev" href="../element/">
+      
+      
+        <link rel="next" href="../config/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>MCP Tools - AXTerminator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#mcp-tools-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              MCP Tools
             
           </span>
         </div>
@@ -230,7 +234,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -260,7 +264,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -341,7 +345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -369,7 +373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -397,7 +401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/permissions/" class="md-nav__link">
+      <a href="../../getting-started/permissions/" class="md-nav__link">
         
   
   
@@ -486,7 +490,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/finding-elements/" class="md-nav__link">
+      <a href="../../guide/finding-elements/" class="md-nav__link">
         
   
   
@@ -514,7 +518,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/actions/" class="md-nav__link">
+      <a href="../../guide/actions/" class="md-nav__link">
         
   
   
@@ -542,7 +546,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/self-healing/" class="md-nav__link">
+      <a href="../../guide/self-healing/" class="md-nav__link">
         
   
   
@@ -570,7 +574,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/vlm/" class="md-nav__link">
+      <a href="../../guide/vlm/" class="md-nav__link">
         
   
   
@@ -598,7 +602,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/audio/" class="md-nav__link">
+      <a href="../../guide/audio/" class="md-nav__link">
         
   
   
@@ -626,7 +630,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/camera/" class="md-nav__link">
+      <a href="../../guide/camera/" class="md-nav__link">
         
   
   
@@ -654,7 +658,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/spaces/" class="md-nav__link">
+      <a href="../../guide/spaces/" class="md-nav__link">
         
   
   
@@ -686,8 +690,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -698,13 +704,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
@@ -725,7 +729,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -743,7 +747,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/core/" class="md-nav__link">
+      <a href="../core/" class="md-nav__link">
         
   
   
@@ -771,7 +775,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/element/" class="md-nav__link">
+      <a href="../element/" class="md-nav__link">
         
   
   
@@ -796,10 +800,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../api/mcp-tools/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Tools
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -815,6 +846,164 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-tools-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Tools (19)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Tools (19)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gui-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GUI Interaction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audio-tools-3-audio-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audio Tools (3) -- audio feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camera-tools-3-camera-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera Tools (3) -- camera feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spaces-tools-5-spaces-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spaces Tools (5) -- spaces feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resources-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources (5)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guided-prompts-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Guided Prompts (4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#elicitation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Elicitation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Annotations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -827,7 +1016,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../config/" class="md-nav__link">
         
   
   
@@ -916,7 +1105,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../performance/" class="md-nav__link">
+      <a href="../../performance/" class="md-nav__link">
         
   
   
@@ -944,7 +1133,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+      <a href="../../comparison/" class="md-nav__link">
         
   
   
@@ -1033,7 +1222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DESIGN/" class="md-nav__link">
+      <a href="../../DESIGN/" class="md-nav__link">
         
   
   
@@ -1061,7 +1250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SYNC_ENGINE/" class="md-nav__link">
+      <a href="../../SYNC_ENGINE/" class="md-nav__link">
         
   
   
@@ -1109,6 +1298,152 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-tools-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Tools (19)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Tools (19)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gui-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GUI Interaction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audio-tools-3-audio-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audio Tools (3) -- audio feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camera-tools-3-camera-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera Tools (3) -- camera feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spaces-tools-5-spaces-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spaces Tools (5) -- spaces feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resources-5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources (5)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guided-prompts-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Guided Prompts (4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#elicitation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Elicitation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Annotations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1462,332 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="mcp-tools-reference">MCP Tools Reference<a class="headerlink" href="#mcp-tools-reference" title="Permanent link">&para;</a></h1>
+<p>AXTerminator v0.6.1 exposes up to 30 MCP tools (19 core + optional audio, camera, spaces), 5 resources, 4 guided prompts, and 9 elicitation scenarios.</p>
+<h2 id="core-tools-19">Core Tools (19)<a class="headerlink" href="#core-tools-19" title="Permanent link">&para;</a></h2>
+<h3 id="gui-interaction">GUI Interaction<a class="headerlink" href="#gui-interaction" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_connect</code></td>
+<td>Connect to a running application by name, bundle ID, or PID</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_find</code></td>
+<td>Find a UI element by query string</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_click</code></td>
+<td>Click an element (background by default)</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_click_at</code></td>
+<td>Click at screen coordinates</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_type</code></td>
+<td>Type text into an element (requires focus)</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_set_value</code></td>
+<td>Set element value directly via AXValue attribute</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_get_value</code></td>
+<td>Read element value</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_scroll</code></td>
+<td>Scroll within an element</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_drag</code></td>
+<td>Drag from one element/position to another</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_key_press</code></td>
+<td>Press a keyboard key or combination</td>
+<td>destructive</td>
+</tr>
+</tbody>
+</table>
+<h3 id="observation">Observation<a class="headerlink" href="#observation" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_is_accessible</code></td>
+<td>Check if accessibility permissions are granted</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_screenshot</code></td>
+<td>Capture a PNG screenshot of an app or element</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_get_tree</code></td>
+<td>Get the accessibility element hierarchy</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_get_attributes</code></td>
+<td>Read all attributes of an element</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_list_windows</code></td>
+<td>List all windows of an application</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_list_apps</code></td>
+<td>List all running accessible applications</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_wait_idle</code></td>
+<td>Wait for application to become idle</td>
+<td>readOnly, idempotent</td>
+</tr>
+</tbody>
+</table>
+<h3 id="verification">Verification<a class="headerlink" href="#verification" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_assert</code></td>
+<td>Assert element state (exists, enabled, value, etc.)</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_find_visual</code></td>
+<td>Find element using VLM vision as fallback</td>
+<td>readOnly</td>
+</tr>
+</tbody>
+</table>
+<h2 id="audio-tools-3-audio-feature">Audio Tools (3) -- <code>audio</code> feature<a class="headerlink" href="#audio-tools-3-audio-feature" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_listen</code></td>
+<td>Capture audio and transcribe via SFSpeechRecognizer (48kHz native)</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_speak</code></td>
+<td>Text-to-speech via NSSpeechSynthesizer</td>
+<td>openWorld</td>
+</tr>
+<tr>
+<td><code>ax_audio_devices</code></td>
+<td>List available audio input/output devices</td>
+<td>readOnly</td>
+</tr>
+</tbody>
+</table>
+<h2 id="camera-tools-3-camera-feature">Camera Tools (3) -- <code>camera</code> feature<a class="headerlink" href="#camera-tools-3-camera-feature" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_camera_capture</code></td>
+<td>Capture a single frame from AVFoundation</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_gesture_detect</code></td>
+<td>Detect hand gestures in a camera frame</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_gesture_listen</code></td>
+<td>Continuous gesture detection (requires <code>watch</code> feature)</td>
+<td>readOnly</td>
+</tr>
+</tbody>
+</table>
+<h2 id="spaces-tools-5-spaces-feature">Spaces Tools (5) -- <code>spaces</code> feature<a class="headerlink" href="#spaces-tools-5-spaces-feature" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_list_spaces</code></td>
+<td>List all virtual desktops</td>
+<td>readOnly</td>
+</tr>
+<tr>
+<td><code>ax_create_space</code></td>
+<td>Create a new virtual desktop</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_move_to_space</code></td>
+<td>Move a window to a specific space</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_switch_space</code></td>
+<td>Switch active space</td>
+<td>destructive</td>
+</tr>
+<tr>
+<td><code>ax_destroy_space</code></td>
+<td>Destroy a virtual desktop</td>
+<td>destructive</td>
+</tr>
+</tbody>
+</table>
+<h2 id="resources-5">Resources (5)<a class="headerlink" href="#resources-5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>URI</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>axterminator://apps</code></td>
+<td>Running applications</td>
+</tr>
+<tr>
+<td><code>axterminator://app/{name}/tree</code></td>
+<td>Live element hierarchy</td>
+</tr>
+<tr>
+<td><code>axterminator://app/{name}/screenshot</code></td>
+<td>Current screenshot (base64 PNG)</td>
+</tr>
+<tr>
+<td><code>axterminator://app/{name}/state</code></td>
+<td>Focused element, window title</td>
+</tr>
+<tr>
+<td><code>axterminator://system/displays</code></td>
+<td>Monitor layout and Retina scaling</td>
+</tr>
+</tbody>
+</table>
+<h2 id="guided-prompts-4">Guided Prompts (4)<a class="headerlink" href="#guided-prompts-4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test-app</code></td>
+<td>Generate a test plan for an application</td>
+</tr>
+<tr>
+<td><code>navigate-to</code></td>
+<td>Navigate to a specific screen or element</td>
+</tr>
+<tr>
+<td><code>extract-data</code></td>
+<td>Extract structured data from a UI</td>
+</tr>
+<tr>
+<td><code>accessibility-audit</code></td>
+<td>Audit an app's accessibility compliance</td>
+</tr>
+</tbody>
+</table>
+<h2 id="elicitation">Elicitation<a class="headerlink" href="#elicitation" title="Permanent link">&para;</a></h2>
+<p>Destructive and ambiguous operations trigger elicitation dialogs for user confirmation. There are 9 elicitation scenarios covering:</p>
+<ul>
+<li>Destructive clicks (e.g., "Delete", "Remove")</li>
+<li>Text input into sensitive fields</li>
+<li>Drag operations</li>
+<li>Space management (create/destroy)</li>
+<li>Application termination</li>
+</ul>
+<h2 id="tool-annotations">Tool Annotations<a class="headerlink" href="#tool-annotations" title="Permanent link">&para;</a></h2>
+<p>All tools carry MCP tool annotations:</p>
+<table>
+<thead>
+<tr>
+<th>Annotation</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>readOnlyHint</code></td>
+<td>Tool only reads state, no side effects</td>
+</tr>
+<tr>
+<td><code>destructiveHint</code></td>
+<td>Tool modifies state (clicks, types, deletes)</td>
+</tr>
+<tr>
+<td><code>idempotentHint</code></td>
+<td>Calling multiple times has same effect</td>
+</tr>
+<tr>
+<td><code>openWorldHint</code></td>
+<td>Tool interacts with external systems</td>
+</tr>
+</tbody>
+</table>
+<h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Bearer token auth</strong> required for HTTP transport (<code>--token</code> flag)</li>
+<li><strong>Localhost-only</strong> binding for HTTP transport by default</li>
+<li>Structured MCP logging with progress notifications</li>
+</ul>
 
 
 
@@ -1215,10 +1874,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

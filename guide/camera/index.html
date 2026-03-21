@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/guide/camera/">
       
       
+        <link rel="prev" href="../audio/">
+      
+      
+        <link rel="next" href="../spaces/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>Camera & Gestures - AXTerminator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#camera-gestures" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              Camera & Gestures
             
           </span>
         </div>
@@ -230,7 +234,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -260,7 +264,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -341,7 +345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -369,7 +373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -397,7 +401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/permissions/" class="md-nav__link">
+      <a href="../../getting-started/permissions/" class="md-nav__link">
         
   
   
@@ -429,8 +433,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -441,13 +447,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -468,7 +472,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -486,7 +490,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/finding-elements/" class="md-nav__link">
+      <a href="../finding-elements/" class="md-nav__link">
         
   
   
@@ -514,7 +518,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/actions/" class="md-nav__link">
+      <a href="../actions/" class="md-nav__link">
         
   
   
@@ -542,7 +546,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/self-healing/" class="md-nav__link">
+      <a href="../self-healing/" class="md-nav__link">
         
   
   
@@ -570,7 +574,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/vlm/" class="md-nav__link">
+      <a href="../vlm/" class="md-nav__link">
         
   
   
@@ -598,7 +602,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/audio/" class="md-nav__link">
+      <a href="../audio/" class="md-nav__link">
         
   
   
@@ -623,10 +627,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../guide/camera/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Camera & Gestures
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -642,6 +673,115 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enable-camera" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enable Camera
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP Tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gesture-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gesture Detection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Gesture Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camera-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera Capture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Camera Capture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-watch-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous Watch Mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -654,7 +794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/spaces/" class="md-nav__link">
+      <a href="../spaces/" class="md-nav__link">
         
   
   
@@ -743,7 +883,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/core/" class="md-nav__link">
+      <a href="../../api/core/" class="md-nav__link">
         
   
   
@@ -771,7 +911,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/element/" class="md-nav__link">
+      <a href="../../api/element/" class="md-nav__link">
         
   
   
@@ -799,7 +939,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/mcp-tools/" class="md-nav__link">
+      <a href="../../api/mcp-tools/" class="md-nav__link">
         
   
   
@@ -827,7 +967,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -916,7 +1056,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../performance/" class="md-nav__link">
+      <a href="../../performance/" class="md-nav__link">
         
   
   
@@ -944,7 +1084,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+      <a href="../../comparison/" class="md-nav__link">
         
   
   
@@ -1033,7 +1173,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DESIGN/" class="md-nav__link">
+      <a href="../../DESIGN/" class="md-nav__link">
         
   
   
@@ -1061,7 +1201,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SYNC_ENGINE/" class="md-nav__link">
+      <a href="../../SYNC_ENGINE/" class="md-nav__link">
         
   
   
@@ -1109,6 +1249,103 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enable-camera" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enable Camera
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP Tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gesture-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gesture Detection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Gesture Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camera-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera Capture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Camera Capture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-watch-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous Watch Mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1364,106 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="camera-gestures">Camera &amp; Gestures<a class="headerlink" href="#camera-gestures" title="Permanent link">&para;</a></h1>
+<p>AXTerminator includes camera capture and gesture detection via the <code>camera</code> feature flag.</p>
+<h2 id="enable-camera">Enable Camera<a class="headerlink" href="#enable-camera" title="Permanent link">&para;</a></h2>
+<p>Build with the <code>camera</code> feature:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span><span class="s2">&quot;cli,camera&quot;</span>
+</code></pre></div>
+<h2 id="mcp-tools">MCP Tools<a class="headerlink" href="#mcp-tools" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ax_camera_capture</code></td>
+<td>Capture a single frame from AVFoundation</td>
+</tr>
+<tr>
+<td><code>ax_gesture_detect</code></td>
+<td>Detect hand gestures in a camera frame</td>
+</tr>
+<tr>
+<td><code>ax_gesture_listen</code></td>
+<td>Continuously detect gestures (with <code>watch</code> feature)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="gesture-detection">Gesture Detection<a class="headerlink" href="#gesture-detection" title="Permanent link">&para;</a></h2>
+<p>Uses Apple's Vision framework for on-device hand pose detection. Supported gestures:</p>
+<table>
+<thead>
+<tr>
+<th>Gesture</th>
+<th>Detection</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>thumbs_up</td>
+<td>Verified 88.8% confidence</td>
+<td>TIP vs MCP knuckle comparison</td>
+</tr>
+<tr>
+<td>thumbs_down</td>
+<td>Supported</td>
+<td>Inverse of thumbs_up</td>
+</tr>
+<tr>
+<td>open_hand</td>
+<td>Supported</td>
+<td>All fingers extended</td>
+</tr>
+<tr>
+<td>fist</td>
+<td>Supported</td>
+<td>All fingers closed</td>
+</tr>
+<tr>
+<td>peace</td>
+<td>Supported</td>
+<td>Index + middle extended</td>
+</tr>
+<tr>
+<td>pointing</td>
+<td>Supported</td>
+<td>Index finger extended</td>
+</tr>
+<tr>
+<td>ok_sign</td>
+<td>Supported</td>
+<td>Thumb + index circle</td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
+<ol>
+<li>AVFoundation captures a single frame from the default camera</li>
+<li>Vision's VNDetectHumanHandPoseRequest analyzes hand landmarks</li>
+<li>TIP (fingertip) vs MCP (knuckle) joint positions determine gesture</li>
+<li>Confidence filtering removes low-quality detections</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Gesture Accuracy</p>
+<p>v0.6.0 fixed the TIP vs MCP knuckle comparison logic and added confidence filtering, significantly improving gesture recognition accuracy.</p>
+</div>
+<h2 id="camera-capture">Camera Capture<a class="headerlink" href="#camera-capture" title="Permanent link">&para;</a></h2>
+<p>Returns a single JPEG frame from the default camera device.</p>
+<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Camera permission</strong> granted to your terminal app</li>
+<li>If camera permission status is undetermined, AXTerminator will request it automatically</li>
+</ul>
+<h2 id="continuous-watch-mode">Continuous Watch Mode<a class="headerlink" href="#continuous-watch-mode" title="Permanent link">&para;</a></h2>
+<p>The <code>watch</code> feature enables continuous background monitoring that combines audio VAD (voice activity detection) and camera gesture detection:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span><span class="s2">&quot;cli,watch&quot;</span>
+</code></pre></div>
+<p>Events are pushed to Claude Code sessions via MCP notifications. The <code>watch</code> feature implies both <code>audio</code> and <code>camera</code>.</p>
 
 
 
@@ -1215,10 +1550,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

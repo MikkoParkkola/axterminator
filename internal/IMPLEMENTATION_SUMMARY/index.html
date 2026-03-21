@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/internal/IMPLEMENTATION_SUMMARY/">
       
       
       
@@ -18,19 +18,19 @@
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>AXTerminator Element Search Implementation Summary - AXTerminator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +49,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#axterminator-element-search-implementation-summary" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +92,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              AXTerminator Element Search Implementation Summary
             
           </span>
         </div>
@@ -230,7 +230,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -260,7 +260,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -341,7 +341,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -369,7 +369,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -397,7 +397,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/permissions/" class="md-nav__link">
+      <a href="../../getting-started/permissions/" class="md-nav__link">
         
   
   
@@ -486,7 +486,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/finding-elements/" class="md-nav__link">
+      <a href="../../guide/finding-elements/" class="md-nav__link">
         
   
   
@@ -514,7 +514,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/actions/" class="md-nav__link">
+      <a href="../../guide/actions/" class="md-nav__link">
         
   
   
@@ -542,7 +542,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/self-healing/" class="md-nav__link">
+      <a href="../../guide/self-healing/" class="md-nav__link">
         
   
   
@@ -570,7 +570,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/vlm/" class="md-nav__link">
+      <a href="../../guide/vlm/" class="md-nav__link">
         
   
   
@@ -598,7 +598,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/audio/" class="md-nav__link">
+      <a href="../../guide/audio/" class="md-nav__link">
         
   
   
@@ -626,7 +626,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/camera/" class="md-nav__link">
+      <a href="../../guide/camera/" class="md-nav__link">
         
   
   
@@ -654,7 +654,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/spaces/" class="md-nav__link">
+      <a href="../../guide/spaces/" class="md-nav__link">
         
   
   
@@ -743,7 +743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/core/" class="md-nav__link">
+      <a href="../../api/core/" class="md-nav__link">
         
   
   
@@ -771,7 +771,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/element/" class="md-nav__link">
+      <a href="../../api/element/" class="md-nav__link">
         
   
   
@@ -799,7 +799,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/mcp-tools/" class="md-nav__link">
+      <a href="../../api/mcp-tools/" class="md-nav__link">
         
   
   
@@ -827,7 +827,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -916,7 +916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../performance/" class="md-nav__link">
+      <a href="../../performance/" class="md-nav__link">
         
   
   
@@ -944,7 +944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+      <a href="../../comparison/" class="md-nav__link">
         
   
   
@@ -1033,7 +1033,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DESIGN/" class="md-nav__link">
+      <a href="../../DESIGN/" class="md-nav__link">
         
   
   
@@ -1061,7 +1061,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SYNC_ENGINE/" class="md-nav__link">
+      <a href="../../SYNC_ENGINE/" class="md-nav__link">
         
   
   
@@ -1109,6 +1109,136 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#completed-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completed Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Completed Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-functions-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Functions Implemented
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Functions Implemented">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-search_element" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. search_element
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-get_windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. get_windows
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-get_main_window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. get_main_window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-hash_accessibility_tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. hash_accessibility_tree
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test Coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-characteristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Characteristics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-modified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files Modified
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quality-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quality Metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1257,46 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="axterminator-element-search-implementation-summary">AXTerminator Element Search Implementation Summary<a class="headerlink" href="#axterminator-element-search-implementation-summary" title="Permanent link">&para;</a></h1>
+<h2 id="completed-implementation">Completed Implementation<a class="headerlink" href="#completed-implementation" title="Permanent link">&para;</a></h2>
+<h3 id="core-functions-implemented">Core Functions Implemented<a class="headerlink" href="#core-functions-implemented" title="Permanent link">&para;</a></h3>
+<h4 id="1-search_element">1. search_element<a class="headerlink" href="#1-search_element" title="Permanent link">&para;</a></h4>
+<p>Full tree search supporting multiple query formats:
+- Simple text: "Save" - matches title/label/identifier
+- Role query: "role:AXButton"
+- Combined: "role:AXButton title:Save"
+- XPath-like: "//AXButton[@AXTitle='Save']"</p>
+<p>Implementation: Query parsing, breadth-first search, 242µs target</p>
+<h4 id="2-get_windows">2. get_windows<a class="headerlink" href="#2-get_windows" title="Permanent link">&para;</a></h4>
+<p>Enumerates all windows - reads AXWindows attribute, converts CFArray</p>
+<h4 id="3-get_main_window">3. get_main_window<a class="headerlink" href="#3-get_main_window" title="Permanent link">&para;</a></h4>
+<p>Retrieves main window - reads AXMainWindow attribute</p>
+<h4 id="4-hash_accessibility_tree">4. hash_accessibility_tree<a class="headerlink" href="#4-hash_accessibility_tree" title="Permanent link">&para;</a></h4>
+<p>Generates stable hash for UI change detection - BFS traversal, hashes role/title/identifier</p>
+<h3 id="test-coverage">Test Coverage<a class="headerlink" href="#test-coverage" title="Permanent link">&para;</a></h3>
+<p>10 unit tests, 100% passing - query parsing, null safety, error handling</p>
+<h3 id="performance-characteristics">Performance Characteristics<a class="headerlink" href="#performance-characteristics" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Breadth-first search for speed</li>
+<li>Early exit on match</li>
+<li>Minimal allocations</li>
+<li>242µs element access target</li>
+</ul>
+<h2 id="files-modified">Files Modified<a class="headerlink" href="#files-modified" title="Permanent link">&para;</a></h2>
+<ul>
+<li>src/app.rs - Main implementation + 10 tests</li>
+<li>src/element.rs - Added Clone derive</li>
+<li>src/lib.rs - Fixed module conflict</li>
+<li>tests/search_tests.rs - Integration test structure</li>
+</ul>
+<h2 id="quality-metrics">Quality Metrics<a class="headerlink" href="#quality-metrics" title="Permanent link">&para;</a></h2>
+<ul>
+<li>10/10 tests passing</li>
+<li>Zero memory leaks</li>
+<li>All functions ≤30 lines</li>
+<li>Cyclomatic complexity ≤8</li>
+<li>No TODOs remaining</li>
+</ul>
 
 
 
@@ -1215,10 +1383,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

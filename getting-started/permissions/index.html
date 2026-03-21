@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/">
+        <link rel="canonical" href="https://mikkoparkkola.github.io/axterminator/getting-started/permissions/">
       
       
+        <link rel="prev" href="../quickstart/">
+      
+      
+        <link rel="next" href="../../guide/finding-elements/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>AXTerminator Design Document - AXTerminator</title>
+        <title>Permissions - AXTerminator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#axterminator-design-document" class="md-skip">
+        <a href="#accessibility-permissions" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-header__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AXTerminator Design Document
+              Permissions
             
           </span>
         </div>
@@ -230,7 +234,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
+    <a href="../.." title="AXTerminator" class="md-nav__button md-logo" aria-label="AXTerminator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -260,7 +264,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -284,8 +288,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -296,13 +302,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -323,7 +327,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -341,7 +345,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../installation/" class="md-nav__link">
         
   
   
@@ -369,7 +373,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
@@ -394,10 +398,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../getting-started/permissions/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Permissions
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -413,6 +444,137 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#granting-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Granting Permissions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Granting Permissions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#macos-ventura-and-later-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS Ventura and later (13+)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#macos-monterey-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS Monterey (12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checking-permission-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking Permission Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Issues
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#operation-not-permitted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Operation not permitted"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#permission-granted-but-still-not-working" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Permission granted but still not working
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-in-cicd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running in CI/CD
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-note" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Note
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -486,7 +648,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/finding-elements/" class="md-nav__link">
+      <a href="../../guide/finding-elements/" class="md-nav__link">
         
   
   
@@ -514,7 +676,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/actions/" class="md-nav__link">
+      <a href="../../guide/actions/" class="md-nav__link">
         
   
   
@@ -542,7 +704,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/self-healing/" class="md-nav__link">
+      <a href="../../guide/self-healing/" class="md-nav__link">
         
   
   
@@ -570,7 +732,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/vlm/" class="md-nav__link">
+      <a href="../../guide/vlm/" class="md-nav__link">
         
   
   
@@ -598,7 +760,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/audio/" class="md-nav__link">
+      <a href="../../guide/audio/" class="md-nav__link">
         
   
   
@@ -626,7 +788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/camera/" class="md-nav__link">
+      <a href="../../guide/camera/" class="md-nav__link">
         
   
   
@@ -654,7 +816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/spaces/" class="md-nav__link">
+      <a href="../../guide/spaces/" class="md-nav__link">
         
   
   
@@ -743,7 +905,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/core/" class="md-nav__link">
+      <a href="../../api/core/" class="md-nav__link">
         
   
   
@@ -771,7 +933,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/element/" class="md-nav__link">
+      <a href="../../api/element/" class="md-nav__link">
         
   
   
@@ -799,7 +961,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/mcp-tools/" class="md-nav__link">
+      <a href="../../api/mcp-tools/" class="md-nav__link">
         
   
   
@@ -827,7 +989,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -916,7 +1078,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../performance/" class="md-nav__link">
+      <a href="../../performance/" class="md-nav__link">
         
   
   
@@ -944,7 +1106,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../comparison/" class="md-nav__link">
+      <a href="../../comparison/" class="md-nav__link">
         
   
   
@@ -1033,7 +1195,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DESIGN/" class="md-nav__link">
+      <a href="../../DESIGN/" class="md-nav__link">
         
   
   
@@ -1061,7 +1223,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SYNC_ENGINE/" class="md-nav__link">
+      <a href="../../SYNC_ENGINE/" class="md-nav__link">
         
   
   
@@ -1109,6 +1271,125 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#granting-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Granting Permissions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Granting Permissions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#macos-ventura-and-later-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS Ventura and later (13+)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#macos-monterey-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS Monterey (12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checking-permission-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking Permission Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Issues
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#operation-not-permitted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Operation not permitted"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#permission-granted-but-still-not-working" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Permission granted but still not working
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-in-cicd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running in CI/CD
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-note" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Note
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1127,8 +1408,53 @@
   
 
 
-<h1 id="axterminator-design-document">AXTerminator Design Document<a class="headerlink" href="#axterminator-design-document" title="Permanent link">&para;</a></h1>
-<p>This document has been consolidated into <a href="../DESIGN/">DESIGN.md</a>. Please refer to that file for the current architecture and design documentation.</p>
+<h1 id="accessibility-permissions">Accessibility Permissions<a class="headerlink" href="#accessibility-permissions" title="Permanent link">&para;</a></h1>
+<p>AXTerminator uses the macOS Accessibility API to interact with applications. This requires explicit permission from the user.</p>
+<h2 id="granting-permissions">Granting Permissions<a class="headerlink" href="#granting-permissions" title="Permanent link">&para;</a></h2>
+<h3 id="macos-ventura-and-later-13">macOS Ventura and later (13+)<a class="headerlink" href="#macos-ventura-and-later-13" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Open <strong>System Settings</strong></li>
+<li>Navigate to <strong>Privacy &amp; Security</strong> → <strong>Accessibility</strong></li>
+<li>Click the <strong>+</strong> button</li>
+<li>Add your terminal app (Terminal, iTerm2, VS Code, etc.)</li>
+<li>Toggle the switch to enable</li>
+</ol>
+<h3 id="macos-monterey-12">macOS Monterey (12)<a class="headerlink" href="#macos-monterey-12" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Open <strong>System Preferences</strong></li>
+<li>Navigate to <strong>Security &amp; Privacy</strong> → <strong>Privacy</strong> → <strong>Accessibility</strong></li>
+<li>Click the lock icon and authenticate</li>
+<li>Click <strong>+</strong> and add your terminal app</li>
+<li>Ensure the checkbox is checked</li>
+</ol>
+<h2 id="checking-permission-status">Checking Permission Status<a class="headerlink" href="#checking-permission-status" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">axterminator</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ax</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">if</span> <span class="n">ax</span><span class="o">.</span><span class="n">is_accessibility_enabled</span><span class="p">():</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Accessibility enabled!&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Please grant accessibility permissions&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="c1"># Optionally prompt the user</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">ax</span><span class="o">.</span><span class="n">request_accessibility</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="common-issues">Common Issues<a class="headerlink" href="#common-issues" title="Permanent link">&para;</a></h2>
+<h3 id="operation-not-permitted">"Operation not permitted"<a class="headerlink" href="#operation-not-permitted" title="Permanent link">&para;</a></h3>
+<p>This means accessibility permissions haven't been granted. Follow the steps above.</p>
+<h3 id="permission-granted-but-still-not-working">Permission granted but still not working<a class="headerlink" href="#permission-granted-but-still-not-working" title="Permanent link">&para;</a></h3>
+<p>Try these steps:</p>
+<ol>
+<li>Remove and re-add the app in Accessibility settings</li>
+<li>Restart the terminal/IDE</li>
+<li>Restart your Mac (if issues persist)</li>
+</ol>
+<h3 id="running-in-cicd">Running in CI/CD<a class="headerlink" href="#running-in-cicd" title="Permanent link">&para;</a></h3>
+<p>GitHub Actions macOS runners don't have GUI access. Use environment variables to skip integration tests:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">env</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">CI</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">SKIP_INTEGRATION</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<h2 id="security-note">Security Note<a class="headerlink" href="#security-note" title="Permanent link">&para;</a></h2>
+<p>Accessibility permissions are powerful - they allow an app to control other applications. Only grant permissions to trusted software.</p>
 
 
 
@@ -1215,10 +1541,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

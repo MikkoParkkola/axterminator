@@ -2,26 +2,130 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://mikkoparkkola.github.io/axterminator/</loc>
-         <lastmod>2026-02-01</lastmod>
+         <lastmod>2026-03-21</lastmod>
     </url>
     <url>
          <loc>https://mikkoparkkola.github.io/axterminator/DESIGN/</loc>
-         <lastmod>2026-02-01</lastmod>
+         <lastmod>2026-03-21</lastmod>
     </url>
     <url>
          <loc>https://mikkoparkkola.github.io/axterminator/SYNC_ENGINE/</loc>
-         <lastmod>2026-02-01</lastmod>
+         <lastmod>2026-03-21</lastmod>
     </url>
     <url>
          <loc>https://mikkoparkkola.github.io/axterminator/axterminator-design-doc/</loc>
-         <lastmod>2026-02-01</lastmod>
+         <lastmod>2026-03-21</lastmod>
     </url>
     <url>
          <loc>https://mikkoparkkola.github.io/axterminator/axterminator-patent-claims/</loc>
-         <lastmod>2026-02-01</lastmod>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/comparison/</loc>
+         <lastmod>2026-03-21</lastmod>
     </url>
     <url>
          <loc>https://mikkoparkkola.github.io/axterminator/performance/</loc>
-         <lastmod>2026-02-01</lastmod>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/api/config/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/api/core/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/api/element/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/api/mcp-tools/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/design/MCP_SERVER_DESIGN/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/getting-started/installation/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/getting-started/permissions/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/getting-started/quickstart/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/actions/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/audio/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/camera/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/finding-elements/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/self-healing/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/spaces/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/guide/vlm/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/internal/ACCESSIBILITY_FFI_IMPLEMENTATION/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/internal/HEALING_IMPLEMENTATION/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/internal/HEALING_QUICK_REF/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/internal/IMPLEMENTATION_SUMMARY/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/internal/USAGE_EXAMPLES/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/launch/RELEASE_CHECKLIST/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/launch/blog-post-draft/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/launch/hackernews/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/launch/reddit_python/</loc>
+         <lastmod>2026-03-21</lastmod>
+    </url>
+    <url>
+         <loc>https://mikkoparkkola.github.io/axterminator/launch/reddit_rust/</loc>
+         <lastmod>2026-03-21</lastmod>
     </url>
 </urlset>
