@@ -290,7 +290,7 @@ impl AXApp {
         loop {
             match self.search_element(query) {
                 Ok(element) => return Ok(element),
-                Err(e) if start.elapsed() >= timeout => {
+                Err(_) if start.elapsed() >= timeout => {
                     return Err(AXError::ElementNotFound(query.to_string()));
                 }
                 Err(_) => {
