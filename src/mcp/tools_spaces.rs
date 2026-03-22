@@ -11,12 +11,17 @@
 //! All functions are gated behind `#[cfg(feature = "spaces")]` and use the
 //! CGSSpace private SPI — not available in App Store builds.
 
+#[cfg(feature = "spaces")]
 use std::sync::Arc;
 
+#[cfg(feature = "spaces")]
 use serde_json::{json, Value};
 
+#[cfg(feature = "spaces")]
 use crate::mcp::annotations;
+#[cfg(feature = "spaces")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
+#[cfg(feature = "spaces")]
 use crate::mcp::tools::AppRegistry;
 
 // ---------------------------------------------------------------------------

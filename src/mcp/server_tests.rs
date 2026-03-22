@@ -884,3 +884,635 @@ fn sampling_createMessage_is_method_not_found_from_server_side() {
     // THEN: METHOD_NOT_FOUND — the server sends these requests, not receives them
     assert_eq!(v["error"]["code"], RpcError::METHOD_NOT_FOUND);
 }
+
+// -----------------------------------------------------------------------
+// Exact 34-tool count (default features, no extras)
+// -----------------------------------------------------------------------
+
+#[test]
+fn tools_list_returns_exactly_34_base_tools_with_default_features() {
+    // GIVEN: initialized server with no optional feature flags active
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tools/list
+    let v = send(&mut s, 100, "tools/list", None);
+    // THEN: exactly 34 tools in the base build (Phase 1 × 12 + Phase 3 GUI × 7 + innovation × 15)
+    let tools = v["result"]["tools"].as_array().unwrap();
+    let base: usize = 34;
+    let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
+    let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+    let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
+    let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
+    let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
+    let expected = base + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker;
+    assert_eq!(
+        tools.len(),
+        expected,
+        "expected {expected} tools but got {}; base=34 + spaces={extra_spaces} + \
+         audio={extra_audio} + camera={extra_camera} + watch={extra_watch} + docker={extra_docker}",
+        tools.len()
+    );
+}
+
+// -----------------------------------------------------------------------
+// All 10 prompts listed by name
+// -----------------------------------------------------------------------
+
+#[test]
+fn prompts_list_contains_all_ten_expected_prompt_names() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: prompts/list
+    let v = send(&mut s, 101, "prompts/list", None);
+    let prompts = v["result"]["prompts"].as_array().unwrap();
+    // THEN: all ten canonical prompt names are present
+    let names: Vec<&str> = prompts
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    let expected = [
+        "test-app",
+        "navigate-to",
+        "extract-data",
+        "accessibility-audit",
+        "troubleshooting",
+        "app-guide",
+        "automate-workflow",
+        "debug-ui",
+        "cross-app-copy",
+        "analyze-app",
+    ];
+    for name in &expected {
+        assert!(
+            names.contains(name),
+            "prompt '{name}' missing from prompts/list; found: {names:?}"
+        );
+    }
+    assert_eq!(
+        prompts.len(),
+        10,
+        "expected exactly 10 prompts, got {}",
+        prompts.len()
+    );
+}
+
+// -----------------------------------------------------------------------
+// Every prompt resolves with valid arguments
+// -----------------------------------------------------------------------
+
+/// Helper: call prompts/get and assert the result contains a non-empty messages array.
+fn assert_prompt_resolves(s: &mut Server, id: i64, name: &str, args: Value) {
+    let v = send(
+        s,
+        id,
+        "prompts/get",
+        Some(json!({ "name": name, "arguments": args })),
+    );
+    assert!(
+        v.get("error").is_none(),
+        "prompt '{name}' returned an error: {:?}",
+        v.get("error")
+    );
+    let msgs = v["result"]["messages"].as_array().unwrap_or_else(|| {
+        panic!(
+            "prompt '{name}' result missing 'messages' array; result={:?}",
+            v["result"]
+        )
+    });
+    assert!(
+        !msgs.is_empty(),
+        "prompt '{name}' returned an empty messages array"
+    );
+}
+
+#[test]
+fn prompts_get_navigate_to_resolves_with_both_args() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN/THEN: navigate-to requires app_name + target_screen
+    assert_prompt_resolves(
+        &mut s,
+        102,
+        "navigate-to",
+        json!({ "app_name": "Safari", "target_screen": "Settings" }),
+    );
+}
+
+#[test]
+fn prompts_get_extract_data_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(
+        &mut s,
+        103,
+        "extract-data",
+        json!({ "app_name": "Safari", "data_description": "links" }),
+    );
+}
+
+#[test]
+fn prompts_get_accessibility_audit_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(
+        &mut s,
+        104,
+        "accessibility-audit",
+        json!({ "app_name": "Safari" }),
+    );
+}
+
+#[test]
+fn prompts_get_troubleshooting_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(
+        &mut s,
+        105,
+        "troubleshooting",
+        json!({ "error": "Element not found" }),
+    );
+}
+
+#[test]
+fn prompts_get_app_guide_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(&mut s, 106, "app-guide", json!({ "app": "Calculator" }));
+}
+
+#[test]
+fn prompts_get_automate_workflow_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(
+        &mut s,
+        107,
+        "automate-workflow",
+        json!({ "app_name": "Safari", "goal": "login" }),
+    );
+}
+
+#[test]
+fn prompts_get_debug_ui_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(
+        &mut s,
+        108,
+        "debug-ui",
+        json!({ "app_name": "Safari", "query": "Save" }),
+    );
+}
+
+#[test]
+fn prompts_get_cross_app_copy_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(
+        &mut s,
+        109,
+        "cross-app-copy",
+        json!({
+            "source_app": "Safari",
+            "dest_app": "Notes",
+            "data_description": "URL"
+        }),
+    );
+}
+
+#[test]
+fn prompts_get_analyze_app_resolves() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    assert_prompt_resolves(&mut s, 110, "analyze-app", json!({ "app_name": "Safari" }));
+}
+
+// -----------------------------------------------------------------------
+// Resources: exact static + template counts (default features)
+// -----------------------------------------------------------------------
+
+#[test]
+fn resources_list_returns_six_static_resources_with_default_features() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: resources/list
+    let v = send(&mut s, 111, "resources/list", None);
+    let resources = v["result"]["resources"].as_array().unwrap();
+    // THEN: exactly 6 static resources in the base build:
+    //   system/status, system/displays, apps, clipboard, workflows, profiles
+    // (+1 spaces, +1 audio, +1 camera when their features are enabled)
+    let base: usize = 6;
+    let extra_spaces: usize = if cfg!(feature = "spaces") { 1 } else { 0 };
+    let extra_audio: usize = if cfg!(feature = "audio") { 1 } else { 0 };
+    let extra_camera: usize = if cfg!(feature = "camera") { 1 } else { 0 };
+    let expected = base + extra_spaces + extra_audio + extra_camera;
+    assert_eq!(
+        resources.len(),
+        expected,
+        "expected {expected} static resources, got {}",
+        resources.len()
+    );
+}
+
+#[test]
+fn resources_list_contains_all_six_base_static_uris() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: resources/list
+    let v = send(&mut s, 112, "resources/list", None);
+    let resources = v["result"]["resources"].as_array().unwrap();
+    let uris: Vec<&str> = resources
+        .iter()
+        .map(|r| r["uri"].as_str().unwrap())
+        .collect();
+    // THEN: all six base URIs are always present regardless of features
+    let base_uris = [
+        "axterminator://system/status",
+        "axterminator://system/displays",
+        "axterminator://apps",
+        "axterminator://clipboard",
+        "axterminator://workflows",
+        "axterminator://profiles",
+    ];
+    for uri in &base_uris {
+        assert!(
+            uris.contains(uri),
+            "static resource '{uri}' missing from resources/list; found: {uris:?}"
+        );
+    }
+}
+
+#[test]
+fn resources_templates_list_returns_exactly_four_templates() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: resources/templates/list
+    let v = send(&mut s, 113, "resources/templates/list", None);
+    let templates = v["result"]["resourceTemplates"].as_array().unwrap();
+    // THEN: exactly 4 URI templates
+    assert_eq!(
+        templates.len(),
+        4,
+        "expected 4 resource templates, got {}",
+        templates.len()
+    );
+}
+
+#[test]
+fn resources_templates_list_contains_all_four_template_uris() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: resources/templates/list
+    let v = send(&mut s, 114, "resources/templates/list", None);
+    let templates = v["result"]["resourceTemplates"].as_array().unwrap();
+    let tmpl_uris: Vec<&str> = templates
+        .iter()
+        .map(|t| t["uriTemplate"].as_str().unwrap())
+        .collect();
+    let expected_templates = [
+        "axterminator://app/{name}/tree",
+        "axterminator://app/{name}/screenshot",
+        "axterminator://app/{name}/state",
+        "axterminator://app/{name}/query/{question}",
+    ];
+    for tmpl in &expected_templates {
+        assert!(
+            tmpl_uris.contains(tmpl),
+            "resource template '{tmpl}' missing; found: {tmpl_uris:?}"
+        );
+    }
+}
+
+// -----------------------------------------------------------------------
+// Resources: read every static resource that has no OS dependency
+// -----------------------------------------------------------------------
+
+#[test]
+fn resources_read_system_displays_returns_contents() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: read system/displays (returns stub data without OS accessibility)
+    let v = send(
+        &mut s,
+        115,
+        "resources/read",
+        Some(json!({ "uri": "axterminator://system/displays" })),
+    );
+    // THEN: either a contents array or an error — no panic
+    // (display enumeration may legitimately fail without a real screen)
+    assert!(
+        v.get("error").is_some() || v["result"]["contents"].is_array(),
+        "resources/read system/displays should return contents or an error, got: {v:?}"
+    );
+}
+
+#[test]
+fn resources_read_unknown_uri_returns_error() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: an unregistered URI
+    let v = send(
+        &mut s,
+        116,
+        "resources/read",
+        Some(json!({ "uri": "axterminator://unknown/resource" })),
+    );
+    // THEN: error
+    assert!(
+        v.get("error").is_some(),
+        "unknown resource URI should return an error"
+    );
+}
+
+// -----------------------------------------------------------------------
+// Subscribe / unsubscribe lifecycle
+// -----------------------------------------------------------------------
+
+#[test]
+fn resources_subscribe_returns_empty_success_object() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: subscribe to system/status
+    let v = send(
+        &mut s,
+        120,
+        "resources/subscribe",
+        Some(json!({ "uri": "axterminator://system/status" })),
+    );
+    // THEN: no error; result is an empty object (success)
+    assert!(
+        v.get("error").is_none(),
+        "subscribe should not error: {v:?}"
+    );
+    assert_eq!(
+        v["result"],
+        json!({}),
+        "subscribe result should be an empty object"
+    );
+}
+
+#[test]
+fn resources_unsubscribe_after_subscribe_returns_success() {
+    // GIVEN: initialized server with an active subscription
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let uri = "axterminator://system/status";
+    send(
+        &mut s,
+        121,
+        "resources/subscribe",
+        Some(json!({ "uri": uri })),
+    );
+    // WHEN: unsubscribe
+    let v = send(
+        &mut s,
+        122,
+        "resources/unsubscribe",
+        Some(json!({ "uri": uri })),
+    );
+    // THEN: no error; result is an empty object
+    assert!(
+        v.get("error").is_none(),
+        "unsubscribe should not error: {v:?}"
+    );
+    assert_eq!(v["result"], json!({}));
+}
+
+#[test]
+fn resources_unsubscribe_without_prior_subscribe_is_idempotent() {
+    // GIVEN: initialized server — no subscriptions registered
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: unsubscribe a URI that was never subscribed
+    let v = send(
+        &mut s,
+        123,
+        "resources/unsubscribe",
+        Some(json!({ "uri": "axterminator://apps" })),
+    );
+    // THEN: succeeds silently (removing an absent entry is a no-op)
+    assert!(
+        v.get("error").is_none(),
+        "unsubscribe for unregistered URI should not error: {v:?}"
+    );
+}
+
+#[test]
+fn resources_subscribe_before_initialized_returns_error() {
+    // GIVEN: uninitialized server
+    let mut s = Server::new();
+    // WHEN: subscribe before handshake
+    let v = send(
+        &mut s,
+        124,
+        "resources/subscribe",
+        Some(json!({ "uri": "axterminator://system/status" })),
+    );
+    // THEN: error (server not yet running)
+    assert!(v.get("error").is_some());
+}
+
+#[test]
+fn resources_subscribe_missing_params_returns_error() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: subscribe with no params
+    let v = send(&mut s, 125, "resources/subscribe", None);
+    // THEN: INVALID_PARAMS error
+    assert!(v.get("error").is_some());
+    assert_eq!(v["error"]["code"], RpcError::INVALID_PARAMS);
+}
+
+// -----------------------------------------------------------------------
+// Security mode — sandboxed tools/list filters to read-only set
+// -----------------------------------------------------------------------
+
+#[test]
+fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
+    // GIVEN: sandboxed mode server — the env var is set before constructing
+    // the server so SecurityGuard::from_env() picks it up.
+    //
+    // Safety: `set_var` is unsafe in Rust 2024 because env mutations are not
+    // thread-safe. This test is deliberately isolated (no shared state with
+    // other tests) and the var is restored immediately after Server::new().
+    // The test passes `AXTERMINATOR_SECURITY_MODE` only for the narrow window
+    // of Server construction.
+    //
+    // IMPORTANT: do NOT run this test in parallel with other tests that also
+    // set AXTERMINATOR_SECURITY_MODE. The standard `cargo test` runner
+    // serialises tests within a process on a per-module basis, so the risk of
+    // interference with other *server_tests.rs* tests is low.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+    }
+    let mut s = Server::new();
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+    }
+    initialize_server(&mut s);
+
+    // WHEN: tools/list in sandboxed mode
+    let v = send(&mut s, 130, "tools/list", None);
+    let tools = v["result"]["tools"].as_array().unwrap();
+
+    // THEN: count is strictly less than the full 34-tool set
+    let full_count = 34usize
+        + if cfg!(feature = "spaces") { 5 } else { 0 }
+        + if cfg!(feature = "audio") { 3 } else { 0 }
+        + if cfg!(feature = "camera") { 3 } else { 0 }
+        + if cfg!(feature = "watch") { 3 } else { 0 }
+        + if cfg!(feature = "docker") { 2 } else { 0 };
+    assert!(
+        tools.len() < full_count,
+        "sandboxed mode should expose fewer tools than the full set ({full_count}), \
+         but got {}",
+        tools.len()
+    );
+
+    // THEN: every listed tool is a known read-only tool
+    let read_only_names = [
+        "ax_is_accessible",
+        "ax_connect",
+        "ax_list_apps",
+        "ax_find",
+        "ax_find_visual",
+        "ax_get_tree",
+        "ax_get_attributes",
+        "ax_screenshot",
+        "ax_get_value",
+        "ax_list_windows",
+        "ax_assert",
+        "ax_wait_idle",
+        "ax_query",
+        "ax_analyze",
+        "ax_app_profile",
+        "ax_watch_start",
+        "ax_watch_stop",
+        "ax_watch_status",
+    ];
+    for tool in tools {
+        let name = tool["name"].as_str().unwrap();
+        assert!(
+            read_only_names.contains(&name),
+            "sandboxed tools/list contains non-read-only tool '{name}'"
+        );
+    }
+}
+
+// -----------------------------------------------------------------------
+// Tool annotations — every tool must carry annotation metadata
+// -----------------------------------------------------------------------
+
+#[test]
+fn every_tool_has_annotation_object_in_tools_list() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tools/list
+    let v = send(&mut s, 140, "tools/list", None);
+    let tools = v["result"]["tools"].as_array().unwrap();
+    // THEN: every tool has an 'annotations' object with at least one hint field
+    for tool in tools {
+        let name = tool["name"].as_str().unwrap_or("<unknown>");
+        let annotations = &tool["annotations"];
+        assert!(
+            annotations.is_object(),
+            "tool '{name}' missing annotations object; got: {annotations:?}"
+        );
+        // At least one of the four MCP 2025-11-05 §6.3 hint fields must be present.
+        let obj = annotations.as_object().unwrap();
+        let has_hint = obj.contains_key("readOnlyHint")
+            || obj.contains_key("destructiveHint")
+            || obj.contains_key("idempotentHint")
+            || obj.contains_key("openWorldHint");
+        assert!(
+            has_hint,
+            "tool '{name}' annotations object has no recognised hint fields: {obj:?}"
+        );
+    }
+}
+
+#[test]
+fn every_tool_annotation_read_only_is_boolean() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tools/list
+    let v = send(&mut s, 141, "tools/list", None);
+    let tools = v["result"]["tools"].as_array().unwrap();
+    // THEN: readOnlyHint is always a boolean when present
+    for tool in tools {
+        let name = tool["name"].as_str().unwrap_or("<unknown>");
+        if let Some(hint) = tool["annotations"].get("readOnlyHint") {
+            assert!(
+                hint.is_boolean(),
+                "tool '{name}' readOnlyHint is not a boolean: {hint:?}"
+            );
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// Tasks lifecycle — protocol-layer verification
+// -----------------------------------------------------------------------
+
+#[test]
+fn tasks_list_is_empty_before_any_async_call() {
+    // GIVEN: freshly initialized server — no tasks submitted
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tasks/list without having submitted any task
+    let v = send(&mut s, 150, "tasks/list", None);
+    // THEN: tasks array exists and is empty
+    let tasks = v["result"]["tasks"].as_array().unwrap();
+    assert!(
+        tasks.is_empty(),
+        "tasks/list should be empty on a fresh server, got: {tasks:?}"
+    );
+}
+
+#[test]
+fn tasks_list_grows_after_async_submission() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // Confirm baseline is empty.
+    let before = send(&mut s, 151, "tasks/list", None);
+    let count_before = before["result"]["tasks"].as_array().unwrap().len();
+    // WHEN: submit one async task
+    let v = send(
+        &mut s,
+        152,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    assert!(v["result"]["task"].is_object());
+    // Wait briefly for the background thread to register, then list
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let after = send(&mut s, 153, "tasks/list", None);
+    let count_after = after["result"]["tasks"].as_array().unwrap().len();
+    // THEN: list grew by exactly one
+    assert_eq!(
+        count_after,
+        count_before + 1,
+        "tasks/list count should grow from {count_before} to {} after one submission",
+        count_before + 1
+    );
+}

@@ -9,9 +9,12 @@
 //! All functions are gated behind `#[cfg(feature = "camera")]`.
 //! Uses AVFoundation (capture) and Vision framework (detection) — on-device.
 
+#[cfg(feature = "camera")]
 use serde_json::{json, Value};
 
+#[cfg(feature = "camera")]
 use crate::mcp::annotations;
+#[cfg(feature = "camera")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------

@@ -9,9 +9,12 @@
 //! All functions are gated behind `#[cfg(feature = "audio")]`.
 //! Uses CoreAudio and SFSpeechRecognizer — on-device, no cloud.
 
+#[cfg(feature = "audio")]
 use serde_json::{json, Value};
 
+#[cfg(feature = "audio")]
 use crate::mcp::annotations;
+#[cfg(feature = "audio")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------

@@ -4491,4 +4491,563 @@ mod tests {
         assert!(fields.contains(&"app"));
         assert!(!fields.contains(&"scope"));
     }
+
+    // -----------------------------------------------------------------------
+    // detect_ui_patterns — untested pattern branches
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn detect_patterns_table_view_from_ax_outline() {
+        // GIVEN: AXOutline (tree view) is also a table-family role
+        let scene = make_scene(&[("AXOutline", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: table_view detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "table_view"),
+            "AXOutline should trigger table_view"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_progress_indicator_from_ax_busy_indicator() {
+        // GIVEN: AXBusyIndicator (spinning progress) instead of AXProgressIndicator
+        let scene = make_scene(&[("AXBusyIndicator", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: progress_indicator detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "progress_indicator"),
+            "AXBusyIndicator should trigger progress_indicator"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_settings_page_from_groups_and_checkboxes() {
+        // GIVEN: 3 AXGroup nodes + AXCheckBox, no modal, no password
+        let scene = make_scene(&[
+            ("AXGroup", None, None, None),
+            ("AXGroup", None, None, None),
+            ("AXGroup", None, None, None),
+            ("AXCheckBox", Some("Enable feature"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: settings_page detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "settings_page"),
+            "settings_page not detected with 3 groups + checkbox"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_settings_page_from_groups_and_popups() {
+        // GIVEN: 3 AXGroup nodes + AXPopUpButton, no modal, no password
+        let scene = make_scene(&[
+            ("AXGroup", None, None, None),
+            ("AXGroup", None, None, None),
+            ("AXGroup", None, None, None),
+            ("AXPopUpButton", Some("Color scheme"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: settings_page detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "settings_page"),
+            "settings_page not detected with 3 groups + popup button"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_settings_page_suppressed_by_modal() {
+        // GIVEN: 3 groups + checkbox + a sheet (modal present) — should suppress settings_page
+        let scene = make_scene(&[
+            ("AXGroup", None, None, None),
+            ("AXGroup", None, None, None),
+            ("AXGroup", None, None, None),
+            ("AXCheckBox", Some("Option"), None, None),
+            ("AXSheet", None, None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: settings_page NOT detected (modal blocks it)
+        assert!(
+            !patterns.iter().any(|p| p.pattern == "settings_page"),
+            "settings_page should be suppressed when a modal is present"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_text_editor_from_text_area_with_toolbar() {
+        // GIVEN: AXTextArea + AXToolbar
+        let scene = make_scene(&[
+            ("AXTextArea", None, None, None),
+            ("AXToolbar", None, None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: text_editor detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "text_editor"),
+            "text_editor not detected with AXTextArea + AXToolbar"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_text_editor_from_text_area_with_many_nodes() {
+        // GIVEN: AXTextArea with >10 surrounding nodes (no toolbar required)
+        let mut nodes: Vec<(&str, Option<&str>, Option<&str>, Option<&str>)> =
+            vec![("AXTextArea", None, None, None)];
+        for _ in 0..11 {
+            nodes.push(("AXStaticText", None, None, None));
+        }
+        let scene = make_scene(&nodes);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: text_editor detected (large scene threshold)
+        assert!(
+            patterns.iter().any(|p| p.pattern == "text_editor"),
+            "text_editor not detected with AXTextArea + >10 nodes"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_browser_main_from_address_field_and_tab_group() {
+        // GIVEN: AXTextField with identifier containing "address" + AXTabGroup
+        let mut g = crate::intent::SceneGraph::empty();
+        let addr_node = crate::intent::SceneNode {
+            id: crate::intent::NodeId(0),
+            parent: None,
+            children: vec![],
+            role: Some("AXTextField".into()),
+            title: None,
+            label: None,
+            value: None,
+            description: None,
+            identifier: Some("address-bar".into()),
+            bounds: None,
+            enabled: true,
+            depth: 0,
+        };
+        let tab_node = crate::intent::SceneNode {
+            id: crate::intent::NodeId(1),
+            parent: None,
+            children: vec![],
+            role: Some("AXTabGroup".into()),
+            title: None,
+            label: None,
+            value: None,
+            description: None,
+            identifier: None,
+            bounds: None,
+            enabled: true,
+            depth: 0,
+        };
+        g.push(addr_node);
+        g.push(tab_node);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&g);
+        // THEN: browser_main detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "browser_main"),
+            "browser_main not detected with address-bar field + tab group"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_browser_main_requires_tab_group() {
+        // GIVEN: address-bar text field WITHOUT a tab group
+        let mut g = crate::intent::SceneGraph::empty();
+        let node = crate::intent::SceneNode {
+            id: crate::intent::NodeId(0),
+            parent: None,
+            children: vec![],
+            role: Some("AXTextField".into()),
+            title: None,
+            label: None,
+            value: None,
+            description: None,
+            identifier: Some("url-field".into()),
+            bounds: None,
+            enabled: true,
+            depth: 0,
+        };
+        g.push(node);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&g);
+        // THEN: browser_main NOT detected without tab group
+        assert!(
+            !patterns.iter().any(|p| p.pattern == "browser_main"),
+            "browser_main should require AXTabGroup"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_form_requires_at_least_two_text_fields() {
+        // GIVEN: only one text field + button (below the threshold)
+        let scene = make_scene(&[
+            ("AXTextField", Some("Email"), None, None),
+            ("AXButton", Some("Submit"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: form NOT detected (threshold is 2)
+        assert!(
+            !patterns.iter().any(|p| p.pattern == "form"),
+            "form should require at least 2 text fields"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // infer_app_state — untested loading/error label paths and AXDialog
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn infer_state_modal_from_ax_dialog() {
+        // GIVEN: AXDialog element (alternate modal role)
+        let scene = make_scene(&[("AXDialog", None, None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: modal state
+        assert_eq!(state, super::AppState::Modal);
+    }
+
+    #[test]
+    fn infer_state_loading_from_ax_busy_indicator() {
+        // GIVEN: AXBusyIndicator (spinning indicator), no modal
+        let scene = make_scene(&[("AXBusyIndicator", None, None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: loading
+        assert_eq!(state, super::AppState::Loading);
+    }
+
+    #[test]
+    fn infer_state_loading_from_label_text() {
+        // GIVEN: static text labelled "Loading…", no modal or spinner role
+        let scene = make_scene(&[("AXStaticText", Some("Loading…"), None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: loading (label-based heuristic)
+        assert_eq!(state, super::AppState::Loading);
+    }
+
+    #[test]
+    fn infer_state_error_from_failed_label() {
+        // GIVEN: label containing "failed"
+        let scene = make_scene(&[("AXStaticText", Some("Connection failed"), None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: error
+        assert_eq!(state, super::AppState::Error);
+    }
+
+    #[test]
+    fn infer_state_error_from_invalid_label() {
+        // GIVEN: label containing "invalid"
+        let scene = make_scene(&[("AXStaticText", Some("Invalid password"), None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: error
+        assert_eq!(state, super::AppState::Error);
+    }
+
+    // -----------------------------------------------------------------------
+    // suggest_actions — untested pattern branches
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn suggest_actions_file_open_dialog_suggests_open_click() {
+        // GIVEN: file_open_dialog pattern
+        let open_dlg = super::UiPattern {
+            pattern: "file_open_dialog",
+            confidence: 0.88,
+        };
+        let suggestions = super::suggest_actions(&[open_dlg], super::AppState::Idle);
+        // THEN: click Open suggested
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.tool == "ax_click" && s.query == "Open"),
+            "expected ax_click with 'Open' query for file_open_dialog"
+        );
+    }
+
+    #[test]
+    fn suggest_actions_error_alert_suggests_dismiss_ok() {
+        // GIVEN: error_alert pattern
+        let alert = super::UiPattern {
+            pattern: "error_alert",
+            confidence: 0.80,
+        };
+        let suggestions = super::suggest_actions(&[alert], super::AppState::Idle);
+        // THEN: ax_click with "OK" to dismiss the error alert
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.tool == "ax_click" && s.query == "OK"),
+            "expected ax_click 'OK' for error_alert dismissal"
+        );
+    }
+
+    #[test]
+    fn suggest_actions_text_editor_suggests_type() {
+        // GIVEN: text_editor pattern
+        let editor = super::UiPattern {
+            pattern: "text_editor",
+            confidence: 0.78,
+        };
+        let suggestions = super::suggest_actions(&[editor], super::AppState::Idle);
+        // THEN: type into the text area
+        assert!(
+            suggestions.iter().any(|s| s.tool == "ax_type"),
+            "expected ax_type suggestion for text_editor"
+        );
+    }
+
+    #[test]
+    fn suggest_actions_form_suggests_submit_click() {
+        // GIVEN: form pattern
+        let form = super::UiPattern {
+            pattern: "form",
+            confidence: 0.72,
+        };
+        let suggestions = super::suggest_actions(&[form], super::AppState::Idle);
+        // THEN: click Submit to submit the form
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.tool == "ax_click" && s.query == "Submit"),
+            "expected ax_click 'Submit' for form pattern"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_diff — single-byte-difference case
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn compute_diff_one_byte_different_in_large_array_is_small_fraction() {
+        // GIVEN: 1000-byte arrays differing in exactly one position
+        let baseline: Vec<u8> = (0u8..=255).cycle().take(1000).collect();
+        let mut current = baseline.clone();
+        current[500] ^= 0xFF;
+        // WHEN
+        let diff = super::compute_diff(&baseline, &current);
+        // THEN: diff = 1/1000 = 0.001
+        assert!(
+            (diff - 0.001).abs() < f64::EPSILON * 10.0,
+            "expected ~0.001 for 1 byte diff in 1000-byte array, got {diff}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // decode_baseline_b64 — two-character (one-byte output) chunk
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn decode_baseline_b64_two_char_chunk_produces_one_byte() {
+        // GIVEN: "YQ==" decodes to b"a" — after stripping '=', it's "YQ" (2 chars)
+        let result = super::decode_baseline_b64("YQ==").unwrap();
+        assert_eq!(result, b"a");
+    }
+
+    #[test]
+    fn decode_baseline_b64_three_char_chunk_produces_two_bytes() {
+        // GIVEN: "YWI=" decodes to b"ab" — after stripping '=', it's "YWI" (3 chars)
+        let result = super::decode_baseline_b64("YWI=").unwrap();
+        assert_eq!(result, b"ab");
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_test_assertions — individual assertion types
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_test_assertions_parses_element_exists() {
+        // GIVEN: element_exists assertion
+        let assertions = super::parse_test_assertions(&json!([
+            { "type": "element_exists", "query": "Submit" }
+        ]));
+        assert_eq!(assertions.len(), 1);
+    }
+
+    #[test]
+    fn parse_test_assertions_parses_element_has_text() {
+        // GIVEN: element_has_text assertion
+        let assertions = super::parse_test_assertions(&json!([
+            { "type": "element_has_text", "query": "Title", "expected": "Hello" }
+        ]));
+        assert_eq!(assertions.len(), 1);
+    }
+
+    #[test]
+    fn parse_test_assertions_parses_element_not_exists() {
+        // GIVEN: element_not_exists assertion
+        let assertions = super::parse_test_assertions(&json!([
+            { "type": "element_not_exists", "query": "Error" }
+        ]));
+        assert_eq!(assertions.len(), 1);
+    }
+
+    #[test]
+    fn parse_test_assertions_parses_screen_contains() {
+        // GIVEN: screen_contains assertion
+        let assertions = super::parse_test_assertions(&json!([
+            { "type": "screen_contains", "needle": "Welcome" }
+        ]));
+        assert_eq!(assertions.len(), 1);
+    }
+
+    #[test]
+    fn parse_test_assertions_skips_unknown_type() {
+        // GIVEN: one known and one unknown assertion type
+        let assertions = super::parse_test_assertions(&json!([
+            { "type": "element_exists", "query": "OK" },
+            { "type": "unsupported_future_assertion" }
+        ]));
+        // THEN: only the valid assertion survives
+        assert_eq!(assertions.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_record — click and type action_types recorded successfully
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_record_click_action_type_increments_event_count() {
+        // GIVEN: recording started, then a click event recorded
+        super::handle_ax_record(&json!({"app": "Safari", "action": "start"}));
+        let result = super::handle_ax_record(&json!({
+            "app": "Safari",
+            "action": "record",
+            "action_type": "click",
+            "query": "Submit"
+        }));
+        // THEN: success, event_count=1
+        assert!(!result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["recorded_action_type"], "click");
+        assert!(v["event_count"].as_u64().unwrap() >= 1);
+    }
+
+    #[test]
+    fn ax_record_type_action_type_records_text() {
+        // GIVEN: type event with text
+        super::handle_ax_record(&json!({"app": "Safari", "action": "start"}));
+        let result = super::handle_ax_record(&json!({
+            "app": "Safari",
+            "action": "record",
+            "action_type": "type",
+            "query": "Username",
+            "text": "alice@example.com"
+        }));
+        // THEN: success
+        assert!(!result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["recorded_action_type"], "type");
+    }
+
+    #[test]
+    fn ax_record_unknown_action_type_returns_error() {
+        // GIVEN: unsupported action_type value
+        let result = super::handle_ax_record(&json!({
+            "app": "Safari",
+            "action": "record",
+            "action_type": "teleport"
+        }));
+        // THEN: error mentioning the unknown action_type
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("teleport"));
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_workflow_create — overwrite semantics
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_workflow_create_overwrites_existing_workflow() {
+        // GIVEN: workflow created with 2 steps
+        let wf = make_workflows();
+        super::handle_ax_workflow_create(
+            &json!({
+                "name": "overwrite-wf",
+                "steps": [
+                    { "id": "s1", "action": "click", "target": "A" },
+                    { "id": "s2", "action": "click", "target": "B" }
+                ]
+            }),
+            &wf,
+        );
+        // WHEN: same name created with 1 step
+        let result = super::handle_ax_workflow_create(
+            &json!({
+                "name": "overwrite-wf",
+                "steps": [{ "id": "only", "action": "checkpoint" }]
+            }),
+            &wf,
+        );
+        // THEN: step_count reflects the new definition
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["step_count"], 1);
+        let guard = wf.lock().unwrap();
+        assert_eq!(guard["overwrite-wf"].steps.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // workflow_tracking_data — public function exercised for coverage
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn workflow_tracking_data_returns_valid_json_structure() {
+        // GIVEN: the global tracker (may have state from other tests)
+        // WHEN: calling the public snapshot function
+        let data = super::workflow_tracking_data();
+        // THEN: required top-level keys are present and correctly typed
+        assert!(data["workflows_detected"].is_number());
+        assert!(data["workflows"].is_array());
+        assert!(data["stats"].is_object());
+        assert!(data["stats"]["total_transitions"].is_number());
+        assert!(data["stats"]["distinct_apps"].is_number());
+    }
+
+    // -----------------------------------------------------------------------
+    // has_role / any_label_contains helpers (indirectly via detect/infer)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn detect_patterns_confirmation_dialog_from_alert_yes_no_buttons() {
+        // GIVEN: AXAlert with "Yes" and "No" buttons (alternate confirm labels)
+        let scene = make_scene(&[
+            ("AXAlert", None, None, None),
+            ("AXButton", Some("Yes"), None, None),
+            ("AXButton", Some("No"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: confirmation_dialog detected (yes/no are alternate labels)
+        assert!(
+            patterns.iter().any(|p| p.pattern == "confirmation_dialog"),
+            "confirmation_dialog should be detected with Yes/No buttons"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_login_form_confidence_is_0_90() {
+        // GIVEN: minimal login scene
+        let scene = make_scene(&[
+            ("AXSecureTextField", Some("Password"), None, None),
+            ("AXTextField", Some("Username"), None, None),
+            ("AXButton", Some("Sign In"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: login_form has exactly 0.90 confidence
+        let login = patterns.iter().find(|p| p.pattern == "login_form").unwrap();
+        assert!(
+            (login.confidence - 0.90).abs() < f64::EPSILON,
+            "expected confidence 0.90, got {}",
+            login.confidence
+        );
+    }
 }
