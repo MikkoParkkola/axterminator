@@ -35,6 +35,7 @@ pub mod annotations;
 pub mod auth;
 pub mod elicitation;
 pub mod logging;
+pub mod observer;
 pub mod progress;
 pub mod prompts;
 pub mod protocol;

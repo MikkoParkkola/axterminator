@@ -765,6 +765,12 @@ Advanced tools:\n\
 - ax_app_profile: Electron app metadata\n\
 - ax_track_workflow: cross-app pattern detection\n\
 - ax_record: interaction recording for test generation\n\
+- ax_visual_diff: visual regression testing\n\
+- ax_a11y_audit: WCAG accessibility compliance\n\
+- ax_clipboard: read/write system clipboard\n\
+- ax_run_script: AppleScript/JXA execution\n\
+- ax_session_info: server state\n\
+- ax_undo: undo last actions\n\
 \n\
 Use prompts/get for detailed guidance:\n\
 - 'troubleshooting' — when something fails\n\

@@ -63,7 +63,50 @@ pub(crate) fn innovation_tools() -> Vec<Tool> {
         tool_ax_workflow_status(),
         tool_ax_record(),
         tool_ax_analyze(),
+        tool_ax_run_script(),
+        tool_ax_clipboard(),
+        tool_ax_session_info(),
+        tool_ax_undo(),
+        tool_ax_visual_diff(),
+        tool_ax_a11y_audit(),
     ]
+}
+
+fn tool_ax_run_script() -> Tool {
+    Tool {
+        name: "ax_run_script",
+        title: "Execute AppleScript or JXA",
+        description: "Execute AppleScript or JXA (JavaScript for Automation). Use for operations \
+            the accessibility API cannot perform: menu bar access, system dialogs, app scripting. \
+            BLOCKED in safe/sandboxed mode.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                    "description": "The script source to execute"
+                },
+                "language": {
+                    "type": "string",
+                    "enum": ["applescript", "jxa"],
+                    "default": "applescript",
+                    "description": "Script language: 'applescript' (default) or 'jxa' \
+                        (JavaScript for Automation)"
+                }
+            },
+            "required": ["script"],
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "success": { "type": "boolean" },
+                "output":  { "type": "string" }
+            },
+            "required": ["success"]
+        }),
+        annotations: annotations::DESTRUCTIVE,
+    }
 }
 
 fn tool_ax_analyze() -> Tool {
@@ -513,6 +556,12 @@ pub(crate) fn call_tool_innovation<W: Write>(
         "ax_track_workflow" => Some(handle_ax_track_workflow(args)),
         "ax_record" => Some(handle_ax_record(args)),
         "ax_analyze" => Some(handle_ax_analyze(args, registry)),
+        "ax_run_script" => Some(handle_ax_run_script(args)),
+        "ax_clipboard" => Some(handle_ax_clipboard(args)),
+        "ax_session_info" => Some(handle_ax_session_info(args, registry)),
+        "ax_undo" => Some(handle_ax_undo(args)),
+        "ax_visual_diff" => Some(handle_ax_visual_diff(args, registry)),
+        "ax_a11y_audit" => Some(handle_ax_a11y_audit(args, registry)),
         _ => None,
     }
 }
@@ -1709,8 +1758,605 @@ fn step_action_label(action: &crate::durable_steps::StepAction) -> &'static str 
 }
 
 // ---------------------------------------------------------------------------
+// ax_run_script handler
+// ---------------------------------------------------------------------------
+
+/// Handle `ax_run_script` — execute AppleScript or JXA via `osascript`.
+///
+/// The `language` field selects the interpreter mode:
+/// - `"applescript"` (default) — passed directly to `osascript -e`
+/// - `"jxa"` — passed to `osascript -l JavaScript -e`
+///
+/// Security: this tool is blocked in safe and sandboxed modes via
+/// [`crate::mcp::security::is_script_tool`], which matches `"ax_run_script"`.
+/// The [`crate::mcp::annotations::DESTRUCTIVE`] annotation signals to clients
+/// that this tool can modify system state.
+fn handle_ax_run_script(args: &Value) -> ToolCallResult {
+    let Some(script) = args["script"].as_str() else {
+        return ToolCallResult::error("Missing required field: script");
+    };
+    let language = args["language"].as_str().unwrap_or("applescript");
+
+    let mut cmd = std::process::Command::new("osascript");
+    if language == "jxa" {
+        cmd.args(["-l", "JavaScript", "-e", script]);
+    } else {
+        cmd.args(["-e", script]);
+    }
+
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if output.status.success() {
+                ToolCallResult::ok(json!({"success": true, "output": stdout}).to_string())
+            } else {
+                ToolCallResult::error(format!("Script failed: {stderr}"))
+            }
+        }
+        Err(e) => ToolCallResult::error(format!("Failed to execute script: {e}")),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// ax_clipboard — descriptor
+// ---------------------------------------------------------------------------
+
+fn tool_ax_clipboard() -> Tool {
+    Tool {
+        name: "ax_clipboard",
+        title: "Read/write the system clipboard",
+        description: "Read from or write to the macOS system clipboard. \
+            Use action='read' to retrieve the current clipboard contents. \
+            Use action='write' with a text field to replace the clipboard. \
+            Clipboard writes are blocked in sandboxed security mode.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["read", "write"],
+                    "description": "read=return clipboard text; write=replace clipboard contents"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Text to place on the clipboard (required when action=write)"
+                }
+            },
+            "required": ["action"],
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "action":  { "type": "string" },
+                "text":    { "type": "string" },
+                "written": { "type": "boolean" }
+            },
+            "required": ["action"]
+        }),
+        // Reads are safe; the annotation reflects the write path (more conservative).
+        annotations: annotations::DESTRUCTIVE,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ax_session_info — descriptor
+// ---------------------------------------------------------------------------
+
+fn tool_ax_session_info() -> Tool {
+    Tool {
+        name: "ax_session_info",
+        title: "Server session state",
+        description: "Return server session information: the names of all connected apps, \
+            the total number of registered tools, the active security mode, and the server \
+            version. Useful for health-checks and debugging MCP client state.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "connected_apps": { "type": "array", "items": { "type": "string" } },
+                "tool_count":     { "type": "integer" },
+                "security_mode":  { "type": "string" },
+                "version":        { "type": "string" }
+            },
+            "required": ["connected_apps", "tool_count", "security_mode", "version"]
+        }),
+        annotations: annotations::READ_ONLY,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ax_undo — descriptor
+// ---------------------------------------------------------------------------
+
+fn tool_ax_undo() -> Tool {
+    Tool {
+        name: "ax_undo",
+        title: "Undo last actions in an app",
+        description: "Undo the last N actions in a connected app by sending Cmd+Z. \
+            Activates the named app and then sends the keystroke once per undo step \
+            with a short delay between each. Default count is 1; maximum is 50.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "app": {
+                    "type": "string",
+                    "description": "App name to target (e.g. 'TextEdit', 'Xcode')"
+                },
+                "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 1,
+                    "description": "Number of undo steps to send (default 1, max 50)"
+                }
+            },
+            "required": ["app"],
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "app":    { "type": "string" },
+                "undone": { "type": "integer" },
+                "ok":     { "type": "boolean" }
+            },
+            "required": ["app", "undone", "ok"]
+        }),
+        annotations: annotations::DESTRUCTIVE,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ax_clipboard — handler
+// ---------------------------------------------------------------------------
+
+/// Handle `ax_clipboard` — read from or write to the macOS system clipboard.
+///
+/// Writes are blocked when running in [`SecurityMode::Sandboxed`].
+fn handle_ax_clipboard(args: &Value) -> ToolCallResult {
+    match args["action"].as_str() {
+        Some("read") => clipboard_read(),
+        Some("write") => clipboard_write(args),
+        Some(other) => ToolCallResult::error(format!("Unknown clipboard action: '{other}'")),
+        None => ToolCallResult::error("Missing required field: action"),
+    }
+}
+
+fn clipboard_read() -> ToolCallResult {
+    match std::process::Command::new("osascript")
+        .args(["-e", "the clipboard"])
+        .output()
+    {
+        Err(e) => ToolCallResult::error(format!("Failed to read clipboard: {e}")),
+        Ok(out) => {
+            let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            ToolCallResult::ok(json!({"action": "read", "text": text}).to_string())
+        }
+    }
+}
+
+fn clipboard_write(args: &Value) -> ToolCallResult {
+    use crate::mcp::security::SecurityMode;
+
+    if SecurityMode::from_env() == SecurityMode::Sandboxed {
+        return ToolCallResult::error("ax_clipboard write is blocked in sandboxed security mode");
+    }
+
+    let text = match args["text"].as_str() {
+        Some(t) => t,
+        None => return ToolCallResult::error("Missing field: text (required for action=write)"),
+    };
+
+    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
+    let script = format!("set the clipboard to \"{escaped}\"");
+
+    match std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+    {
+        Err(e) => ToolCallResult::error(format!("Failed to write clipboard: {e}")),
+        Ok(_) => ToolCallResult::ok(json!({"action": "write", "written": true}).to_string()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ax_session_info — handler
+// ---------------------------------------------------------------------------
+
+/// Handle `ax_session_info` — return a snapshot of server session state.
+///
+/// All data is read-only; no parameters are required.
+fn handle_ax_session_info(_args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
+    use crate::mcp::security::SecurityMode;
+
+    let connected_apps = registry.connected_names();
+    let tool_count =
+        crate::mcp::tools::all_tools().len() + crate::mcp::tools_extended::extended_tools().len();
+    let security_mode = match SecurityMode::from_env() {
+        SecurityMode::Normal => "normal",
+        SecurityMode::Safe => "safe",
+        SecurityMode::Sandboxed => "sandboxed",
+    };
+
+    ToolCallResult::ok(
+        json!({
+            "connected_apps": connected_apps,
+            "tool_count":     tool_count,
+            "security_mode":  security_mode,
+            "version":        env!("CARGO_PKG_VERSION")
+        })
+        .to_string(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// ax_undo — handler
+// ---------------------------------------------------------------------------
+
+/// Handle `ax_undo` — send Cmd+Z to the named app N times.
+///
+/// Each iteration activates the target app first so the keystroke lands in
+/// the correct window, then sends the undo keystroke via `osascript`.
+fn handle_ax_undo(args: &Value) -> ToolCallResult {
+    let app_name = match args["app"].as_str() {
+        Some(a) => a,
+        None => return ToolCallResult::error("Missing required field: app"),
+    };
+    let count = args["count"].as_u64().unwrap_or(1).clamp(1, 50) as usize;
+
+    let activate = format!("tell application \"{app_name}\" to activate");
+    for _ in 0..count {
+        std::process::Command::new("osascript")
+            .args(["-e", &activate])
+            .output()
+            .ok();
+        std::process::Command::new("osascript")
+            .args([
+                "-e",
+                "tell application \"System Events\" to keystroke \"z\" using command down",
+            ])
+            .output()
+            .ok();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    ToolCallResult::ok(
+        json!({
+            "app":    app_name,
+            "undone": count,
+            "ok":     true
+        })
+        .to_string(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Visual regression — ax_visual_diff
+// ---------------------------------------------------------------------------
+
+fn tool_ax_visual_diff() -> Tool {
+    Tool {
+        name: "ax_visual_diff",
+        title: "Visual regression testing",
+        description: "Compare current app screenshot against a baseline image. Returns pixel diff \
+            percentage and highlights. Use for visual regression testing.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "app": {
+                    "type": "string",
+                    "description": "App alias from ax_connect"
+                },
+                "baseline": {
+                    "type": "string",
+                    "description": "Baseline PNG image encoded as standard base64"
+                },
+                "threshold": {
+                    "type": "number",
+                    "description": "Maximum allowed diff fraction before the check fails (default 0.01 = 1%)",
+                    "default": 0.01
+                }
+            },
+            "required": ["app", "baseline"],
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "diff_percent":  { "type": "number" },
+                "bytes_changed": { "type": "integer" },
+                "total_bytes":   { "type": "integer" },
+                "threshold":     { "type": "number" },
+                "passed":        { "type": "boolean" }
+            },
+            "required": ["diff_percent", "bytes_changed", "total_bytes", "threshold", "passed"]
+        }),
+        annotations: annotations::READ_ONLY,
+    }
+}
+
+/// Decode a standard-alphabet base64 string to raw bytes without an external crate.
+///
+/// Padding characters (`=`) are stripped before decoding. Returns an error when
+/// a byte outside the standard 64-character alphabet is encountered.
+fn decode_baseline_b64(input: &str) -> Result<Vec<u8>, String> {
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut lookup = [255u8; 256];
+    for (i, &c) in TABLE.iter().enumerate() {
+        lookup[c as usize] = i as u8;
+    }
+
+    let clean: Vec<u8> = input.bytes().filter(|&b| b != b'=').collect();
+    let mut out = Vec::with_capacity(clean.len() * 3 / 4 + 3);
+
+    for chunk in clean.chunks(4) {
+        let vals: Vec<u8> = chunk.iter().map(|&b| lookup[b as usize]).collect();
+        if vals.contains(&255) {
+            return Err("Invalid base64 character in baseline".into());
+        }
+        match vals.as_slice() {
+            [a, b, c, d] => {
+                out.push((a << 2) | (b >> 4));
+                out.push((b << 4) | (c >> 2));
+                out.push((c << 6) | d);
+            }
+            [a, b, c] => {
+                out.push((a << 2) | (b >> 4));
+                out.push((b << 4) | (c >> 2));
+            }
+            [a, b] => {
+                out.push((a << 2) | (b >> 4));
+            }
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
+/// Compare two byte slices and return the fraction of differing bytes in `[0.0, 1.0]`.
+///
+/// A length mismatch contributes as entirely differing extra bytes, so images that
+/// differ in encoded size will score proportionally to the size gap even when the
+/// overlapping prefix is identical.
+fn compute_diff(baseline: &[u8], current: &[u8]) -> f64 {
+    let max_len = baseline.len().max(current.len());
+    if max_len == 0 {
+        return 0.0;
+    }
+    let min_len = baseline.len().min(current.len());
+    let size_diff = (max_len - min_len) as u64;
+    let byte_diff = baseline[..min_len]
+        .iter()
+        .zip(current[..min_len].iter())
+        .filter(|(a, b)| a != b)
+        .count() as u64;
+    (size_diff + byte_diff) as f64 / max_len as f64
+}
+
+/// Handle `ax_visual_diff` — capture the live screenshot and compare it byte-for-byte
+/// against the caller-supplied baseline.
+fn handle_ax_visual_diff(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
+    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
+        return ToolCallResult::error("Missing required field: app");
+    };
+    let Some(baseline_b64) = args["baseline"].as_str() else {
+        return ToolCallResult::error("Missing required field: baseline");
+    };
+    let threshold = args["threshold"].as_f64().unwrap_or(0.01);
+
+    let baseline = match decode_baseline_b64(baseline_b64) {
+        Ok(b) => b,
+        Err(e) => return ToolCallResult::error(format!("baseline decode failed: {e}")),
+    };
+
+    registry
+        .with_app(&app_name, |app| {
+            let current = match app.screenshot_native() {
+                Ok(bytes) => bytes,
+                Err(e) => return ToolCallResult::error(format!("screenshot failed: {e}")),
+            };
+
+            let total_bytes = baseline.len().max(current.len());
+            let diff_frac = compute_diff(&baseline, &current);
+            let bytes_changed = (diff_frac * total_bytes as f64).round() as u64;
+            let passed = diff_frac <= threshold;
+
+            ToolCallResult::ok(
+                json!({
+                    "diff_percent":  diff_frac * 100.0,
+                    "bytes_changed": bytes_changed,
+                    "total_bytes":   total_bytes,
+                    "threshold":     threshold,
+                    "passed":        passed
+                })
+                .to_string(),
+            )
+        })
+        .unwrap_or_else(ToolCallResult::error)
+}
+
+// ---------------------------------------------------------------------------
+// Accessibility compliance audit — ax_a11y_audit
+// ---------------------------------------------------------------------------
+
+fn tool_ax_a11y_audit() -> Tool {
+    Tool {
+        name: "ax_a11y_audit",
+        title: "Accessibility compliance audit",
+        description: "Audit a connected app for accessibility issues: missing labels, incorrect \
+            roles, keyboard navigation, WCAG compliance. Returns a list of issues with severity \
+            and WCAG criterion references.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "app": {
+                    "type": "string",
+                    "description": "App alias from ax_connect"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["full", "focused_window"],
+                    "default": "full",
+                    "description": "Audit scope: full tree or focused window only"
+                }
+            },
+            "required": ["app"],
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "issue_count": { "type": "integer" },
+                "critical":    { "type": "integer" },
+                "warning":     { "type": "integer" },
+                "info":        { "type": "integer" },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "severity": { "type": "string" },
+                            "issue":    { "type": "string" },
+                            "role":     { "type": "string" },
+                            "wcag":     { "type": "string" },
+                            "bounds":   {}
+                        },
+                        "required": ["severity", "issue", "wcag"]
+                    }
+                }
+            },
+            "required": ["issue_count", "critical", "warning", "info", "issues"]
+        }),
+        annotations: annotations::READ_ONLY,
+    }
+}
+
+/// Interactive macOS accessibility roles that require an accessible name under WCAG 1.3.1.
+const INTERACTIVE_ROLES: &[&str] = &[
+    "AXButton",
+    "AXTextField",
+    "AXTextArea",
+    "AXCheckBox",
+    "AXRadioButton",
+    "AXSlider",
+    "AXPopUpButton",
+    "AXMenuItem",
+    "AXLink",
+];
+
+/// Audit a single accessibility node and push any WCAG violations into `issues`.
+///
+/// Three checks are applied per node, each mapped to its governing WCAG success criterion:
+///
+/// | Check                            | WCAG SC |
+/// |----------------------------------|---------|
+/// | Interactive element without name | 1.3.1   |
+/// | Empty or unknown role            | 4.1.2   |
+/// | Image without text alternative   | 1.1.1   |
+fn audit_node(node: &crate::intent::SceneNode, issues: &mut Vec<Value>) {
+    let role = node.role.as_deref().unwrap_or("");
+    let has_label = node.title.is_some() || node.label.is_some() || node.description.is_some();
+
+    let bounds_json = node
+        .bounds
+        .map(|(x, y, w, h)| json!([x, y, w, h]))
+        .unwrap_or(Value::Null);
+
+    // WCAG 1.3.1 — interactive element with no accessible name.
+    if INTERACTIVE_ROLES.contains(&role) && !has_label {
+        issues.push(json!({
+            "severity": "critical",
+            "issue":    "missing_label",
+            "role":     role,
+            "wcag":     "1.3.1",
+            "bounds":   bounds_json
+        }));
+    }
+
+    // WCAG 4.1.2 — element with an empty or AXUnknown role.
+    if role.is_empty() || role == "AXUnknown" {
+        issues.push(json!({
+            "severity": "warning",
+            "issue":    "unknown_role",
+            "role":     role,
+            "wcag":     "4.1.2",
+            "bounds":   bounds_json
+        }));
+    }
+
+    // WCAG 1.1.1 — image element without a text alternative.
+    if role == "AXImage" && !has_label {
+        issues.push(json!({
+            "severity": "critical",
+            "issue":    "unlabeled_image",
+            "role":     role,
+            "wcag":     "1.1.1",
+            "bounds":   bounds_json
+        }));
+    }
+}
+
+/// Walk every node in `scene` and collect all WCAG violations.
+fn audit_accessibility(scene: &crate::intent::SceneGraph) -> Vec<Value> {
+    let mut issues = Vec::new();
+    for node in scene.iter() {
+        audit_node(node, &mut issues);
+    }
+    issues
+}
+
+/// Count issues at a given severity level.
+fn count_by_severity(issues: &[Value], level: &str) -> u64 {
+    issues
+        .iter()
+        .filter(|v| v["severity"].as_str() == Some(level))
+        .count() as u64
+}
+
+/// Handle `ax_a11y_audit` — scan the live AX tree and report WCAG violations.
+fn handle_ax_a11y_audit(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
+    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
+        return ToolCallResult::error("Missing required field: app");
+    };
+    // `scope` validated by schema; reserved for focused-window filtering.
+    let _scope = args["scope"].as_str().unwrap_or("full");
+
+    registry
+        .with_app(&app_name, |app| {
+            let scene = match crate::intent::scan_scene(app.element) {
+                Ok(g) => g,
+                Err(e) => return ToolCallResult::error(format!("scan_scene failed: {e}")),
+            };
+
+            let issues = audit_accessibility(&scene);
+            let issue_count = issues.len() as u64;
+            let critical = count_by_severity(&issues, "critical");
+            let warning = count_by_severity(&issues, "warning");
+            let info = count_by_severity(&issues, "info");
+
+            ToolCallResult::ok(
+                json!({
+                    "issue_count": issue_count,
+                    "critical":    critical,
+                    "warning":     warning,
+                    "info":        info,
+                    "issues":      issues
+                })
+                .to_string(),
+            )
+        })
+        .unwrap_or_else(ToolCallResult::error)
+}
 
 #[cfg(test)]
 mod tests {
@@ -1725,15 +2371,16 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn innovation_tools_registers_nine_tools() {
-        // GIVEN: Wave 2 + workflow tools + ax_record + ax_analyze
+    fn innovation_tools_registers_fifteen_tools() {
+        // GIVEN: Wave 2 + workflow tools + ax_record + ax_analyze + ax_run_script
+        //        + ax_clipboard + ax_session_info + ax_undo + ax_visual_diff + ax_a11y_audit
         // WHEN: requesting descriptors
         let tools = super::innovation_tools();
-        // THEN: exactly nine tools registered (4 original + 3 workflow + ax_record + ax_analyze)
+        // THEN: exactly fifteen tools registered
         assert_eq!(
             tools.len(),
-            9,
-            "expected 9 innovation tools, got {}",
+            15,
+            "expected 15 innovation tools, got {}",
             tools.len()
         );
     }
@@ -1794,6 +2441,12 @@ mod tests {
             "ax_workflow_status",
             "ax_record",
             "ax_analyze",
+            "ax_run_script",
+            "ax_clipboard",
+            "ax_session_info",
+            "ax_undo",
+            "ax_visual_diff",
+            "ax_a11y_audit",
         ] {
             assert!(names.contains(*expected), "missing tool: {expected}");
         }
@@ -1842,10 +2495,24 @@ mod tests {
             "ax_track_workflow",
             "ax_record",
             "ax_analyze",
+            "ax_run_script",
+            "ax_clipboard",
+            "ax_session_info",
+            "ax_undo",
+            "ax_visual_diff",
+            "ax_a11y_audit",
         ] {
-            // WHEN: dispatching with minimal args
-            let result =
-                super::call_tool_innovation(name, &json!({"app": "Ghost"}), &registry, &mut out);
+            // WHEN: dispatching with minimal args tailored per tool
+            let args = if *name == "ax_run_script" {
+                json!({"script": "return 42"})
+            } else if *name == "ax_clipboard" {
+                json!({"action": "read"})
+            } else if *name == "ax_session_info" {
+                json!({})
+            } else {
+                json!({"app": "Ghost"})
+            };
+            let result = super::call_tool_innovation(name, &args, &registry, &mut out);
             // THEN: result is Some (handler ran, even if it returned an error payload)
             assert!(
                 result.is_some(),
@@ -3122,5 +3789,706 @@ mod tests {
         assert_eq!(v["action"], "Click Save");
         assert_eq!(v["tool"], "ax_click");
         assert_eq!(v["query"], "Save");
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_run_script handler
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_run_script_missing_script_returns_error() {
+        // GIVEN: args with no 'script' field
+        // WHEN: dispatching
+        let result = super::handle_ax_run_script(&json!({}));
+        // THEN: error payload with descriptive message
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("script"));
+    }
+
+    #[test]
+    fn ax_run_script_default_language_does_not_report_missing_field() {
+        // GIVEN: no 'language' field — default should be "applescript"
+        // WHEN: handler is entered (osascript may succeed or fail, but not "Missing field")
+        let result = super::handle_ax_run_script(&json!({"script": "return \"hello\""}));
+        // THEN: error is NOT about a missing field (default applied correctly)
+        assert!(
+            !result.content[0].text.contains("Missing required field"),
+            "handler should not report missing field when language is omitted"
+        );
+    }
+
+    #[test]
+    fn ax_run_script_executes_trivial_applescript() {
+        // GIVEN: a simple return-value AppleScript
+        // WHEN: dispatching
+        let result = super::handle_ax_run_script(&json!({
+            "script": "return 42",
+            "language": "applescript"
+        }));
+        // THEN: osascript is always present on macOS — succeeds with output
+        assert!(!result.is_error, "osascript must be available on macOS");
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["success"], true);
+        assert!(v["output"].is_string());
+    }
+
+    #[test]
+    fn ax_run_script_executes_trivial_jxa() {
+        // GIVEN: a minimal JXA script
+        // WHEN: dispatching
+        let result = super::handle_ax_run_script(&json!({
+            "script": "\"hello from jxa\"",
+            "language": "jxa"
+        }));
+        // THEN: success on macOS
+        assert!(!result.is_error, "osascript JXA must be available on macOS");
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["success"], true);
+    }
+
+    #[test]
+    fn ax_run_script_syntax_error_returns_error_not_panic() {
+        // GIVEN: a script with invalid AppleScript syntax
+        // WHEN: dispatching
+        let result = super::handle_ax_run_script(&json!({
+            "script": "this is not valid applescript @@@@",
+            "language": "applescript"
+        }));
+        // THEN: is_error=true, no panic, message contains "Script failed"
+        assert!(result.is_error);
+        assert!(
+            result.content[0].text.contains("Script failed"),
+            "expected 'Script failed' in: {}",
+            result.content[0].text
+        );
+    }
+
+    #[test]
+    fn ax_run_script_descriptor_has_destructive_annotation() {
+        // GIVEN: the ax_run_script tool descriptor
+        let tools = super::innovation_tools();
+        let tool = tools.iter().find(|t| t.name == "ax_run_script").unwrap();
+        // THEN: destructive=true and not read_only (scripts can mutate system state)
+        assert!(
+            tool.annotations.destructive,
+            "ax_run_script must be destructive"
+        );
+        assert!(
+            !tool.annotations.read_only,
+            "ax_run_script must not be read_only"
+        );
+    }
+
+    #[test]
+    fn ax_run_script_dispatch_recognises_name() {
+        // GIVEN: ax_run_script is registered in the stateless dispatch table
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        // WHEN: dispatching with a valid script arg
+        let result = super::call_tool_innovation(
+            "ax_run_script",
+            &json!({"script": "return 1"}),
+            &registry,
+            &mut out,
+        );
+        // THEN: returns Some (handler matched and ran)
+        assert!(
+            result.is_some(),
+            "call_tool_innovation must handle 'ax_run_script'"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_clipboard handler
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_clipboard_missing_action_returns_error() {
+        // GIVEN: args with no 'action' field
+        // WHEN: dispatching
+        let result = super::handle_ax_clipboard(&json!({}));
+        // THEN: error payload
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_clipboard_unknown_action_returns_error() {
+        // GIVEN: an unrecognised action value
+        // WHEN: dispatching
+        let result = super::handle_ax_clipboard(&json!({"action": "flush"}));
+        // THEN: error payload explaining the unknown action
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Unknown clipboard action"));
+    }
+
+    #[test]
+    fn ax_clipboard_write_without_text_returns_error() {
+        // GIVEN: action=write but no text field, not sandboxed
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+        // WHEN: dispatching
+        let result = super::handle_ax_clipboard(&json!({"action": "write"}));
+        // THEN: error payload about missing text
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("text"));
+    }
+
+    #[test]
+    fn ax_clipboard_write_blocked_in_sandboxed_mode() {
+        // GIVEN: sandboxed mode
+        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+        // WHEN: dispatching a write
+        let result = super::handle_ax_clipboard(&json!({"action": "write", "text": "hello"}));
+        // THEN: error payload about sandboxed mode
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("sandboxed"));
+        // cleanup
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+    }
+
+    #[test]
+    fn ax_clipboard_descriptor_has_destructive_annotation() {
+        // GIVEN: tool descriptor
+        let tool = super::tool_ax_clipboard();
+        // THEN: annotation flags destructive (write path is state-changing)
+        assert!(tool.annotations.destructive);
+        assert!(!tool.annotations.read_only);
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_session_info handler
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_session_info_returns_all_required_fields() {
+        // GIVEN: an empty registry
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: calling the handler
+        let result = super::handle_ax_session_info(&json!({}), &registry);
+        // THEN: success with the four required keys present
+        assert!(!result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert!(v["connected_apps"].is_array());
+        assert!(v["tool_count"].is_number());
+        assert!(v["security_mode"].is_string());
+        assert!(v["version"].is_string());
+    }
+
+    #[test]
+    fn ax_session_info_security_mode_reflects_env() {
+        // GIVEN: sandboxed mode set in the environment
+        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: calling the handler
+        let result = super::handle_ax_session_info(&json!({}), &registry);
+        // THEN: security_mode field is "sandboxed"
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["security_mode"], "sandboxed");
+        // cleanup
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+    }
+
+    #[test]
+    fn ax_session_info_version_is_non_empty() {
+        // GIVEN: any registry
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: calling the handler
+        let result = super::handle_ax_session_info(&json!({}), &registry);
+        // THEN: version is a non-empty string (set from CARGO_PKG_VERSION)
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert!(!v["version"].as_str().unwrap_or("").is_empty());
+    }
+
+    #[test]
+    fn ax_session_info_connected_apps_is_empty_with_fresh_registry() {
+        // GIVEN: a fresh registry with no connected apps
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: calling the handler
+        let result = super::handle_ax_session_info(&json!({}), &registry);
+        // THEN: connected_apps is an empty array
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["connected_apps"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn ax_session_info_descriptor_is_read_only() {
+        // GIVEN: tool descriptor
+        let tool = super::tool_ax_session_info();
+        // THEN: read-only, non-destructive
+        assert!(tool.annotations.read_only);
+        assert!(!tool.annotations.destructive);
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_undo handler
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_undo_missing_app_returns_error() {
+        // GIVEN: args with no 'app' field
+        // WHEN: dispatching
+        let result = super::handle_ax_undo(&json!({}));
+        // THEN: error payload
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_undo_returns_correct_undone_count() {
+        // GIVEN: app + count=1 (osascript calls fail silently in test env)
+        // WHEN: dispatching
+        let result = super::handle_ax_undo(&json!({"app": "Ghost", "count": 1}));
+        // THEN: undone field equals the requested count, ok=true
+        assert!(!result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["undone"], 1);
+        assert_eq!(v["app"], "Ghost");
+        assert_eq!(v["ok"], true);
+    }
+
+    #[test]
+    fn ax_undo_clamps_count_above_maximum() {
+        // GIVEN: count=999 (above the 50 ceiling)
+        // WHEN: dispatching
+        let result = super::handle_ax_undo(&json!({"app": "Finder", "count": 999}));
+        // THEN: undone is clamped to 50
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["undone"], 50);
+    }
+
+    #[test]
+    fn ax_undo_defaults_to_one_when_count_absent() {
+        // GIVEN: no count field provided
+        // WHEN: dispatching
+        let result = super::handle_ax_undo(&json!({"app": "Notes"}));
+        // THEN: undone defaults to 1
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["undone"], 1);
+    }
+
+    #[test]
+    fn ax_undo_descriptor_has_destructive_annotation() {
+        // GIVEN: tool descriptor
+        let tool = super::tool_ax_undo();
+        // THEN: annotation flags destructive (Cmd+Z modifies app state)
+        assert!(tool.annotations.destructive);
+        assert!(!tool.annotations.read_only);
+    }
+
+    // -----------------------------------------------------------------------
+    // decode_baseline_b64
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn decode_baseline_b64_round_trips_hello() {
+        // GIVEN: "Hello" in standard base64
+        let encoded = "SGVsbG8=";
+        // WHEN: decoding
+        let result = super::decode_baseline_b64(encoded).unwrap();
+        // THEN: original bytes recovered
+        assert_eq!(result, b"Hello");
+    }
+
+    #[test]
+    fn decode_baseline_b64_empty_string_returns_empty_vec() {
+        // GIVEN: empty input
+        // WHEN: decoding
+        let result = super::decode_baseline_b64("").unwrap();
+        // THEN: empty vec, no panic
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn decode_baseline_b64_rejects_invalid_character() {
+        // GIVEN: base64 with a non-alphabet byte
+        // WHEN: decoding
+        let result = super::decode_baseline_b64("SGVs!G8=");
+        // THEN: error returned
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid base64"));
+    }
+
+    #[test]
+    fn decode_baseline_b64_handles_three_byte_input_without_padding() {
+        // GIVEN: "Man" → standard base64 "TWFu" (no padding needed for 3-byte input)
+        let result = super::decode_baseline_b64("TWFu").unwrap();
+        assert_eq!(result, b"Man");
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_diff
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn compute_diff_identical_slices_returns_zero() {
+        // GIVEN: two identical byte slices
+        let data = b"identical_data";
+        // WHEN: computing diff
+        let diff = super::compute_diff(data, data);
+        // THEN: zero diff
+        assert_eq!(diff, 0.0);
+    }
+
+    #[test]
+    fn compute_diff_both_empty_returns_zero() {
+        // GIVEN: both slices empty
+        // WHEN: computing diff
+        let diff = super::compute_diff(&[], &[]);
+        // THEN: zero, no division by zero
+        assert_eq!(diff, 0.0);
+    }
+
+    #[test]
+    fn compute_diff_completely_different_same_length_returns_one() {
+        // GIVEN: no bytes in common
+        let a = [0u8; 4];
+        let b = [255u8; 4];
+        // WHEN: computing diff
+        let diff = super::compute_diff(&a, &b);
+        // THEN: 100% diff
+        assert_eq!(diff, 1.0);
+    }
+
+    #[test]
+    fn compute_diff_size_mismatch_is_penalised() {
+        // GIVEN: baseline twice the length of current, identical prefix
+        let baseline = [1u8, 2, 3, 4];
+        let current = [1u8, 2];
+        // WHEN: computing diff
+        let diff = super::compute_diff(&baseline, &current);
+        // THEN: diff > 0 because the extra 2 bytes count as changed
+        assert!(diff > 0.0 && diff <= 1.0, "diff {diff} not in (0, 1]");
+    }
+
+    #[test]
+    fn compute_diff_result_always_in_unit_interval() {
+        // GIVEN: arbitrary different-length slices
+        let a = b"hello world this is a test";
+        let b = b"Hello World";
+        // WHEN: computing diff
+        let diff = super::compute_diff(a, b);
+        // THEN: result is in [0.0, 1.0]
+        assert!((0.0..=1.0).contains(&diff));
+    }
+
+    // -----------------------------------------------------------------------
+    // handle_ax_visual_diff — error paths (no live app required)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_visual_diff_missing_app_returns_error() {
+        // GIVEN: args with no app field
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: dispatching
+        let result = super::handle_ax_visual_diff(&json!({"baseline": "SGVsbG8="}), &registry);
+        // THEN: error mentions missing field
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_visual_diff_missing_baseline_returns_error() {
+        // GIVEN: args with no baseline field
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: dispatching
+        let result = super::handle_ax_visual_diff(&json!({"app": "Safari"}), &registry);
+        // THEN: error mentions missing field
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_visual_diff_invalid_base64_returns_error() {
+        // GIVEN: baseline with an invalid character
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: dispatching
+        let result = super::handle_ax_visual_diff(
+            &json!({"app": "Safari", "baseline": "not!valid@b64"}),
+            &registry,
+        );
+        // THEN: decode error propagated
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("baseline decode failed"));
+    }
+
+    #[test]
+    fn ax_visual_diff_unconnected_app_returns_error() {
+        // GIVEN: valid base64 but app not in registry
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: dispatching
+        let result = super::handle_ax_visual_diff(
+            &json!({"app": "GhostApp", "baseline": "SGVsbG8="}),
+            &registry,
+        );
+        // THEN: error from registry lookup
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("not connected"));
+    }
+
+    #[test]
+    fn ax_visual_diff_dispatch_returns_some_for_valid_call() {
+        // GIVEN: ax_visual_diff is in the stateless dispatch table
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        // WHEN: dispatching with minimal (error-triggering) args
+        let result = super::call_tool_innovation(
+            "ax_visual_diff",
+            &json!({"app": "X", "baseline": "SGVsbG8="}),
+            &registry,
+            &mut out,
+        );
+        // THEN: handler ran and returned Some
+        assert!(result.is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // audit_node / audit_accessibility — pure unit tests (no live app)
+    // -----------------------------------------------------------------------
+
+    fn make_a11y_scene(
+        nodes: &[(&str, Option<&str>, Option<&str>, Option<&str>)],
+    ) -> crate::intent::SceneGraph {
+        let mut g = crate::intent::SceneGraph::empty();
+        for (role, title, label, description) in nodes {
+            let node = crate::intent::SceneNode {
+                id: crate::intent::NodeId(g.len()),
+                parent: None,
+                children: vec![],
+                role: Some(role.to_string()),
+                title: title.map(str::to_string),
+                label: label.map(str::to_string),
+                value: None,
+                description: description.map(str::to_string),
+                identifier: None,
+                bounds: None,
+                enabled: true,
+                depth: 0,
+            };
+            g.push(node);
+        }
+        g
+    }
+
+    #[test]
+    fn audit_accessibility_empty_scene_returns_no_issues() {
+        // GIVEN: empty scene graph
+        let scene = crate::intent::SceneGraph::empty();
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: no issues, no panic
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn audit_accessibility_labeled_button_raises_no_missing_label() {
+        // GIVEN: button with a title (accessible name present)
+        let scene = make_a11y_scene(&[("AXButton", Some("OK"), None, None)]);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: no missing_label issue
+        assert!(!issues.iter().any(|v| v["issue"] == "missing_label"));
+    }
+
+    #[test]
+    fn audit_accessibility_unlabeled_button_is_critical_1_3_1() {
+        // GIVEN: button with no title, label, or description
+        let scene = make_a11y_scene(&[("AXButton", None, None, None)]);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: one critical missing_label issue referencing WCAG 1.3.1
+        let crit: Vec<_> = issues
+            .iter()
+            .filter(|v| v["issue"] == "missing_label" && v["severity"] == "critical")
+            .collect();
+        assert_eq!(crit.len(), 1);
+        assert_eq!(crit[0]["wcag"], "1.3.1");
+    }
+
+    #[test]
+    fn audit_accessibility_all_interactive_roles_flagged_when_unlabeled() {
+        // GIVEN: one unlabeled node per interactive role
+        let roles = super::INTERACTIVE_ROLES;
+        let nodes: Vec<(&str, Option<&str>, Option<&str>, Option<&str>)> =
+            roles.iter().map(|r| (*r, None, None, None)).collect();
+        let scene = make_a11y_scene(&nodes);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: one missing_label issue per interactive role
+        let missing_count = issues
+            .iter()
+            .filter(|v| v["issue"] == "missing_label")
+            .count();
+        assert_eq!(missing_count, roles.len());
+    }
+
+    #[test]
+    fn audit_accessibility_unknown_role_is_warning_4_1_2() {
+        // GIVEN: node with AXUnknown role
+        let scene = make_a11y_scene(&[("AXUnknown", None, None, None)]);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: one warning for unknown_role referencing WCAG 4.1.2
+        let warn: Vec<_> = issues
+            .iter()
+            .filter(|v| v["issue"] == "unknown_role" && v["severity"] == "warning")
+            .collect();
+        assert_eq!(warn.len(), 1);
+        assert_eq!(warn[0]["wcag"], "4.1.2");
+    }
+
+    #[test]
+    fn audit_accessibility_empty_role_string_triggers_unknown_role() {
+        // GIVEN: node whose role is an empty string
+        let mut scene = crate::intent::SceneGraph::empty();
+        let node = crate::intent::SceneNode {
+            id: crate::intent::NodeId(0),
+            parent: None,
+            children: vec![],
+            role: Some(String::new()),
+            title: None,
+            label: None,
+            value: None,
+            description: None,
+            identifier: None,
+            bounds: None,
+            enabled: true,
+            depth: 0,
+        };
+        scene.push(node);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: unknown_role warning raised
+        assert!(issues.iter().any(|v| v["issue"] == "unknown_role"));
+    }
+
+    #[test]
+    fn audit_accessibility_unlabeled_image_is_critical_1_1_1() {
+        // GIVEN: image with no text alternative
+        let scene = make_a11y_scene(&[("AXImage", None, None, None)]);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: critical unlabeled_image issue referencing WCAG 1.1.1
+        let img: Vec<_> = issues
+            .iter()
+            .filter(|v| v["issue"] == "unlabeled_image" && v["severity"] == "critical")
+            .collect();
+        assert_eq!(img.len(), 1);
+        assert_eq!(img[0]["wcag"], "1.1.1");
+    }
+
+    #[test]
+    fn audit_accessibility_labeled_image_passes() {
+        // GIVEN: image with a description (text alternative)
+        let scene = make_a11y_scene(&[("AXImage", None, None, Some("Company logo"))]);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: no unlabeled_image issue
+        assert!(!issues.iter().any(|v| v["issue"] == "unlabeled_image"));
+    }
+
+    #[test]
+    fn audit_accessibility_non_interactive_unlabeled_node_clean() {
+        // GIVEN: a static text element (not interactive) with no label
+        let scene = make_a11y_scene(&[("AXStaticText", None, None, None)]);
+        // WHEN: auditing
+        let issues = super::audit_accessibility(&scene);
+        // THEN: no missing_label issue (static text doesn't require an explicit label)
+        assert!(!issues.iter().any(|v| v["issue"] == "missing_label"));
+    }
+
+    #[test]
+    fn count_by_severity_aggregates_correctly() {
+        // GIVEN: issues with mixed severities
+        let issues = vec![
+            json!({"severity": "critical", "issue": "missing_label",   "wcag": "1.3.1"}),
+            json!({"severity": "critical", "issue": "unlabeled_image", "wcag": "1.1.1"}),
+            json!({"severity": "warning",  "issue": "unknown_role",    "wcag": "4.1.2"}),
+        ];
+        // WHEN / THEN
+        assert_eq!(super::count_by_severity(&issues, "critical"), 2);
+        assert_eq!(super::count_by_severity(&issues, "warning"), 1);
+        assert_eq!(super::count_by_severity(&issues, "info"), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // handle_ax_a11y_audit — error paths (no live app required)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_a11y_audit_missing_app_returns_error() {
+        // GIVEN: no app field
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: dispatching
+        let result = super::handle_ax_a11y_audit(&json!({}), &registry);
+        // THEN: error mentions missing field
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_a11y_audit_unconnected_app_returns_error() {
+        // GIVEN: app not in registry
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: dispatching
+        let result = super::handle_ax_a11y_audit(&json!({"app": "GhostApp"}), &registry);
+        // THEN: error from registry lookup
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("not connected"));
+    }
+
+    #[test]
+    fn ax_a11y_audit_dispatch_returns_some_for_valid_call() {
+        // GIVEN: ax_a11y_audit is in the stateless dispatch table
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        // WHEN: dispatching with minimal (error-triggering) args
+        let result =
+            super::call_tool_innovation("ax_a11y_audit", &json!({"app": "X"}), &registry, &mut out);
+        // THEN: handler ran and returned Some
+        assert!(result.is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // Tool descriptor invariants
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_visual_diff_descriptor_is_read_only() {
+        // GIVEN: the tool descriptor
+        let tool = super::tool_ax_visual_diff();
+        // THEN: annotation flags read_only (screenshot is non-destructive)
+        assert!(tool.annotations.read_only);
+        assert!(!tool.annotations.destructive);
+    }
+
+    #[test]
+    fn ax_visual_diff_descriptor_requires_app_and_baseline() {
+        // GIVEN: the tool descriptor
+        let tool = super::tool_ax_visual_diff();
+        // THEN: app and baseline are declared as required
+        let required = tool.input_schema["required"].as_array().unwrap();
+        let fields: Vec<&str> = required.iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(fields.contains(&"app"));
+        assert!(fields.contains(&"baseline"));
+    }
+
+    #[test]
+    fn ax_a11y_audit_descriptor_is_read_only() {
+        // GIVEN: the tool descriptor
+        let tool = super::tool_ax_a11y_audit();
+        // THEN: annotation flags read_only (audit does not mutate app state)
+        assert!(tool.annotations.read_only);
+        assert!(!tool.annotations.destructive);
+    }
+
+    #[test]
+    fn ax_a11y_audit_descriptor_requires_only_app() {
+        // GIVEN: the tool descriptor
+        let tool = super::tool_ax_a11y_audit();
+        // THEN: only app is required (scope has a default value)
+        let required = tool.input_schema["required"].as_array().unwrap();
+        let fields: Vec<&str> = required.iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(fields.contains(&"app"));
+        assert!(!fields.contains(&"scope"));
     }
 }

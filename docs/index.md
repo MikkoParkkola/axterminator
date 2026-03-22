@@ -11,9 +11,9 @@
 
 </div>
 
-Up to 30 MCP tools (19 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
+Up to 34+ MCP tools (27 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
-**Current version: 0.6.1** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
+**Current version: 0.8.0** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
 
 ## Deploy
 
@@ -64,7 +64,7 @@ args = ["mcp", "serve"]
 
 Replace `/path/to/axterminator` with the actual binary path.
 
-Done. Your agent has 19 core tools (up to 30 with all feature flags) to control any macOS app.
+Done. Your agent has 27 core tools (up to 34+ with all feature flags) to control any macOS app.
 
 ## MCP Tools
 
@@ -72,7 +72,8 @@ Done. Your agent has 19 core tools (up to 30 with all feature flags) to control 
 |----------|-------|----------------------|
 | **GUI** | `ax_connect`, `ax_find`, `ax_click`, `ax_click_at`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_scroll`, `ax_drag`, `ax_key_press` | Connect to apps, find elements, interact |
 | **Observe** | `ax_is_accessible`, `ax_screenshot`, `ax_get_tree`, `ax_get_attributes`, `ax_list_windows`, `ax_list_apps`, `ax_wait_idle` | Check permissions, see UI state, screenshots |
-| **Verify** | `ax_assert`, `ax_find_visual` | Assert element state, AI vision fallback |
+| **Verify** | `ax_assert`, `ax_find_visual`, `ax_visual_diff`, `ax_a11y_audit` | Assert element state, AI vision fallback, visual regression, WCAG audit |
+| **System** | `ax_clipboard`, `ax_run_script`, `ax_undo`, `ax_session_info`, `ax_analyze` | Clipboard, AppleScript/JXA, undo actions, session state, UI analysis |
 | **Audio** | `ax_listen`, `ax_speak`, `ax_audio_devices` | Capture mic/system audio (48kHz native), text-to-speech |
 | **Camera** | `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen` | Camera frames, gesture recognition |
 | **Spaces** | `ax_list_spaces`, `ax_create_space`, `ax_move_to_space`, `ax_switch_space`, `ax_destroy_space` | Virtual desktop isolation |

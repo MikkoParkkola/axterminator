@@ -110,7 +110,7 @@ fn ping_returns_empty_object() {
 
 #[test]
 fn tools_list_returns_correct_count_for_feature_set() {
-    // GIVEN: initialized server (base 19; +5 with spaces, +3 audio, +3 camera)
+    // GIVEN: initialized server (base 29; +5 with spaces, +3 audio, +3 camera)
     let mut s = Server::new();
     initialize_server(&mut s);
     // WHEN: tools/list
@@ -119,7 +119,7 @@ fn tools_list_returns_correct_count_for_feature_set() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     // THEN: count is a deterministic function of active features
     let count = v["result"]["tools"].as_array().unwrap().len();
-    let base = 28usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (8, incl. ax_record) + ax_analyze (1)
+    let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
     let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };

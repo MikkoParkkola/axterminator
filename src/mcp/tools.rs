@@ -589,13 +589,13 @@ mod tests {
 
     #[test]
     fn all_tools_count_matches_feature_set() {
-        // GIVEN: Phase 1 (12) + Phase 3 GUI (7) + innovation (7) = 26 base
-        //        +3 camera = 29; +5 spaces = 31/34; +3 audio = 29/32/34/37
+        // GIVEN: Phase 1 (12) + Phase 3 GUI (7) + innovation (9, incl. ax_run_script) = 28 base
+        //        +3 camera = 31; +5 spaces = 32/34; +3 audio = 32/35/37/40
         //        +3 watch (watch implies audio+camera, so net +3 over camera+audio)
         // WHEN: requesting all tools
         let tools = all_tools();
         // THEN: count is a deterministic function of active features
-        let base = 28usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (8, incl. ax_record) + ax_analyze (1)
+        let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         // `watch` implies `audio` and `camera`, so these are additive
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };

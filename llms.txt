@@ -5,7 +5,7 @@
 
 ## What This Is
 
-AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. 19-30 tools depending on features.
+AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. 19-34+ tools depending on features.
 
 ## Requirements
 
@@ -146,7 +146,7 @@ BINARY_PATH mcp serve --http 8741 --localhost-only
 BINARY_PATH mcp serve --http 8741 --token YOUR_SECRET_TOKEN
 ```
 
-## Available Tools (19 core)
+## Available Tools (34+)
 
 After connecting, call `tools/list` to get the full schema. Core tools:
 
@@ -168,6 +168,19 @@ After connecting, call `tools/list` to get the full schema. Core tools:
 - `ax_key_press` — send keyboard shortcuts
 - `ax_assert` — assert element state
 - `ax_find_visual` — visual element detection (requires VLM)
+- `ax_visual_diff` — visual regression testing (compare screenshots against baseline)
+- `ax_a11y_audit` — WCAG accessibility compliance audit
+- `ax_clipboard` — read/write system clipboard
+- `ax_run_script` — execute AppleScript/JXA scripts
+- `ax_undo` — undo last N actions (Cmd+Z)
+- `ax_session_info` — server session state
+- `ax_analyze` — detect UI patterns, infer app state, suggest actions
+- `ax_query` — natural language UI questions
+- `ax_record` — interaction recording for test generation
+- `ax_workflow_create` / `ax_workflow_step` / `ax_workflow_status` — durable multi-step workflows
+- `ax_track_workflow` — cross-app pattern detection
+- `ax_test_run` — black-box test execution
+- `ax_app_profile` — Electron app metadata
 
 Optional feature tools: `ax_listen`, `ax_speak`, `ax_audio_devices` (audio), `ax_camera_capture`, `ax_gesture_detect` (camera), `ax_list_spaces`, `ax_create_space` (spaces).
 
@@ -201,19 +214,19 @@ ax_find query="description:equals"
 ## Feature Flags (build-time)
 
 ```bash
-# Core only (default — 19 tools)
+# Core only (default — 27 tools)
 cargo build --release --features cli
 
-# With audio capture + TTS (22 tools)
+# With audio capture + TTS (30 tools)
 cargo build --release --features cli,audio
 
-# With camera + gesture detection (22 tools)
+# With camera + gesture detection (30 tools)
 cargo build --release --features cli,camera
 
-# With virtual desktop isolation (24 tools)
+# With virtual desktop isolation (32 tools)
 cargo build --release --features cli,spaces
 
-# Everything (30 tools)
+# Everything (34+ tools)
 cargo build --release --features cli,audio,camera,watch,spaces,http-transport
 ```
 
