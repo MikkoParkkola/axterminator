@@ -9,7 +9,7 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.8.0</string>
+    <string>0.9.0</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>AXTerminator uses your location to provide contextual awareness for AI agents.</string>
     <key>NSLocationUsageDescription</key>
