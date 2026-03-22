@@ -54,7 +54,10 @@ pub(super) fn sck_available() -> bool {
 /// Falls back to `AudioError::Framework` if SCK is not available or capture fails.
 /// The caller should fall back to the AVAudioEngine path on error.
 pub(super) fn capture_system_audio_sck(duration_secs: f32) -> Result<AudioData, AudioError> {
-    info!(duration = duration_secs, "capturing system audio via ScreenCaptureKit (audio-only mode)");
+    info!(
+        duration = duration_secs,
+        "capturing system audio via ScreenCaptureKit (audio-only mode)"
+    );
 
     // SAFETY: C function that allocates a result struct. We own the result and free it below.
     let mut result = unsafe { axt_sck_capture_system_audio(duration_secs) };

@@ -114,7 +114,11 @@ pub fn read_clipboard() -> ClipboardContent {
         None
     } else {
         let s = ns_string_to_rust(text_ns);
-        if s.is_empty() { None } else { Some(s) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     };
 
     ClipboardContent {

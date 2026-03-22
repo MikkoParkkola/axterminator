@@ -129,7 +129,9 @@ fn battery_level() -> Option<f64> {
         if let Some(pct_pos) = line.find('%') {
             // Walk backward from % to find the number.
             let before = &line[..pct_pos];
-            let num_start = before.rfind(|c: char| !c.is_ascii_digit()).map_or(0, |i| i + 1);
+            let num_start = before
+                .rfind(|c: char| !c.is_ascii_digit())
+                .map_or(0, |i| i + 1);
             if let Ok(pct) = before[num_start..].parse::<f64>() {
                 return Some(pct);
             }
@@ -146,7 +148,8 @@ fn battery_charging() -> Option<bool> {
     let text = String::from_utf8_lossy(&output.stdout);
     if text.contains("charging") && !text.contains("discharging") {
         Some(true)
-    } else if text.contains("discharging") || text.contains("charged") || text.contains("AC Power") {
+    } else if text.contains("discharging") || text.contains("charged") || text.contains("AC Power")
+    {
         Some(false) // Discharging or fully charged on AC.
     } else {
         None
@@ -244,7 +247,11 @@ fn screen_scale() -> f64 {
         return 1.0;
     }
     let scale: f64 = unsafe { msg_send![main, backingScaleFactor] };
-    if scale > 0.0 { scale } else { 1.0 }
+    if scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -421,10 +428,7 @@ fn wifi_ssid() -> Option<String> {
 }
 
 fn active_network_interfaces() -> Vec<NetworkInterface> {
-    let output = match std::process::Command::new("ifconfig")
-        .args(["-a"])
-        .output()
-    {
+    let output = match std::process::Command::new("ifconfig").args(["-a"]).output() {
         Ok(o) => o,
         Err(_) => return vec![],
     };
@@ -511,7 +515,11 @@ fn frontmost_app_name() -> Option<String> {
     }
     let name: *mut Object = unsafe { msg_send![app, localizedName] };
     let s = ns_string_to_rust(name);
-    if s.is_empty() { None } else { Some(s) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 // ---------------------------------------------------------------------------

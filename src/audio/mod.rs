@@ -60,6 +60,8 @@ use base64::Engine as _;
 mod capture;
 mod devices;
 mod ffi;
+#[cfg(feature = "parakeet")]
+pub mod parakeet;
 mod sck_capture;
 mod speech;
 
@@ -69,7 +71,7 @@ mod speech;
 
 pub use capture::{capture_microphone, capture_system_audio, validate_duration};
 pub use devices::{check_microphone_permission, list_audio_devices, AudioDevice};
-pub use speech::{speak, transcribe};
+pub use speech::{speak, transcribe, transcribe_with_engine, AudioEngine};
 
 // ---------------------------------------------------------------------------
 // Constants

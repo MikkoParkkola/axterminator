@@ -123,13 +123,20 @@ fn tools_list_returns_correct_count_for_feature_set() {
     let context_base = 1usize; // system_context (always on); clipboard is in innovation
     let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-    let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+    // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
+    let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
     let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
     let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
     assert_eq!(
         count,
-        base + context_base + extra_context_location + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
+        base + context_base
+            + extra_context_location
+            + extra_spaces
+            + extra_audio
+            + extra_camera
+            + extra_watch
+            + extra_docker
     );
 }
 
@@ -903,11 +910,18 @@ fn tools_list_returns_exactly_34_base_tools_with_default_features() {
     let base: usize = 35; // 34 original + 1 context (system_context); clipboard is in innovation
     let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-    let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+    // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
+    let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
     let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
     let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
-    let expected = base + extra_context_location + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker;
+    let expected = base
+        + extra_context_location
+        + extra_spaces
+        + extra_audio
+        + extra_camera
+        + extra_watch
+        + extra_docker;
     assert_eq!(
         tools.len(),
         expected,

@@ -48,6 +48,7 @@ pub(super) mod server_handlers;
 pub mod tools;
 pub mod tools_audio;
 pub mod tools_camera;
+pub mod tools_capture;
 pub mod tools_context;
 #[cfg(feature = "docker")]
 pub mod tools_docker;

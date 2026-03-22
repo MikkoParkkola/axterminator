@@ -105,7 +105,10 @@ pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError>
 
     // Prefer ScreenCaptureKit on macOS 14+ (no Screen Recording permission needed).
     if super::sck_capture::sck_available() {
-        debug!(duration = duration_secs, "attempting SCK audio-only capture (macOS 14+)");
+        debug!(
+            duration = duration_secs,
+            "attempting SCK audio-only capture (macOS 14+)"
+        );
         match super::sck_capture::capture_system_audio_sck(duration_secs) {
             Ok(data) => return Ok(data),
             Err(e) => {
@@ -116,7 +119,10 @@ pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError>
 
     // Fallback: AVAudioEngine (requires microphone permission).
     check_microphone_permission()?;
-    debug!(duration = duration_secs, "capturing system audio via AVAudioEngine (fallback)");
+    debug!(
+        duration = duration_secs,
+        "capturing system audio via AVAudioEngine (fallback)"
+    );
     capture_via_av_audio_engine(duration_secs)
 }
 

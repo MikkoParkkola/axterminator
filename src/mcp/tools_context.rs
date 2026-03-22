@@ -178,12 +178,10 @@ pub(crate) fn handle_ax_clipboard(args: &Value) -> ToolCallResult {
     if let Some(text) = args["text"].as_str() {
         // Write mode.
         match crate::context::clipboard::write_clipboard(text) {
-            Ok(count) => ToolCallResult::ok(
-                json!({ "written": true, "change_count": count }).to_string(),
-            ),
-            Err(e) => ToolCallResult::error(
-                json!({ "error": e, "written": false }).to_string(),
-            ),
+            Ok(count) => {
+                ToolCallResult::ok(json!({ "written": true, "change_count": count }).to_string())
+            }
+            Err(e) => ToolCallResult::error(json!({ "error": e, "written": false }).to_string()),
         }
     } else {
         // Read mode.
@@ -242,7 +240,11 @@ mod tests {
     #[test]
     fn handle_system_context_returns_valid_json() {
         let result = handle_ax_system_context();
-        assert!(!result.is_error, "unexpected error: {}", result.content[0].text);
+        assert!(
+            !result.is_error,
+            "unexpected error: {}",
+            result.content[0].text
+        );
         let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["macos_version"].is_string());
         assert!(v["dark_mode"].is_boolean());
@@ -251,7 +253,11 @@ mod tests {
     #[test]
     fn handle_clipboard_read_returns_valid_json() {
         let result = handle_ax_clipboard(&json!({}));
-        assert!(!result.is_error, "unexpected error: {}", result.content[0].text);
+        assert!(
+            !result.is_error,
+            "unexpected error: {}",
+            result.content[0].text
+        );
         let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["change_count"].is_number());
     }

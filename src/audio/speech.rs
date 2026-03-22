@@ -1,5 +1,10 @@
 //! On-device speech recognition (`SFSpeechRecognizer`) and text-to-speech
 //! (`NSSpeechSynthesizer`).
+//!
+//! When the `parakeet` feature is enabled, [`transcribe`] accepts an optional
+//! [`AudioEngine`] enum through the `engine` routing layer in
+//! [`transcribe_with_engine`].  The bare [`transcribe`] function always uses
+//! the Apple engine for backward compatibility.
 
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -42,6 +47,67 @@ impl SpeechAuthStatus {
 // Public API
 // ---------------------------------------------------------------------------
 
+/// Transcription engine selector.
+///
+/// Controls which ASR backend [`transcribe_with_engine`] uses.
+///
+/// | Variant      | Backend | Notes |
+/// |--------------|---------|-------|
+/// | `Apple`      | `SFSpeechRecognizer` | On-device, macOS built-in |
+/// | `Parakeet`   | ONNX Runtime (Parakeet TDT 0.6B v3) | 25 European languages, requires model download |
+///
+/// `Apple` is the default and always available when the `audio` feature is
+/// enabled.  `Parakeet` is only available when the `parakeet` feature is also
+/// enabled; selecting it without the feature returns a compile error via
+/// exhaustive `#[cfg]` gating.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AudioEngine {
+    /// Apple `SFSpeechRecognizer` — on-device, macOS built-in.
+    #[default]
+    Apple,
+    /// NVIDIA Parakeet TDT 0.6B v3 via ONNX Runtime.
+    ///
+    /// Only available when the `parakeet` Cargo feature is enabled.
+    Parakeet,
+}
+
+impl AudioEngine {
+    /// Parse an engine name from a string slice (case-insensitive).
+    ///
+    /// Accepts `"apple"` and `"parakeet"`.  Returns `None` for unrecognised
+    /// values — callers should surface this as a validation error rather than
+    /// silently falling back.
+    ///
+    /// Named `parse_str` rather than `from_str` to avoid shadowing
+    /// [`std::str::FromStr::from_str`] without implementing the trait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axterminator::audio::AudioEngine;
+    /// assert_eq!(AudioEngine::parse_str("apple"), Some(AudioEngine::Apple));
+    /// assert_eq!(AudioEngine::parse_str("parakeet"), Some(AudioEngine::Parakeet));
+    /// assert_eq!(AudioEngine::parse_str("unknown"), None);
+    /// ```
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "apple" => Some(Self::Apple),
+            "parakeet" => Some(Self::Parakeet),
+            _ => None,
+        }
+    }
+
+    /// Machine-readable name of the engine (matches the `from_str` input).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Apple => "apple",
+            Self::Parakeet => "parakeet",
+        }
+    }
+}
+
 /// Transcribe audio on-device using `SFSpeechRecognizer`.
 ///
 /// All recognition runs locally (`requiresOnDeviceRecognition = true`).
@@ -73,6 +139,60 @@ pub fn transcribe(audio: &AudioData, language: Option<&str>) -> Result<String, A
     let locale = language.unwrap_or("en-US");
     debug!(samples = audio.samples.len(), locale, "transcribing audio");
     transcribe_with_sf_speech(audio, locale)
+}
+
+/// Transcribe audio using the selected [`AudioEngine`].
+///
+/// This is the engine-routing entry point consumed by `ax_listen` when the
+/// caller specifies an explicit `engine` parameter.  For backward
+/// compatibility, [`transcribe`] always uses [`AudioEngine::Apple`].
+///
+/// # Errors
+///
+/// - [`AudioError::Transcription`] when the `Parakeet` engine is requested but
+///   the `parakeet` feature is not enabled at compile time.
+/// - All errors from [`transcribe`] apply when `engine` is `Apple`.
+/// - All errors from [`crate::audio::parakeet::transcribe_parakeet`] apply
+///   when `engine` is `Parakeet` (including model-not-downloaded errors).
+///
+/// # Examples
+///
+/// ```ignore
+/// use axterminator::audio::{AudioData, transcribe_with_engine, AudioEngine};
+/// let silent = AudioData::silent(1.0);
+/// let text = transcribe_with_engine(&silent, None, AudioEngine::Apple).unwrap_or_default();
+/// ```
+pub fn transcribe_with_engine(
+    audio: &AudioData,
+    language: Option<&str>,
+    engine: AudioEngine,
+) -> Result<String, AudioError> {
+    match engine {
+        AudioEngine::Apple => transcribe(audio, language),
+        AudioEngine::Parakeet => transcribe_parakeet_engine(audio, language),
+    }
+}
+
+/// Dispatch to the Parakeet backend, gated by the `parakeet` feature.
+#[cfg(feature = "parakeet")]
+fn transcribe_parakeet_engine(
+    audio: &AudioData,
+    language: Option<&str>,
+) -> Result<String, AudioError> {
+    crate::audio::parakeet::transcribe_parakeet(audio, language)
+}
+
+/// Stub returned when `parakeet` feature is not compiled in.
+#[cfg(not(feature = "parakeet"))]
+fn transcribe_parakeet_engine(
+    _audio: &AudioData,
+    _language: Option<&str>,
+) -> Result<String, AudioError> {
+    Err(AudioError::Transcription(
+        "The Parakeet engine requires the `parakeet` Cargo feature. \
+         Rebuild with `--features parakeet` to enable it."
+            .to_string(),
+    ))
 }
 
 /// Synthesize `text` as speech and play it through the default audio output.
@@ -559,6 +679,61 @@ mod tests {
             SpeechAuthStatus::from_raw(99),
             SpeechAuthStatus::NotDetermined
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // AudioEngine parsing
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn audio_engine_from_str_apple() {
+        assert_eq!(AudioEngine::parse_str("apple"), Some(AudioEngine::Apple));
+        assert_eq!(AudioEngine::parse_str("APPLE"), Some(AudioEngine::Apple));
+    }
+
+    #[test]
+    fn audio_engine_from_str_parakeet() {
+        assert_eq!(
+            AudioEngine::parse_str("parakeet"),
+            Some(AudioEngine::Parakeet)
+        );
+        assert_eq!(
+            AudioEngine::parse_str("PARAKEET"),
+            Some(AudioEngine::Parakeet)
+        );
+    }
+
+    #[test]
+    fn audio_engine_from_str_unknown_returns_none() {
+        assert_eq!(AudioEngine::parse_str("whisper"), None);
+        assert_eq!(AudioEngine::parse_str(""), None);
+    }
+
+    #[test]
+    fn audio_engine_as_str_round_trips() {
+        assert_eq!(AudioEngine::Apple.as_str(), "apple");
+        assert_eq!(AudioEngine::Parakeet.as_str(), "parakeet");
+    }
+
+    #[test]
+    fn audio_engine_default_is_apple() {
+        assert_eq!(AudioEngine::default(), AudioEngine::Apple);
+    }
+
+    // -----------------------------------------------------------------------
+    // transcribe_with_engine — Apple path (no hardware — just validates routing)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn transcribe_with_engine_parakeet_without_feature_returns_error() {
+        // GIVEN: parakeet engine requested at runtime
+        // WHEN: parakeet feature is not compiled in (or model absent when it is)
+        // THEN: returns transcription_error (either feature-absent or model-absent)
+        let audio = crate::audio::AudioData::silent(0.1);
+        let result = transcribe_with_engine(&audio, None, AudioEngine::Parakeet);
+        // Always an error: either the feature stub fires, or the model is missing.
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), "transcription_error");
     }
 
     // -----------------------------------------------------------------------

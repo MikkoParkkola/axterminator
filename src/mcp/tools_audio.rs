@@ -34,8 +34,7 @@ fn tool_ax_listen() -> Tool {
         title: "Capture audio and optionally transcribe it",
         description: "Capture audio from the system (microphone or loopback output) for \
             `duration` seconds and return the raw WAV data as base64. When `transcribe` is \
-            true the audio is also transcribed on-device via SFSpeechRecognizer (macOS 13+, \
-            no cloud — privacy-preserving).\n\
+            true the audio is also transcribed on-device (privacy-preserving — no cloud).\n\
             \n\
             On macOS 14+, system audio capture uses ScreenCaptureKit in audio-only mode \
             (width=0, height=0) which does NOT require Screen Recording permission.\n\
@@ -43,6 +42,11 @@ fn tool_ax_listen() -> Tool {
             Sources:\n\
             - `\"microphone\"` — default input device (requires TCC microphone permission)\n\
             - `\"system\"` — system audio output loopback (macOS 14+: no Screen Recording needed)\n\
+            \n\
+            Transcription engines (requires `transcribe: true`):\n\
+            - `\"apple\"` — Apple SFSpeechRecognizer (default, macOS 13+, any language)\n\
+            - `\"parakeet\"` — NVIDIA Parakeet TDT 0.6B v3 (25 European languages, \
+              ONNX Runtime, requires model download — see `~/.axterminator/models/`)\n\
             \n\
             Duration is capped at 30 seconds. The call returns within `duration + 1s`.\n\
             \n\
@@ -53,8 +57,11 @@ fn tool_ax_listen() -> Tool {
             Example: verify an error sound played\n\
             `{\"duration\": 3, \"source\": \"system\", \"transcribe\": false}`\n\
             \n\
-            Example: transcribe Finnish speech\n\
-            `{\"duration\": 10, \"transcribe\": true, \"language\": \"fi-FI\"}`",
+            Example: transcribe Finnish speech with Apple engine\n\
+            `{\"duration\": 10, \"transcribe\": true, \"language\": \"fi-FI\"}`\n\
+            \n\
+            Example: high-quality transcription with Parakeet\n\
+            `{\"duration\": 10, \"transcribe\": true, \"engine\": \"parakeet\"}`",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -76,12 +83,24 @@ fn tool_ax_listen() -> Tool {
                     "description": "When true, return a text transcript in addition to raw audio",
                     "default": false
                 },
+                "engine": {
+                    "type": "string",
+                    "enum": ["apple", "parakeet"],
+                    "description": "Transcription engine (default \"apple\"). \
+                        \"apple\" uses SFSpeechRecognizer (on-device, macOS 13+). \
+                        \"parakeet\" uses NVIDIA Parakeet TDT 0.6B v3 via ONNX Runtime \
+                        (25 European languages, auto language detection — model download \
+                        required: huggingface-cli download nvidia/parakeet-tdt-0.6b-v3 \
+                        --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3).",
+                    "default": "apple"
+                },
                 "language": {
                     "type": "string",
                     "description": "BCP-47 locale for speech recognition (default \"en-US\"). \
-                        On-device model quality varies by language — English is solid, less \
-                        common languages may have low accuracy. Examples: \"en-US\", \"fi-FI\", \
-                        \"ja-JP\", \"de-DE\", \"fr-FR\", \"es-ES\", \"zh-Hans\"",
+                        Applies to the Apple engine. The Parakeet engine performs automatic \
+                        language detection and ignores this field. \
+                        Examples: \"en-US\", \"fi-FI\", \"ja-JP\", \"de-DE\", \"fr-FR\", \
+                        \"es-ES\", \"zh-Hans\"",
                     "default": "en-US"
                 },
                 "max_chunk_secs": {
@@ -105,6 +124,7 @@ fn tool_ax_listen() -> Tool {
                 "size_bytes":     { "type": "integer", "description": "WAV payload size before base64" },
                 "base64_wav":     { "type": "string" },
                 "transcript":     { "type": "string" },
+                "engine_used":    { "type": "string", "description": "Transcription engine that produced the transcript (\"apple\" or \"parakeet\")" },
                 "chunks": {
                     "type": "array",
                     "description": "Present when max_chunk_secs is set",
@@ -214,6 +234,21 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
     let do_transcribe = args["transcribe"].as_bool().unwrap_or(false);
     let language = args["language"].as_str();
     let max_chunk_secs = args["max_chunk_secs"].as_f64().map(|v| v as f32);
+    let engine_str = args["engine"].as_str().unwrap_or("apple");
+
+    // Validate engine name before touching any hardware.
+    let engine = match crate::audio::AudioEngine::parse_str(engine_str) {
+        Some(e) => e,
+        None => {
+            return ToolCallResult::error(
+                json!({
+                    "error": format!("Unknown engine \"{engine_str}\". Valid values: \"apple\", \"parakeet\"."),
+                    "error_code": "invalid_engine"
+                })
+                .to_string(),
+            );
+        }
+    };
 
     // AC5: validate duration cap before touching any hardware.
     if let Err(e) = crate::audio::validate_duration(duration) {
@@ -241,7 +276,7 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
     let size_bytes = audio_data.wav_size_bytes();
 
     let transcript = if do_transcribe {
-        match crate::audio::transcribe(&audio_data, language) {
+        match crate::audio::transcribe_with_engine(&audio_data, language, engine) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!(error = %e, "transcription failed — returning audio without transcript");
@@ -286,6 +321,7 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
 
     if let Some(t) = transcript {
         payload["transcript"] = serde_json::Value::String(t);
+        payload["engine_used"] = serde_json::Value::String(engine.as_str().to_string());
     }
 
     ToolCallResult::ok(payload.to_string())
@@ -489,5 +525,71 @@ mod tests {
         );
         assert!(result.is_some());
         assert!(result.unwrap().is_error);
+    }
+
+    // -----------------------------------------------------------------------
+    // engine parameter parsing
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ax_listen_schema_includes_engine_parameter() {
+        // GIVEN: ax_listen tool definition
+        let tool = tool_ax_listen();
+        let props = &tool.input_schema["properties"];
+        // THEN: engine property is present with correct enum values
+        assert!(
+            props["engine"].is_object(),
+            "engine property missing from schema"
+        );
+        let enum_vals = props["engine"]["enum"].as_array().unwrap();
+        let names: Vec<&str> = enum_vals.iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(names.contains(&"apple"), "apple missing from engine enum");
+        assert!(
+            names.contains(&"parakeet"),
+            "parakeet missing from engine enum"
+        );
+    }
+
+    #[test]
+    fn ax_listen_output_schema_includes_engine_used_field() {
+        let tool = tool_ax_listen();
+        let props = &tool.output_schema["properties"];
+        assert!(
+            props["engine_used"].is_object(),
+            "engine_used missing from output schema"
+        );
+    }
+
+    #[test]
+    fn handle_ax_listen_unknown_engine_returns_error() {
+        // GIVEN: an unknown engine name
+        let args = json!({ "duration": 1.0, "engine": "whisper" });
+        // WHEN: dispatched
+        let result = handle_ax_listen(&args);
+        // THEN: error with "invalid_engine" code (no hardware touched)
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_engine");
+    }
+
+    #[test]
+    fn handle_ax_listen_explicit_apple_engine_duration_exceeded_returns_error() {
+        // GIVEN: valid engine but duration too long
+        let args = json!({ "duration": 99.0, "engine": "apple" });
+        let result = handle_ax_listen(&args);
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "duration_exceeded");
+    }
+
+    #[test]
+    fn handle_ax_listen_parakeet_engine_duration_exceeded_returns_error() {
+        // GIVEN: parakeet engine + overlong duration (engine validation happens
+        //        before capture — so duration check fires independently of model presence)
+        let args = json!({ "duration": 99.0, "engine": "parakeet" });
+        let result = handle_ax_listen(&args);
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "duration_exceeded");
     }
 }

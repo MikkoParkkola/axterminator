@@ -69,6 +69,8 @@ pub fn extended_tools() -> Vec<Tool> {
     tools.extend(spaces_tools());
     #[cfg(feature = "audio")]
     tools.extend(crate::mcp::tools_audio::audio_tools());
+    #[cfg(feature = "audio")]
+    tools.extend(crate::mcp::tools_capture::capture_tools());
     #[cfg(feature = "camera")]
     tools.extend(camera_tools());
     #[cfg(feature = "watch")]
@@ -126,6 +128,16 @@ pub fn call_tool_extended<W: Write>(
         "ax_speak" => Some(crate::mcp::tools_audio::handle_ax_speak(args)),
         #[cfg(feature = "audio")]
         "ax_audio_devices" => Some(crate::mcp::tools_audio::handle_ax_audio_devices()),
+        #[cfg(feature = "audio")]
+        "ax_start_capture" => Some(crate::mcp::tools_capture::handle_ax_start_capture(args)),
+        #[cfg(feature = "audio")]
+        "ax_stop_capture" => Some(crate::mcp::tools_capture::handle_ax_stop_capture(args)),
+        #[cfg(feature = "audio")]
+        "ax_get_transcription" => {
+            Some(crate::mcp::tools_capture::handle_ax_get_transcription(args))
+        }
+        #[cfg(feature = "audio")]
+        "ax_capture_status" => Some(crate::mcp::tools_capture::handle_ax_capture_status()),
         #[cfg(feature = "camera")]
         "ax_camera_capture" => Some(crate::mcp::tools_camera::handle_ax_camera_capture(args)),
         #[cfg(feature = "camera")]
@@ -182,13 +194,20 @@ mod tests {
         let context_base = 1usize; // system_context (always on); clipboard is in innovation
         let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-        let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+        // audio feature: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
+        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
         let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
         let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
         assert_eq!(
             tools.len(),
-            base + context_base + extra_context_location + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
+            base + context_base
+                + extra_context_location
+                + extra_spaces
+                + extra_audio
+                + extra_camera
+                + extra_watch
+                + extra_docker
         );
     }
 
