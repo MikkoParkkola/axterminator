@@ -62,7 +62,67 @@ pub(crate) fn innovation_tools() -> Vec<Tool> {
         tool_ax_workflow_step(),
         tool_ax_workflow_status(),
         tool_ax_record(),
+        tool_ax_analyze(),
     ]
+}
+
+fn tool_ax_analyze() -> Tool {
+    Tool {
+        name: "ax_analyze",
+        title: "Accessibility Intelligence Engine",
+        description: "Analyze the current UI state: detect UI patterns (login forms, search bars, \
+            data tables, navigation, modals), infer app state (loading, idle, error, modal), \
+            and suggest next actions based on what the engine observes.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "app": {
+                    "type": "string",
+                    "description": "App alias from ax_connect"
+                },
+                "focus": {
+                    "type": "string",
+                    "enum": ["patterns", "state", "actions", "all"],
+                    "default": "all",
+                    "description": "Which aspect to analyze: patterns, state, actions, or all"
+                }
+            },
+            "required": ["app"],
+            "additionalProperties": false
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "node_count":   { "type": "integer" },
+                "app_state":    { "type": "string" },
+                "patterns": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "pattern":    { "type": "string" },
+                            "confidence": { "type": "number" }
+                        },
+                        "required": ["pattern", "confidence"]
+                    }
+                },
+                "suggestions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string" },
+                            "tool":   { "type": "string" },
+                            "query":  { "type": "string" }
+                        },
+                        "required": ["action", "tool"]
+                    }
+                }
+            },
+            "required": ["node_count", "app_state", "patterns", "suggestions"]
+        }),
+        annotations: annotations::READ_ONLY,
+    }
 }
 
 fn tool_ax_workflow_create() -> Tool {
@@ -452,6 +512,7 @@ pub(crate) fn call_tool_innovation<W: Write>(
         "ax_test_run" => Some(handle_ax_test_run(args, out)),
         "ax_track_workflow" => Some(handle_ax_track_workflow(args)),
         "ax_record" => Some(handle_ax_record(args)),
+        "ax_analyze" => Some(handle_ax_analyze(args, registry)),
         _ => None,
     }
 }
@@ -918,6 +979,461 @@ fn handle_workflow_stats() -> ToolCallResult {
 }
 
 // ---------------------------------------------------------------------------
+// Accessibility Intelligence Engine — ax_analyze
+// ---------------------------------------------------------------------------
+
+/// Detected UI pattern with an associated confidence score.
+#[derive(Debug, Clone, PartialEq)]
+struct UiPattern {
+    pattern: &'static str,
+    confidence: f64,
+}
+
+/// Inferred high-level application state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppState {
+    Idle,
+    Loading,
+    Error,
+    Modal,
+    AuthRequired,
+}
+
+impl AppState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Loading => "loading",
+            Self::Error => "error",
+            Self::Modal => "modal",
+            Self::AuthRequired => "auth_required",
+        }
+    }
+}
+
+/// A node-role predicate: returns `true` when `role` matches the target.
+fn has_role(nodes: &[&crate::intent::SceneNode], role: &str) -> bool {
+    nodes.iter().any(|n| n.role.as_deref() == Some(role))
+}
+
+/// Returns `true` when any node's text labels contain `needle` (case-insensitive).
+fn any_label_contains(nodes: &[&crate::intent::SceneNode], needle: &str) -> bool {
+    nodes.iter().any(|n| {
+        n.text_labels()
+            .iter()
+            .any(|l| l.to_lowercase().contains(needle))
+    })
+}
+
+/// Detect common UI patterns from a `SceneGraph`.
+///
+/// Each pattern is evaluated independently; multiple patterns may match a single scene.
+/// Confidence values reflect the reliability of the heuristic — stronger structural
+/// signals produce higher scores.
+fn detect_ui_patterns(scene: &crate::intent::SceneGraph) -> Vec<UiPattern> {
+    let nodes: Vec<&crate::intent::SceneNode> = scene.iter().collect();
+    let mut patterns = Vec::new();
+
+    // Login form: secure password field + a plain text field + a submit button.
+    let has_password = has_role(&nodes, "AXSecureTextField");
+    let has_text_field = has_role(&nodes, "AXTextField");
+    let has_button = has_role(&nodes, "AXButton");
+    if has_password && has_text_field && has_button {
+        patterns.push(UiPattern {
+            pattern: "login_form",
+            confidence: 0.90,
+        });
+    }
+
+    // Search interface: a dedicated search field or a text field labelled "search".
+    let has_search_field = has_role(&nodes, "AXSearchField");
+    let has_search_label = has_text_field && any_label_contains(&nodes, "search");
+    if has_search_field || has_search_label {
+        patterns.push(UiPattern {
+            pattern: "search_interface",
+            confidence: 0.85,
+        });
+    }
+
+    // Navigation: a tab group or a toolbar containing multiple buttons.
+    let has_tab_group = has_role(&nodes, "AXTabGroup");
+    let has_toolbar = has_role(&nodes, "AXToolbar");
+    if has_tab_group || has_toolbar {
+        patterns.push(UiPattern {
+            pattern: "navigation",
+            confidence: 0.80,
+        });
+    }
+
+    // Table / data view.
+    let has_table =
+        has_role(&nodes, "AXTable") || has_role(&nodes, "AXGrid") || has_role(&nodes, "AXOutline");
+    if has_table {
+        patterns.push(UiPattern {
+            pattern: "table_view",
+            confidence: 0.88,
+        });
+    }
+
+    // Modal / dialog: sheet or dialog element is present.
+    let has_modal = has_role(&nodes, "AXSheet") || has_role(&nodes, "AXDialog");
+    if has_modal {
+        patterns.push(UiPattern {
+            pattern: "modal_dialog",
+            confidence: 0.95,
+        });
+    }
+
+    // File-save dialog: modal + Save button + filename field.
+    if has_modal && has_button {
+        let save_btn = any_label_contains(&nodes, "save");
+        let open_btn = any_label_contains(&nodes, "open");
+        let cancel_btn = any_label_contains(&nodes, "cancel");
+        if save_btn && cancel_btn {
+            patterns.push(UiPattern {
+                pattern: "file_save_dialog",
+                confidence: 0.88,
+            });
+        } else if open_btn && cancel_btn {
+            patterns.push(UiPattern {
+                pattern: "file_open_dialog",
+                confidence: 0.88,
+            });
+        }
+    }
+
+    // Confirmation / alert dialog: alert element with OK/Yes + Cancel/No buttons.
+    let has_alert = has_role(&nodes, "AXAlert");
+    if has_alert && has_button {
+        let ok = any_label_contains(&nodes, "ok") || any_label_contains(&nodes, "yes");
+        let cancel = any_label_contains(&nodes, "cancel") || any_label_contains(&nodes, "no");
+        if ok && cancel {
+            patterns.push(UiPattern {
+                pattern: "confirmation_dialog",
+                confidence: 0.87,
+            });
+        } else {
+            patterns.push(UiPattern {
+                pattern: "error_alert",
+                confidence: 0.80,
+            });
+        }
+    }
+
+    // Settings page: multiple labeled groups of controls (no modal, no login).
+    let has_groups = scene.nodes_by_role("AXGroup").len() >= 3;
+    let has_checkboxes = has_role(&nodes, "AXCheckBox");
+    let has_popups = has_role(&nodes, "AXPopUpButton");
+    if has_groups && (has_checkboxes || has_popups) && !has_modal && !has_password {
+        patterns.push(UiPattern {
+            pattern: "settings_page",
+            confidence: 0.75,
+        });
+    }
+
+    // Text editor: large scrollable text area with optional toolbar.
+    let has_text_area = has_role(&nodes, "AXTextArea");
+    if has_text_area && (has_toolbar || nodes.len() > 10) {
+        patterns.push(UiPattern {
+            pattern: "text_editor",
+            confidence: 0.78,
+        });
+    }
+
+    // Browser main: address bar heuristic (text field with URL-like identifier).
+    let browser_addr = nodes.iter().any(|n| {
+        n.role.as_deref() == Some("AXTextField")
+            && n.identifier
+                .as_deref()
+                .is_some_and(|id| id.contains("address") || id.contains("url"))
+    });
+    if browser_addr && has_tab_group {
+        patterns.push(UiPattern {
+            pattern: "browser_main",
+            confidence: 0.85,
+        });
+    }
+
+    // Form: group of labeled text fields (distinct from login — no password field).
+    let text_field_count = scene.nodes_by_role("AXTextField").len();
+    if text_field_count >= 2 && !has_password && has_button {
+        patterns.push(UiPattern {
+            pattern: "form",
+            confidence: 0.72,
+        });
+    }
+
+    // Progress / loading indicator.
+    let has_progress =
+        has_role(&nodes, "AXProgressIndicator") || has_role(&nodes, "AXBusyIndicator");
+    if has_progress {
+        patterns.push(UiPattern {
+            pattern: "progress_indicator",
+            confidence: 0.93,
+        });
+    }
+
+    patterns
+}
+
+/// Infer the high-level application state from a `SceneGraph`.
+///
+/// States are evaluated in priority order: modal > loading > error > auth_required > idle.
+fn infer_app_state(scene: &crate::intent::SceneGraph) -> AppState {
+    let nodes: Vec<&crate::intent::SceneNode> = scene.iter().collect();
+
+    // Modal blocks all other interactions — highest priority.
+    if has_role(&nodes, "AXSheet") || has_role(&nodes, "AXDialog") {
+        return AppState::Modal;
+    }
+
+    // Loading indicators: spinner or progress bar visible.
+    let loading = has_role(&nodes, "AXProgressIndicator")
+        || has_role(&nodes, "AXBusyIndicator")
+        || any_label_contains(&nodes, "loading");
+    if loading {
+        return AppState::Loading;
+    }
+
+    // Error state: error text or error alert present.
+    let error = has_role(&nodes, "AXAlert")
+        || any_label_contains(&nodes, "error")
+        || any_label_contains(&nodes, "failed")
+        || any_label_contains(&nodes, "invalid");
+    if error {
+        return AppState::Error;
+    }
+
+    // Auth required: password field visible without a modal wrapping it.
+    if has_role(&nodes, "AXSecureTextField") {
+        return AppState::AuthRequired;
+    }
+
+    AppState::Idle
+}
+
+/// A suggested next action for the agent.
+#[derive(Debug, Clone)]
+struct Suggestion {
+    action: &'static str,
+    tool: &'static str,
+    query: &'static str,
+}
+
+/// Generate next-action suggestions from detected patterns and app state.
+///
+/// Suggestions are purely informational — they are never executed automatically.
+/// The list is ordered from most-specific to most-general.
+fn suggest_actions(patterns: &[UiPattern], state: AppState) -> Vec<Suggestion> {
+    let mut suggestions: Vec<Suggestion> = Vec::new();
+
+    // State-driven suggestions take priority.
+    match state {
+        AppState::Modal => {
+            suggestions.push(Suggestion {
+                action: "Dismiss or interact with the modal dialog before continuing",
+                tool: "ax_click",
+                query: "Cancel",
+            });
+        }
+        AppState::Loading => {
+            suggestions.push(Suggestion {
+                action: "Wait for the app to finish loading",
+                tool: "ax_wait_idle",
+                query: "",
+            });
+        }
+        AppState::Error => {
+            suggestions.push(Suggestion {
+                action: "Acknowledge the error and check error details",
+                tool: "ax_get_value",
+                query: "error message",
+            });
+        }
+        AppState::AuthRequired => {
+            suggestions.push(Suggestion {
+                action: "Enter credentials to authenticate",
+                tool: "ax_type",
+                query: "username",
+            });
+        }
+        AppState::Idle => {}
+    }
+
+    // Pattern-driven suggestions.
+    let pattern_names: Vec<&str> = patterns.iter().map(|p| p.pattern).collect();
+
+    if pattern_names.contains(&"login_form") {
+        suggestions.push(Suggestion {
+            action: "Type your username into the text field",
+            tool: "ax_type",
+            query: "username",
+        });
+        suggestions.push(Suggestion {
+            action: "Type your password into the secure field",
+            tool: "ax_type",
+            query: "password",
+        });
+        suggestions.push(Suggestion {
+            action: "Click the sign-in button to submit credentials",
+            tool: "ax_click",
+            query: "Sign In",
+        });
+    }
+
+    if pattern_names.contains(&"search_interface") {
+        suggestions.push(Suggestion {
+            action: "Type your query into the search field",
+            tool: "ax_type",
+            query: "search",
+        });
+    }
+
+    if pattern_names.contains(&"file_save_dialog") {
+        suggestions.push(Suggestion {
+            action: "Type a filename and click Save to confirm",
+            tool: "ax_type",
+            query: "Save As",
+        });
+        suggestions.push(Suggestion {
+            action: "Click Save to confirm the file",
+            tool: "ax_click",
+            query: "Save",
+        });
+    }
+
+    if pattern_names.contains(&"file_open_dialog") {
+        suggestions.push(Suggestion {
+            action: "Navigate to the desired file and click Open",
+            tool: "ax_click",
+            query: "Open",
+        });
+    }
+
+    if pattern_names.contains(&"confirmation_dialog") {
+        suggestions.push(Suggestion {
+            action: "Confirm the action by clicking OK or Yes",
+            tool: "ax_click",
+            query: "OK",
+        });
+        suggestions.push(Suggestion {
+            action: "Cancel the action to dismiss the dialog",
+            tool: "ax_click",
+            query: "Cancel",
+        });
+    }
+
+    if pattern_names.contains(&"error_alert") {
+        suggestions.push(Suggestion {
+            action: "Dismiss the error alert",
+            tool: "ax_click",
+            query: "OK",
+        });
+    }
+
+    if pattern_names.contains(&"table_view") {
+        suggestions.push(Suggestion {
+            action: "Read the visible rows from the data table",
+            tool: "ax_get_value",
+            query: "table row",
+        });
+    }
+
+    if pattern_names.contains(&"text_editor") {
+        suggestions.push(Suggestion {
+            action: "Type or edit text in the editor area",
+            tool: "ax_type",
+            query: "text area",
+        });
+    }
+
+    if pattern_names.contains(&"form") {
+        suggestions.push(Suggestion {
+            action: "Fill in the form fields",
+            tool: "ax_type",
+            query: "text field",
+        });
+        suggestions.push(Suggestion {
+            action: "Submit the form",
+            tool: "ax_click",
+            query: "Submit",
+        });
+    }
+
+    suggestions
+}
+
+/// Serialize a single `UiPattern` to JSON.
+fn pattern_to_json(p: &UiPattern) -> Value {
+    json!({ "pattern": p.pattern, "confidence": p.confidence })
+}
+
+/// Serialize a single `Suggestion` to JSON.
+fn suggestion_to_json(s: &Suggestion) -> Value {
+    json!({ "action": s.action, "tool": s.tool, "query": s.query })
+}
+
+/// Handle `ax_analyze` — detect patterns, infer state, and suggest actions.
+///
+/// The `focus` parameter limits the output:
+/// - `"patterns"` — only pattern detection results
+/// - `"state"` — only inferred app state
+/// - `"actions"` — only suggested next actions
+/// - `"all"` (default) — everything combined
+fn handle_ax_analyze(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
+    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
+        return ToolCallResult::error("Missing required field: app");
+    };
+    let focus = args["focus"].as_str().unwrap_or("all");
+
+    registry
+        .with_app(&app_name, |app| {
+            let scene = match crate::intent::scan_scene(app.element) {
+                Ok(g) => g,
+                Err(e) => return ToolCallResult::error(format!("scan_scene failed: {e}")),
+            };
+
+            let node_count = scene.len();
+            let patterns = detect_ui_patterns(&scene);
+            let state = infer_app_state(&scene);
+            let actions = suggest_actions(&patterns, state);
+
+            let patterns_json: Vec<Value> = patterns.iter().map(pattern_to_json).collect();
+            let suggestions_json: Vec<Value> = actions.iter().map(suggestion_to_json).collect();
+
+            let payload = match focus {
+                "patterns" => json!({
+                    "node_count": node_count,
+                    "app_state":  state.as_str(),
+                    "patterns":   patterns_json,
+                    "suggestions": []
+                }),
+                "state" => json!({
+                    "node_count": node_count,
+                    "app_state":  state.as_str(),
+                    "patterns":   [],
+                    "suggestions": []
+                }),
+                "actions" => json!({
+                    "node_count":  node_count,
+                    "app_state":   state.as_str(),
+                    "patterns":    [],
+                    "suggestions": suggestions_json
+                }),
+                _ => json!({
+                    "node_count":  node_count,
+                    "app_state":   state.as_str(),
+                    "patterns":    patterns_json,
+                    "suggestions": suggestions_json
+                }),
+            };
+
+            ToolCallResult::ok(payload.to_string())
+        })
+        .unwrap_or_else(ToolCallResult::error)
+}
+
+// ---------------------------------------------------------------------------
 // Resource endpoint helpers
 // ---------------------------------------------------------------------------
 
@@ -1209,15 +1725,15 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn innovation_tools_registers_eight_tools() {
-        // GIVEN: Wave 2 + workflow tools + ax_record implementation
+    fn innovation_tools_registers_nine_tools() {
+        // GIVEN: Wave 2 + workflow tools + ax_record + ax_analyze
         // WHEN: requesting descriptors
         let tools = super::innovation_tools();
-        // THEN: exactly eight tools registered (4 original + 3 workflow + ax_record)
+        // THEN: exactly nine tools registered (4 original + 3 workflow + ax_record + ax_analyze)
         assert_eq!(
             tools.len(),
-            8,
-            "expected 8 innovation tools, got {}",
+            9,
+            "expected 9 innovation tools, got {}",
             tools.len()
         );
     }
@@ -1277,6 +1793,7 @@ mod tests {
             "ax_workflow_step",
             "ax_workflow_status",
             "ax_record",
+            "ax_analyze",
         ] {
             assert!(names.contains(*expected), "missing tool: {expected}");
         }
@@ -1314,8 +1831,8 @@ mod tests {
     }
 
     #[test]
-    fn call_tool_innovation_recognises_all_five_stateless_names() {
-        // GIVEN: the five stateless innovation tool names (including ax_record)
+    fn call_tool_innovation_recognises_all_stateless_names() {
+        // GIVEN: all stateless innovation tool names (including ax_record + ax_analyze)
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
         for name in &[
@@ -1324,6 +1841,7 @@ mod tests {
             "ax_test_run",
             "ax_track_workflow",
             "ax_record",
+            "ax_analyze",
         ] {
             // WHEN: dispatching with minimal args
             let result =
@@ -2024,5 +2542,585 @@ mod tests {
         // THEN: error mentions action_type (default "record" path hit, missing action_type)
         assert!(result.is_error);
         assert!(result.content[0].text.contains("action_type"));
+    }
+
+    // -----------------------------------------------------------------------
+    // ax_analyze — unit tests for the three pure intelligence helpers
+    // -----------------------------------------------------------------------
+
+    // Helper: build a SceneGraph from a list of (role, title, label, identifier) tuples.
+    fn make_scene(
+        nodes: &[(&str, Option<&str>, Option<&str>, Option<&str>)],
+    ) -> crate::intent::SceneGraph {
+        let mut g = crate::intent::SceneGraph::empty();
+        for (role, title, label, identifier) in nodes {
+            let node = crate::intent::SceneNode {
+                id: crate::intent::NodeId(g.len()),
+                parent: None,
+                children: vec![],
+                role: Some(role.to_string()),
+                title: title.map(str::to_string),
+                label: label.map(str::to_string),
+                value: None,
+                description: None,
+                identifier: identifier.map(str::to_string),
+                bounds: None,
+                enabled: true,
+                depth: 0,
+            };
+            g.push(node);
+        }
+        g
+    }
+
+    // --- detect_ui_patterns ------------------------------------------------
+
+    #[test]
+    fn detect_patterns_login_form_detected_when_password_text_button_present() {
+        // GIVEN: scene with secure field + text field + button
+        let scene = make_scene(&[
+            ("AXSecureTextField", Some("Password"), None, None),
+            ("AXTextField", Some("Username"), None, None),
+            ("AXButton", Some("Sign In"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: login_form detected
+        assert!(
+            patterns.iter().any(|p| p.pattern == "login_form"),
+            "login_form not detected"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_login_form_requires_password_field() {
+        // GIVEN: text field + button but NO secure field
+        let scene = make_scene(&[
+            ("AXTextField", Some("Email"), None, None),
+            ("AXButton", Some("Submit"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: login_form NOT detected
+        assert!(
+            !patterns.iter().any(|p| p.pattern == "login_form"),
+            "login_form should not be detected without a password field"
+        );
+    }
+
+    #[test]
+    fn detect_patterns_search_interface_from_search_field_role() {
+        // GIVEN: AXSearchField present
+        let scene = make_scene(&[("AXSearchField", Some("Search"), None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: search_interface detected
+        assert!(patterns.iter().any(|p| p.pattern == "search_interface"));
+    }
+
+    #[test]
+    fn detect_patterns_search_interface_from_label() {
+        // GIVEN: AXTextField labelled "Search Items"
+        let scene = make_scene(&[("AXTextField", None, Some("Search Items"), None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: search_interface detected
+        assert!(patterns.iter().any(|p| p.pattern == "search_interface"));
+    }
+
+    #[test]
+    fn detect_patterns_navigation_from_tab_group() {
+        // GIVEN: AXTabGroup present
+        let scene = make_scene(&[("AXTabGroup", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: navigation detected
+        assert!(patterns.iter().any(|p| p.pattern == "navigation"));
+    }
+
+    #[test]
+    fn detect_patterns_navigation_from_toolbar() {
+        // GIVEN: AXToolbar present
+        let scene = make_scene(&[("AXToolbar", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: navigation detected
+        assert!(patterns.iter().any(|p| p.pattern == "navigation"));
+    }
+
+    #[test]
+    fn detect_patterns_table_view_from_ax_table() {
+        // GIVEN: AXTable present
+        let scene = make_scene(&[("AXTable", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: table_view detected
+        assert!(patterns.iter().any(|p| p.pattern == "table_view"));
+    }
+
+    #[test]
+    fn detect_patterns_table_view_from_ax_grid() {
+        // GIVEN: AXGrid present
+        let scene = make_scene(&[("AXGrid", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: table_view detected
+        assert!(patterns.iter().any(|p| p.pattern == "table_view"));
+    }
+
+    #[test]
+    fn detect_patterns_modal_dialog_from_sheet() {
+        // GIVEN: AXSheet present
+        let scene = make_scene(&[("AXSheet", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: modal_dialog detected
+        assert!(patterns.iter().any(|p| p.pattern == "modal_dialog"));
+    }
+
+    #[test]
+    fn detect_patterns_modal_dialog_from_ax_dialog() {
+        // GIVEN: AXDialog present
+        let scene = make_scene(&[("AXDialog", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: modal_dialog detected
+        assert!(patterns.iter().any(|p| p.pattern == "modal_dialog"));
+    }
+
+    #[test]
+    fn detect_patterns_file_save_dialog_from_sheet_save_cancel() {
+        // GIVEN: sheet + Save + Cancel buttons
+        let scene = make_scene(&[
+            ("AXSheet", None, None, None),
+            ("AXButton", Some("Save"), None, None),
+            ("AXButton", Some("Cancel"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: file_save_dialog detected
+        assert!(patterns.iter().any(|p| p.pattern == "file_save_dialog"));
+    }
+
+    #[test]
+    fn detect_patterns_file_open_dialog_from_sheet_open_cancel() {
+        // GIVEN: sheet + Open + Cancel buttons
+        let scene = make_scene(&[
+            ("AXSheet", None, None, None),
+            ("AXButton", Some("Open"), None, None),
+            ("AXButton", Some("Cancel"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: file_open_dialog detected
+        assert!(patterns.iter().any(|p| p.pattern == "file_open_dialog"));
+    }
+
+    #[test]
+    fn detect_patterns_confirmation_dialog_from_alert_ok_cancel() {
+        // GIVEN: AXAlert with OK + Cancel buttons
+        let scene = make_scene(&[
+            ("AXAlert", None, None, None),
+            ("AXButton", Some("OK"), None, None),
+            ("AXButton", Some("Cancel"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: confirmation_dialog detected
+        assert!(patterns.iter().any(|p| p.pattern == "confirmation_dialog"));
+    }
+
+    #[test]
+    fn detect_patterns_error_alert_from_alert_single_button() {
+        // GIVEN: AXAlert with a single dismiss button (no cancel = not confirmation)
+        let scene = make_scene(&[
+            ("AXAlert", None, None, None),
+            ("AXButton", Some("OK"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: error_alert detected (OK but no Cancel → single-button alert)
+        assert!(patterns.iter().any(|p| p.pattern == "error_alert"));
+    }
+
+    #[test]
+    fn detect_patterns_progress_indicator_detected() {
+        // GIVEN: AXProgressIndicator
+        let scene = make_scene(&[("AXProgressIndicator", None, None, None)]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: progress_indicator detected
+        assert!(patterns.iter().any(|p| p.pattern == "progress_indicator"));
+    }
+
+    #[test]
+    fn detect_patterns_form_from_multiple_text_fields_and_button() {
+        // GIVEN: 2 text fields + button, no password field
+        let scene = make_scene(&[
+            ("AXTextField", Some("First Name"), None, None),
+            ("AXTextField", Some("Last Name"), None, None),
+            ("AXButton", Some("Submit"), None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: form detected
+        assert!(patterns.iter().any(|p| p.pattern == "form"));
+    }
+
+    #[test]
+    fn detect_patterns_empty_scene_returns_no_patterns() {
+        // GIVEN: empty scene graph
+        let scene = crate::intent::SceneGraph::empty();
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: no patterns (not a panic)
+        assert!(patterns.is_empty());
+    }
+
+    #[test]
+    fn detect_patterns_all_have_confidence_in_range() {
+        // GIVEN: scene with several patterns triggerable
+        let scene = make_scene(&[
+            ("AXTable", None, None, None),
+            ("AXSearchField", None, None, None),
+            ("AXTabGroup", None, None, None),
+        ]);
+        // WHEN
+        let patterns = super::detect_ui_patterns(&scene);
+        // THEN: all confidence values are in [0.0, 1.0]
+        for p in &patterns {
+            assert!(
+                (0.0..=1.0).contains(&p.confidence),
+                "pattern '{}' has out-of-range confidence {}",
+                p.pattern,
+                p.confidence
+            );
+        }
+    }
+
+    // --- infer_app_state ---------------------------------------------------
+
+    #[test]
+    fn infer_state_idle_for_empty_scene() {
+        // GIVEN: empty scene
+        let scene = crate::intent::SceneGraph::empty();
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: idle
+        assert_eq!(state, super::AppState::Idle);
+    }
+
+    #[test]
+    fn infer_state_modal_when_sheet_present() {
+        // GIVEN: scene with an AXSheet
+        let scene = make_scene(&[("AXSheet", None, None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: modal (highest priority)
+        assert_eq!(state, super::AppState::Modal);
+    }
+
+    #[test]
+    fn infer_state_loading_when_progress_indicator_present() {
+        // GIVEN: progress indicator, no modal
+        let scene = make_scene(&[("AXProgressIndicator", None, None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: loading
+        assert_eq!(state, super::AppState::Loading);
+    }
+
+    #[test]
+    fn infer_state_error_when_alert_present_without_modal() {
+        // GIVEN: alert element, no modal/progress
+        let scene = make_scene(&[("AXAlert", None, None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: error
+        assert_eq!(state, super::AppState::Error);
+    }
+
+    #[test]
+    fn infer_state_error_from_error_text_label() {
+        // GIVEN: static text labelled "Error"
+        let scene = make_scene(&[("AXStaticText", Some("Error: file not found"), None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: error
+        assert_eq!(state, super::AppState::Error);
+    }
+
+    #[test]
+    fn infer_state_auth_required_when_password_field_present_without_modal() {
+        // GIVEN: secure text field, no modal or progress
+        let scene = make_scene(&[("AXSecureTextField", Some("Password"), None, None)]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: auth_required
+        assert_eq!(state, super::AppState::AuthRequired);
+    }
+
+    #[test]
+    fn infer_state_modal_overrides_loading() {
+        // GIVEN: both sheet and progress indicator
+        let scene = make_scene(&[
+            ("AXSheet", None, None, None),
+            ("AXProgressIndicator", None, None, None),
+        ]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: modal wins (higher priority)
+        assert_eq!(state, super::AppState::Modal);
+    }
+
+    #[test]
+    fn infer_state_loading_overrides_error() {
+        // GIVEN: progress indicator + alert
+        let scene = make_scene(&[
+            ("AXProgressIndicator", None, None, None),
+            ("AXAlert", None, None, None),
+        ]);
+        // WHEN
+        let state = super::infer_app_state(&scene);
+        // THEN: loading overrides error
+        assert_eq!(state, super::AppState::Loading);
+    }
+
+    #[test]
+    fn app_state_as_str_covers_all_variants() {
+        // GIVEN / WHEN / THEN: every variant maps to a non-empty string
+        use super::AppState;
+        for (state, expected) in &[
+            (AppState::Idle, "idle"),
+            (AppState::Loading, "loading"),
+            (AppState::Error, "error"),
+            (AppState::Modal, "modal"),
+            (AppState::AuthRequired, "auth_required"),
+        ] {
+            assert_eq!(state.as_str(), *expected);
+        }
+    }
+
+    // --- suggest_actions ---------------------------------------------------
+
+    #[test]
+    fn suggest_actions_idle_empty_patterns_returns_empty() {
+        // GIVEN: idle state, no patterns
+        let suggestions = super::suggest_actions(&[], super::AppState::Idle);
+        // THEN: no suggestions
+        assert!(suggestions.is_empty());
+    }
+
+    #[test]
+    fn suggest_actions_modal_state_suggests_dismiss() {
+        // GIVEN: modal state
+        let suggestions = super::suggest_actions(&[], super::AppState::Modal);
+        // THEN: dismiss suggestion present
+        assert!(suggestions.iter().any(|s| s.tool == "ax_click"));
+    }
+
+    #[test]
+    fn suggest_actions_loading_state_suggests_wait() {
+        // GIVEN: loading state
+        let suggestions = super::suggest_actions(&[], super::AppState::Loading);
+        // THEN: wait suggestion present
+        assert!(suggestions.iter().any(|s| s.tool == "ax_wait_idle"));
+    }
+
+    #[test]
+    fn suggest_actions_error_state_suggests_get_value() {
+        // GIVEN: error state
+        let suggestions = super::suggest_actions(&[], super::AppState::Error);
+        // THEN: read the error message
+        assert!(suggestions.iter().any(|s| s.tool == "ax_get_value"));
+    }
+
+    #[test]
+    fn suggest_actions_auth_required_suggests_type() {
+        // GIVEN: auth_required state
+        let suggestions = super::suggest_actions(&[], super::AppState::AuthRequired);
+        // THEN: type action suggested
+        assert!(suggestions.iter().any(|s| s.tool == "ax_type"));
+    }
+
+    #[test]
+    fn suggest_actions_login_form_includes_submit() {
+        // GIVEN: login_form pattern detected
+        let login = super::UiPattern {
+            pattern: "login_form",
+            confidence: 0.9,
+        };
+        let suggestions = super::suggest_actions(&[login], super::AppState::Idle);
+        // THEN: click the sign-in button
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.tool == "ax_click" && s.query.to_lowercase().contains("sign")),
+            "expected ax_click with 'Sign In' query"
+        );
+    }
+
+    #[test]
+    fn suggest_actions_search_interface_suggests_type() {
+        // GIVEN: search_interface pattern
+        let search = super::UiPattern {
+            pattern: "search_interface",
+            confidence: 0.85,
+        };
+        let suggestions = super::suggest_actions(&[search], super::AppState::Idle);
+        // THEN: type into search
+        assert!(suggestions.iter().any(|s| s.tool == "ax_type"));
+    }
+
+    #[test]
+    fn suggest_actions_file_save_dialog_suggests_save_click() {
+        // GIVEN: file_save_dialog pattern
+        let save_dlg = super::UiPattern {
+            pattern: "file_save_dialog",
+            confidence: 0.88,
+        };
+        let suggestions = super::suggest_actions(&[save_dlg], super::AppState::Idle);
+        // THEN: click Save
+        assert!(suggestions
+            .iter()
+            .any(|s| s.tool == "ax_click" && s.query == "Save"));
+    }
+
+    #[test]
+    fn suggest_actions_confirmation_dialog_includes_cancel() {
+        // GIVEN: confirmation_dialog pattern
+        let conf = super::UiPattern {
+            pattern: "confirmation_dialog",
+            confidence: 0.87,
+        };
+        let suggestions = super::suggest_actions(&[conf], super::AppState::Idle);
+        // THEN: Cancel action present
+        assert!(suggestions
+            .iter()
+            .any(|s| s.tool == "ax_click" && s.query == "Cancel"));
+    }
+
+    #[test]
+    fn suggest_actions_table_view_suggests_get_value() {
+        // GIVEN: table_view pattern
+        let table = super::UiPattern {
+            pattern: "table_view",
+            confidence: 0.88,
+        };
+        let suggestions = super::suggest_actions(&[table], super::AppState::Idle);
+        // THEN: read the table
+        assert!(suggestions.iter().any(|s| s.tool == "ax_get_value"));
+    }
+
+    #[test]
+    fn suggest_actions_all_suggestions_have_non_empty_action_and_tool() {
+        // GIVEN: all pattern types simultaneously
+        let patterns: Vec<super::UiPattern> = [
+            "login_form",
+            "search_interface",
+            "file_save_dialog",
+            "file_open_dialog",
+            "confirmation_dialog",
+            "error_alert",
+            "table_view",
+            "text_editor",
+            "form",
+        ]
+        .iter()
+        .map(|p| super::UiPattern {
+            pattern: p,
+            confidence: 0.8,
+        })
+        .collect();
+        let suggestions = super::suggest_actions(&patterns, super::AppState::Idle);
+        for s in &suggestions {
+            assert!(!s.action.is_empty(), "suggestion has empty action");
+            assert!(!s.tool.is_empty(), "suggestion has empty tool");
+        }
+    }
+
+    // --- handle_ax_analyze dispatch ----------------------------------------
+
+    #[test]
+    fn ax_analyze_missing_app_returns_error() {
+        // GIVEN: no app field
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN
+        let result = super::handle_ax_analyze(&json!({}), &registry);
+        // THEN: error mentions missing field
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_analyze_unconnected_app_returns_error() {
+        // GIVEN: app not in registry
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN
+        let result = super::handle_ax_analyze(&json!({"app": "NotConnected"}), &registry);
+        // THEN: error mentions not connected
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("not connected"));
+    }
+
+    #[test]
+    fn ax_analyze_dispatch_returns_some_for_valid_call() {
+        // GIVEN: ax_analyze is in the stateless dispatch table
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        // WHEN: dispatching with minimal (error-triggering) args
+        let result =
+            super::call_tool_innovation("ax_analyze", &json!({"app": "X"}), &registry, &mut out);
+        // THEN: handler ran and returned Some (even if payload is an error)
+        assert!(
+            result.is_some(),
+            "ax_analyze should be handled by call_tool_innovation"
+        );
+    }
+
+    #[test]
+    fn ax_analyze_workflow_tools_still_return_none_from_stateless_dispatch() {
+        // GIVEN: ax_analyze did not break the existing None-fallthrough for workflow tools
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        let result = super::call_tool_innovation(
+            "ax_workflow_create",
+            &json!({"name": "wf"}),
+            &registry,
+            &mut out,
+        );
+        assert!(result.is_none());
+    }
+
+    // --- pattern_to_json / suggestion_to_json helpers ----------------------
+
+    #[test]
+    fn pattern_to_json_produces_expected_keys() {
+        // GIVEN: a UiPattern
+        let p = super::UiPattern {
+            pattern: "login_form",
+            confidence: 0.9,
+        };
+        // WHEN
+        let v = super::pattern_to_json(&p);
+        // THEN: both required keys present
+        assert_eq!(v["pattern"], "login_form");
+        assert!((v["confidence"].as_f64().unwrap() - 0.9).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn suggestion_to_json_produces_expected_keys() {
+        // GIVEN: a Suggestion
+        let s = super::Suggestion {
+            action: "Click Save",
+            tool: "ax_click",
+            query: "Save",
+        };
+        // WHEN
+        let v = super::suggestion_to_json(&s);
+        // THEN: all three keys present
+        assert_eq!(v["action"], "Click Save");
+        assert_eq!(v["tool"], "ax_click");
+        assert_eq!(v["query"], "Save");
     }
 }

@@ -128,6 +128,15 @@ pub fn static_resources() -> ResourceListResult {
                 "All running macOS applications with PIDs, bundle IDs, and accessibility info.",
             mime_type: "application/json",
         },
+        Resource {
+            uri: "axterminator://clipboard",
+            name: "clipboard",
+            title: "System Clipboard",
+            description:
+                "Current macOS clipboard text content. Subscribe for change notifications \
+                when the clipboard is updated by the user or another application.",
+            mime_type: "application/json",
+        },
     ];
 
     #[cfg(feature = "spaces")]
@@ -263,6 +272,7 @@ pub fn read_resource(
         "axterminator://system/status" => read::read_system_status(uri, registry),
         "axterminator://system/displays" => read::read_system_displays(uri),
         "axterminator://apps" => read::read_running_apps(uri, registry),
+        "axterminator://clipboard" => read::read_clipboard(uri),
         "axterminator://workflows" => read::read_workflows(uri),
         "axterminator://profiles" => read::read_profiles(uri),
         #[cfg(feature = "spaces")]
@@ -382,6 +392,47 @@ mod tests {
             .iter()
             .any(|r| r.uri == "axterminator://apps");
         assert!(has_apps);
+    }
+
+    #[test]
+    fn static_resources_contains_clipboard() {
+        // GIVEN: static resource list
+        let list = static_resources();
+        // THEN: clipboard resource is advertised
+        let has_clipboard = list
+            .resources
+            .iter()
+            .any(|r| r.uri == "axterminator://clipboard");
+        assert!(has_clipboard, "clipboard must be in static resource list");
+    }
+
+    // -----------------------------------------------------------------------
+    // clipboard resource
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn read_clipboard_returns_json_with_text_field() {
+        // GIVEN: an empty registry (clipboard needs no connected apps)
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading the clipboard resource
+        let result = read_resource("axterminator://clipboard", &registry)
+            .expect("clipboard resource must succeed");
+        // THEN: one JSON content item with a 'text' field
+        assert_eq!(result.contents.len(), 1);
+        assert_eq!(result.contents[0].mime_type, "application/json");
+        let text = result.contents[0].text.as_ref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert!(
+            v["text"].is_string(),
+            "clipboard payload must have a 'text' string field"
+        );
+    }
+
+    #[test]
+    fn read_clipboard_mime_type_is_application_json() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = read_resource("axterminator://clipboard", &registry).unwrap();
+        assert_eq!(result.contents[0].mime_type, "application/json");
     }
 
     #[test]

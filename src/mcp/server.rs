@@ -11,9 +11,9 @@
 //! For CPU-bound or blocking tools the handler itself is responsible for spawning
 //! worker threads if needed.
 //!
-//! ## Phase 2 additions
+//! ## Phase 2 + 3 additions
 //!
-//! This module now routes all six Phase 2 methods alongside the Phase 1 set:
+//! This module routes all Phase 2 and Phase 3 methods alongside the Phase 1 set:
 //!
 //! | Method | Phase | Handler |
 //! |--------|-------|---------|
@@ -22,8 +22,10 @@
 //! | `resources/read` | 2 | [`server_handlers`] |
 //! | `prompts/list` | 2 | [`server_handlers`] |
 //! | `prompts/get` | 2 | [`server_handlers`] |
+//! | `resources/subscribe` | 3 | [`server_handlers`] |
+//! | `resources/unsubscribe` | 3 | [`server_handlers`] |
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, Write};
 use std::sync::{Arc, Mutex};
 
@@ -70,6 +72,12 @@ pub(super) struct Server {
     pub(super) phase: Phase,
     /// Active durable workflows, keyed by workflow name.
     pub(super) workflows: Arc<Mutex<HashMap<String, WorkflowState>>>,
+    /// Resource URIs the client has subscribed to via `resources/subscribe`.
+    ///
+    /// When a state-changing tool completes successfully, the server checks
+    /// whether any affected URI is in this set and emits a
+    /// `notifications/resources/updated` notification if so.
+    pub(crate) subscriptions: Arc<Mutex<HashSet<String>>>,
     #[cfg(feature = "watch")]
     pub(super) watch_state: Arc<crate::mcp::tools_watch::WatchState>,
 }
@@ -80,6 +88,7 @@ impl Server {
             registry: Arc::new(AppRegistry::default()),
             phase: Phase::Uninitialized,
             workflows: Arc::new(Mutex::new(HashMap::new())),
+            subscriptions: Arc::new(Mutex::new(HashSet::new())),
             #[cfg(feature = "watch")]
             watch_state: Arc::new(crate::mcp::tools_watch::WatchState::new()),
         }
@@ -136,6 +145,13 @@ impl Server {
             }
             "resources/read" if self.phase == Phase::Running => {
                 Some(self.handle_resources_read(id, msg.params.as_ref()))
+            }
+            // Phase 3 — resource subscriptions
+            "resources/subscribe" if self.phase == Phase::Running => {
+                Some(self.handle_resources_subscribe(id, msg.params.as_ref()))
+            }
+            "resources/unsubscribe" if self.phase == Phase::Running => {
+                Some(self.handle_resources_unsubscribe(id, msg.params.as_ref()))
             }
             // Phase 2 — prompts
             "prompts/list" if self.phase == Phase::Running => Some(Self::handle_prompts_list(id)),
@@ -361,6 +377,34 @@ pub fn emit_log(out: &mut impl Write, level: &str, message: &str) -> io::Result<
     let json = serde_json::to_string(&notif).expect("notification serialization cannot fail");
     writeln!(out, "{json}")?;
     out.flush()
+}
+
+/// Emit a `notifications/resources/updated` notification for `uri`.
+///
+/// Called after any state-changing tool completes successfully, when `uri` is
+/// present in the server's subscription set. Best-effort — I/O errors are
+/// silently swallowed so a broken notification never aborts a tool result.
+///
+/// The notification body follows the MCP 2025-11-05 §6.3 wire format:
+///
+/// ```json
+/// {"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"..."}}
+/// ```
+///
+/// # Panics
+///
+/// Panics if serialisation of the notification fails, which cannot happen in
+/// practice because the structure is statically defined.
+pub fn notify_resource_changed(out: &mut impl Write, uri: &str) {
+    let notif = JsonRpcNotification {
+        jsonrpc: "2.0",
+        method: "notifications/resources/updated",
+        params: json!({ "uri": uri }),
+    };
+    let json = serde_json::to_string(&notif).expect("notification serialization cannot fail");
+    // Best-effort: ignore I/O errors on notifications.
+    let _ = writeln!(out, "{json}");
+    let _ = out.flush();
 }
 
 // ---------------------------------------------------------------------------

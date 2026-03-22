@@ -174,7 +174,7 @@ mod tests {
         // WHEN: requesting extended tools
         let tools = super::extended_tools();
         // THEN: count is deterministic per feature set
-        let base = 15usize; // Phase 3 GUI (7) + innovation (8, incl. ax_record)
+        let base = 16usize; // Phase 3 GUI (7) + innovation (8, incl. ax_record) + ax_analyze (1)
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };

@@ -119,7 +119,7 @@ fn tools_list_returns_correct_count_for_feature_set() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     // THEN: count is a deterministic function of active features
     let count = v["result"]["tools"].as_array().unwrap().len();
-    let base = 27usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (8, incl. ax_record)
+    let base = 28usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (8, incl. ax_record) + ax_analyze (1)
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
     let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
@@ -218,7 +218,7 @@ fn initialize_response_advertises_resources_capability() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     // THEN: capabilities.resources is present
     assert!(v["result"]["capabilities"]["resources"].is_object());
-    assert_eq!(v["result"]["capabilities"]["resources"]["subscribe"], false);
+    assert_eq!(v["result"]["capabilities"]["resources"]["subscribe"], true);
 }
 
 #[test]
@@ -401,14 +401,14 @@ fn resources_read_unconnected_app_returns_error() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn prompts_list_returns_six_prompts() {
+fn prompts_list_returns_ten_prompts() {
     let mut s = Server::new();
     initialize_server(&mut s);
     let req = make_request(20, "prompts/list", None);
     let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
     let v: Value = serde_json::to_value(&resp).unwrap();
     let prompts = v["result"]["prompts"].as_array().unwrap();
-    assert_eq!(prompts.len(), 6);
+    assert_eq!(prompts.len(), 10);
 }
 
 #[test]

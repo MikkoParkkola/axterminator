@@ -13,6 +13,10 @@
 //! | `navigate-to` | Navigate to a specific screen or dialog |
 //! | `extract-data` | Extract structured data from the app's UI |
 //! | `accessibility-audit` | WCAG compliance audit |
+//! | `automate-workflow` | Create a multi-step durable workflow with retry/checkpoint |
+//! | `debug-ui` | Debug why an element cannot be found |
+//! | `cross-app-copy` | Copy data between two macOS applications |
+//! | `analyze-app` | Comprehensive UI analysis: patterns, state, actions, accessibility |
 //!
 //! ## Adding a new prompt
 //!
@@ -36,7 +40,7 @@ use crate::mcp::protocol::{
 ///
 /// ```
 /// let list = axterminator::mcp::prompts::all_prompts();
-/// assert_eq!(list.prompts.len(), 6);
+/// assert_eq!(list.prompts.len(), 10);
 /// ```
 #[must_use]
 pub fn all_prompts() -> PromptListResult {
@@ -48,6 +52,10 @@ pub fn all_prompts() -> PromptListResult {
             prompt_accessibility_audit(),
             prompt_troubleshooting(),
             prompt_app_guide(),
+            prompt_automate_workflow(),
+            prompt_debug_ui(),
+            prompt_cross_app_copy(),
+            prompt_analyze_app(),
         ],
     }
 }
@@ -83,6 +91,10 @@ pub fn get_prompt(params: &PromptGetParams) -> Result<PromptGetResult, String> {
         "accessibility-audit" => build_accessibility_audit(params),
         "troubleshooting" => build_troubleshooting(params),
         "app-guide" => build_app_guide(params),
+        "automate-workflow" => build_automate_workflow(params),
+        "debug-ui" => build_debug_ui(params),
+        "cross-app-copy" => build_cross_app_copy(params),
+        "analyze-app" => build_analyze_app(params),
         other => Err(format!("Unknown prompt: {other}")),
     }
 }
@@ -192,6 +204,88 @@ fn prompt_app_guide() -> Prompt {
         arguments: vec![PromptArgument {
             name: "app",
             description: "App name (e.g. Calculator, TextEdit, Safari)",
+            required: true,
+        }],
+    }
+}
+
+fn prompt_automate_workflow() -> Prompt {
+    Prompt {
+        name: "automate-workflow",
+        title: "Automate a Workflow",
+        description: "Create a multi-step durable workflow. Guides the agent through defining \
+            steps, setting retry policies, and executing the workflow with checkpoint/resume.",
+        arguments: vec![
+            PromptArgument {
+                name: "app_name",
+                description: "Primary app the workflow runs in (e.g. Safari, TextEdit)",
+                required: true,
+            },
+            PromptArgument {
+                name: "goal",
+                description: "Natural language description of what the workflow should accomplish",
+                required: true,
+            },
+        ],
+    }
+}
+
+fn prompt_debug_ui() -> Prompt {
+    Prompt {
+        name: "debug-ui",
+        title: "Debug UI Element",
+        description: "Debug why an element cannot be found. Walks through the accessibility tree, \
+            checks attribute values, suggests alternative queries.",
+        arguments: vec![
+            PromptArgument {
+                name: "app_name",
+                description: "App to debug",
+                required: true,
+            },
+            PromptArgument {
+                name: "query",
+                description: "The query that failed (e.g. title:Submit, role:AXButton)",
+                required: true,
+            },
+        ],
+    }
+}
+
+fn prompt_cross_app_copy() -> Prompt {
+    Prompt {
+        name: "cross-app-copy",
+        title: "Copy Data Between Apps",
+        description: "Copy data between two macOS applications. Reads from source, \
+            transforms if needed, writes to destination.",
+        arguments: vec![
+            PromptArgument {
+                name: "source_app",
+                description: "App to read data from",
+                required: true,
+            },
+            PromptArgument {
+                name: "dest_app",
+                description: "App to write data to",
+                required: true,
+            },
+            PromptArgument {
+                name: "data_description",
+                description: "What data to copy (e.g. 'selected text', 'table contents')",
+                required: true,
+            },
+        ],
+    }
+}
+
+fn prompt_analyze_app() -> Prompt {
+    Prompt {
+        name: "analyze-app",
+        title: "Analyze App UI",
+        description: "Comprehensive analysis of an app's UI: detect patterns, infer state, \
+            suggest actions, audit accessibility.",
+        arguments: vec![PromptArgument {
+            name: "app_name",
+            description: "Name of the app to analyze",
             required: true,
         }],
     }
@@ -518,6 +612,129 @@ fn build_app_guide(params: &PromptGetParams) -> Result<PromptGetResult, String> 
     })
 }
 
+fn build_automate_workflow(params: &PromptGetParams) -> Result<PromptGetResult, String> {
+    let app = require_arg(params, "app_name")?;
+    let goal = require_arg(params, "goal")?;
+
+    let user_msg = format!(
+        "Automate the following workflow in {app}: \"{goal}\"\n\
+        Steps:\n\
+        1. Call ax_connect with app=\"{app}\" to connect (if not already connected).\n\
+        2. Call ax_screenshot to see the current state.\n\
+        3. Decompose the goal into atomic steps (click, type, wait, assert).\n\
+        4. For each step decide: which ax_* tool to use, what retry count to set,\n\
+           and whether failure should rollback or abort.\n\
+        5. Call ax_workflow with the composed steps and name=\"{goal}\".\n\
+        6. Monitor progress notifications — each step reports its result.\n\
+        7. If the workflow fails, inspect the error, adjust the step list, and retry.\n\
+        8. Take a final ax_screenshot and call ax_assert to verify the goal was reached."
+    );
+
+    let assistant_msg = format!(
+        "I will automate \"{goal}\" in {app} using ax_workflow for atomic, \
+        rollback-safe execution. Starting by connecting and capturing the current state."
+    );
+
+    Ok(PromptGetResult {
+        description: format!("Automate workflow: {goal} in {app}"),
+        messages: vec![user_message(user_msg), assistant_message(assistant_msg)],
+    })
+}
+
+fn build_debug_ui(params: &PromptGetParams) -> Result<PromptGetResult, String> {
+    let app = require_arg(params, "app_name")?;
+    let query = require_arg(params, "query")?;
+
+    let user_msg = format!(
+        "The query \"{query}\" returns no results in {app}. Help me find the element.\n\
+        Debug steps:\n\
+        1. Call ax_connect with app=\"{app}\" (if not already connected).\n\
+        2. Call ax_screenshot to see what is currently visible on screen.\n\
+        3. Call ax_get_tree with depth=8 to inspect the full element hierarchy.\n\
+        4. Look for elements that match the intent of \"{query}\" using different attributes:\n\
+           - Try query=\"description:{query}\" if the original used a title search\n\
+           - Try query=\"role:AXButton\" then narrow by other attributes\n\
+           - Try query=\"id:...\" if the element has an accessibility identifier\n\
+        5. Check whether the element is inside a scroll view, sheet, or popover \
+           that may not be in the foreground window.\n\
+        6. Check whether the element appears only after an action (e.g. hover, focus).\n\
+        7. Report: the exact element found (role, title, description, identifier, bounds) \
+           and the corrected query syntax."
+    );
+
+    let assistant_msg = format!(
+        "I will diagnose why \"{query}\" fails in {app} by inspecting the full \
+        accessibility tree and trying alternative locators."
+    );
+
+    Ok(PromptGetResult {
+        description: format!("Debug UI element '{query}' in {app}"),
+        messages: vec![user_message(user_msg), assistant_message(assistant_msg)],
+    })
+}
+
+fn build_cross_app_copy(params: &PromptGetParams) -> Result<PromptGetResult, String> {
+    let source = require_arg(params, "source_app")?;
+    let dest = require_arg(params, "dest_app")?;
+    let data = require_arg(params, "data_description")?;
+
+    let user_msg = format!(
+        "Copy \"{data}\" from {source} to {dest}.\n\
+        Steps:\n\
+        1. Call ax_connect for both {source} and {dest}.\n\
+        2. Call ax_screenshot on {source} to confirm the data is visible.\n\
+        3. Locate the source element with ax_find in {source} and read it with ax_get_value.\n\
+        4. Read the current clipboard via the axterminator://clipboard resource.\n\
+        5. If the source supports AXPress on a Copy button or cmd+C, use ax_key_press;\n\
+           otherwise use ax_set_value / ax_clipboard write to place the value on the clipboard.\n\
+        6. Switch to {dest}: call ax_screenshot to see its current state.\n\
+        7. Locate the destination element in {dest} and use ax_set_value or ax_key_press \
+           cmd+V to paste.\n\
+        8. Call ax_get_value on the destination element to verify the data was transferred.\n\
+        9. Report success with the transferred value and any transformation applied."
+    );
+
+    let assistant_msg = format!(
+        "I will copy \"{data}\" from {source} to {dest} using the clipboard \
+        as the transfer channel, verifying the data at each stage."
+    );
+
+    Ok(PromptGetResult {
+        description: format!("Copy {data} from {source} to {dest}"),
+        messages: vec![user_message(user_msg), assistant_message(assistant_msg)],
+    })
+}
+
+fn build_analyze_app(params: &PromptGetParams) -> Result<PromptGetResult, String> {
+    let app = require_arg(params, "app_name")?;
+
+    let user_msg = format!(
+        "Perform a comprehensive UI analysis of {app}.\n\
+        Steps:\n\
+        1. Call ax_connect with app=\"{app}\" to connect.\n\
+        2. Call ax_screenshot for a visual snapshot.\n\
+        3. Read axterminator://app/{app}/state to get structured window and focus info.\n\
+        4. Read axterminator://app/{app}/tree to get the full element hierarchy.\n\
+        5. Detect UI patterns: identify the main interaction model (form, table, \
+           document, browser, media player, settings panel, etc.).\n\
+        6. Infer application state: idle, loading, error, editing, modal dialog, etc.\n\
+        7. Suggest the 3-5 most useful next actions an agent could take.\n\
+        8. Run an accessibility pre-check: list any elements missing labels or roles.\n\
+        9. Report findings as a structured summary with sections: \
+           Visual State | UI Pattern | Suggested Actions | Accessibility Issues."
+    );
+
+    let assistant_msg = format!(
+        "I will analyze {app} comprehensively — visual state, UI patterns, \
+        inferred application state, next-action suggestions, and an accessibility pre-check."
+    );
+
+    Ok(PromptGetResult {
+        description: format!("Comprehensive UI analysis of {app}"),
+        messages: vec![user_message(user_msg), assistant_message(assistant_msg)],
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -593,9 +810,9 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn all_prompts_returns_six_prompts() {
+    fn all_prompts_returns_ten_prompts() {
         let list = all_prompts();
-        assert_eq!(list.prompts.len(), 6);
+        assert_eq!(list.prompts.len(), 10);
     }
 
     #[test]
@@ -771,6 +988,222 @@ mod tests {
     fn accessibility_audit_missing_app_name_returns_error() {
         let p = PromptGetParams {
             name: "accessibility-audit".into(),
+            arguments: None,
+        };
+        assert!(get_prompt(&p).is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // automate-workflow prompt
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn automate_workflow_with_valid_args_returns_two_messages() {
+        // GIVEN: required arguments for automate-workflow
+        let p = params(
+            "automate-workflow",
+            &[("app_name", "TextEdit"), ("goal", "save the document")],
+        );
+        // WHEN: prompt resolved
+        let result = get_prompt(&p).unwrap();
+        // THEN: two messages (user + assistant)
+        assert_eq!(result.messages.len(), 2);
+    }
+
+    #[test]
+    fn automate_workflow_user_message_contains_goal() {
+        let p = params(
+            "automate-workflow",
+            &[("app_name", "Safari"), ("goal", "open Settings")],
+        );
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0].content.text.contains("open Settings"));
+    }
+
+    #[test]
+    fn automate_workflow_user_message_contains_ax_workflow() {
+        let p = params(
+            "automate-workflow",
+            &[("app_name", "Finder"), ("goal", "create a folder")],
+        );
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0].content.text.contains("ax_workflow"));
+    }
+
+    #[test]
+    fn automate_workflow_missing_app_name_returns_error() {
+        let p = params("automate-workflow", &[("goal", "do something")]);
+        let err = get_prompt(&p).unwrap_err();
+        assert!(err.contains("app_name"));
+    }
+
+    #[test]
+    fn automate_workflow_missing_goal_returns_error() {
+        let p = params("automate-workflow", &[("app_name", "TextEdit")]);
+        let err = get_prompt(&p).unwrap_err();
+        assert!(err.contains("goal"));
+    }
+
+    // -----------------------------------------------------------------------
+    // debug-ui prompt
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn debug_ui_with_valid_args_returns_two_messages() {
+        // GIVEN: required arguments for debug-ui
+        let p = params(
+            "debug-ui",
+            &[("app_name", "Notes"), ("query", "title:New Note")],
+        );
+        // WHEN: prompt resolved
+        let result = get_prompt(&p).unwrap();
+        // THEN: two messages (user + assistant)
+        assert_eq!(result.messages.len(), 2);
+    }
+
+    #[test]
+    fn debug_ui_user_message_contains_failed_query() {
+        let p = params(
+            "debug-ui",
+            &[("app_name", "Safari"), ("query", "role:AXButton title:Go")],
+        );
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0]
+            .content
+            .text
+            .contains("role:AXButton title:Go"));
+    }
+
+    #[test]
+    fn debug_ui_user_message_mentions_ax_get_tree() {
+        let p = params(
+            "debug-ui",
+            &[("app_name", "Finder"), ("query", "New Folder")],
+        );
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0].content.text.contains("ax_get_tree"));
+    }
+
+    #[test]
+    fn debug_ui_missing_query_returns_error() {
+        let p = params("debug-ui", &[("app_name", "Safari")]);
+        let err = get_prompt(&p).unwrap_err();
+        assert!(err.contains("query"));
+    }
+
+    // -----------------------------------------------------------------------
+    // cross-app-copy prompt
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cross_app_copy_with_valid_args_returns_two_messages() {
+        // GIVEN: all required arguments for cross-app-copy
+        let p = params(
+            "cross-app-copy",
+            &[
+                ("source_app", "Notes"),
+                ("dest_app", "TextEdit"),
+                ("data_description", "note body text"),
+            ],
+        );
+        // WHEN: prompt resolved
+        let result = get_prompt(&p).unwrap();
+        // THEN: two messages (user + assistant)
+        assert_eq!(result.messages.len(), 2);
+    }
+
+    #[test]
+    fn cross_app_copy_user_message_contains_both_apps() {
+        let p = params(
+            "cross-app-copy",
+            &[
+                ("source_app", "Contacts"),
+                ("dest_app", "Sheets"),
+                ("data_description", "email addresses"),
+            ],
+        );
+        let result = get_prompt(&p).unwrap();
+        let text = &result.messages[0].content.text;
+        assert!(text.contains("Contacts"));
+        assert!(text.contains("Sheets"));
+    }
+
+    #[test]
+    fn cross_app_copy_description_references_clipboard_resource() {
+        let p = params(
+            "cross-app-copy",
+            &[
+                ("source_app", "Notes"),
+                ("dest_app", "Mail"),
+                ("data_description", "note content"),
+            ],
+        );
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0]
+            .content
+            .text
+            .contains("axterminator://clipboard"));
+    }
+
+    #[test]
+    fn cross_app_copy_missing_dest_app_returns_error() {
+        let p = params(
+            "cross-app-copy",
+            &[("source_app", "Notes"), ("data_description", "text")],
+        );
+        let err = get_prompt(&p).unwrap_err();
+        assert!(err.contains("dest_app"));
+    }
+
+    // -----------------------------------------------------------------------
+    // analyze-app prompt
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn analyze_app_with_valid_args_returns_two_messages() {
+        // GIVEN: required argument for analyze-app
+        let p = params("analyze-app", &[("app_name", "Safari")]);
+        // WHEN: prompt resolved
+        let result = get_prompt(&p).unwrap();
+        // THEN: two messages (user + assistant)
+        assert_eq!(result.messages.len(), 2);
+    }
+
+    #[test]
+    fn analyze_app_user_message_mentions_state_resource() {
+        let p = params("analyze-app", &[("app_name", "Finder")]);
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0]
+            .content
+            .text
+            .contains("axterminator://app/Finder/state"));
+    }
+
+    #[test]
+    fn analyze_app_user_message_mentions_tree_resource() {
+        let p = params("analyze-app", &[("app_name", "Mail")]);
+        let result = get_prompt(&p).unwrap();
+        assert!(result.messages[0]
+            .content
+            .text
+            .contains("axterminator://app/Mail/tree"));
+    }
+
+    #[test]
+    fn analyze_app_description_contains_analysis_summary_sections() {
+        let p = params("analyze-app", &[("app_name", "Notes")]);
+        let result = get_prompt(&p).unwrap();
+        let text = &result.messages[0].content.text;
+        // Must guide toward all four required sections
+        assert!(text.contains("UI Pattern"));
+        assert!(text.contains("Suggested Actions"));
+        assert!(text.contains("Accessibility"));
+    }
+
+    #[test]
+    fn analyze_app_missing_app_name_returns_error() {
+        let p = PromptGetParams {
+            name: "analyze-app".into(),
             arguments: None,
         };
         assert!(get_prompt(&p).is_err());

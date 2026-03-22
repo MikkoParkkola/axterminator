@@ -595,7 +595,7 @@ mod tests {
         // WHEN: requesting all tools
         let tools = all_tools();
         // THEN: count is a deterministic function of active features
-        let base = 27usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (8, incl. ax_record)
+        let base = 28usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (8, incl. ax_record) + ax_analyze (1)
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         // `watch` implies `audio` and `camera`, so these are additive
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };

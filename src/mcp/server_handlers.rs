@@ -9,11 +9,12 @@
 use std::io::Write;
 
 use serde_json::Value;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::mcp::protocol::{
     ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse, LoggingCapability,
     PingResult, PromptGetParams, PromptsCapability, RequestId, ResourceReadParams,
+    ResourceSubscribeParams, ResourceSubscribeResult, ResourceUnsubscribeParams,
     ResourcesCapability, RpcError, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
@@ -157,6 +158,85 @@ impl Server {
     }
 
     // -----------------------------------------------------------------------
+    // Phase 3 — resource subscriptions
+    // -----------------------------------------------------------------------
+
+    /// Register a client subscription for `notifications/resources/updated`.
+    ///
+    /// The URI is stored in the server's subscription set. After any
+    /// state-changing tool completes, the server checks the set and emits a
+    /// notification for every affected URI. The client then calls
+    /// `resources/read` to fetch the updated content.
+    pub(super) fn handle_resources_subscribe(
+        &self,
+        id: RequestId,
+        params: Option<&Value>,
+    ) -> JsonRpcResponse {
+        let Some(params_val) = params else {
+            return JsonRpcResponse::err(
+                id,
+                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
+            );
+        };
+
+        match serde_json::from_value::<ResourceSubscribeParams>(params_val.clone()) {
+            Ok(p) => {
+                let uri = p.uri.clone();
+                if let Ok(mut subs) = self.subscriptions.lock() {
+                    subs.insert(uri.clone());
+                }
+                debug!(uri, "resource subscribed");
+                JsonRpcResponse::ok(
+                    id,
+                    serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
+                )
+            }
+            Err(e) => JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    format!("Invalid resources/subscribe params: {e}"),
+                ),
+            ),
+        }
+    }
+
+    /// Remove a client subscription, stopping update notifications for that URI.
+    pub(super) fn handle_resources_unsubscribe(
+        &self,
+        id: RequestId,
+        params: Option<&Value>,
+    ) -> JsonRpcResponse {
+        let Some(params_val) = params else {
+            return JsonRpcResponse::err(
+                id,
+                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
+            );
+        };
+
+        match serde_json::from_value::<ResourceUnsubscribeParams>(params_val.clone()) {
+            Ok(p) => {
+                let uri = p.uri.clone();
+                if let Ok(mut subs) = self.subscriptions.lock() {
+                    subs.remove(&uri);
+                }
+                debug!(uri, "resource unsubscribed");
+                JsonRpcResponse::ok(
+                    id,
+                    serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
+                )
+            }
+            Err(e) => JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    format!("Invalid resources/unsubscribe params: {e}"),
+                ),
+            ),
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Phase 2 — prompts
     // -----------------------------------------------------------------------
 
@@ -198,6 +278,10 @@ impl Server {
     // -----------------------------------------------------------------------
 
     /// Dispatch a tool call, routing watch tools to the watch state first.
+    ///
+    /// After any state-changing tool succeeds, the server checks its
+    /// subscription set and emits `notifications/resources/updated` for every
+    /// subscribed URI that the tool may have affected.
     fn dispatch_tool<W: Write>(
         &self,
         name: &str,
@@ -214,9 +298,34 @@ impl Server {
         if let Some(result) =
             crate::mcp::tools_innovation::call_workflow_tool(name, args, &self.workflows, out)
         {
+            self.notify_subscribed(name, args, out);
             return result;
         }
-        call_tool(name, args, &self.registry, out)
+        let result = call_tool(name, args, &self.registry, out);
+        if !result.is_error {
+            self.notify_subscribed(name, args, out);
+        }
+        result
+    }
+
+    /// Emit `notifications/resources/updated` for every subscribed URI that
+    /// `tool_name` is known to affect.
+    ///
+    /// This implements the §6.3 "notify after state change" pattern without
+    /// the full AX observer backend (which is Phase 5). Only URIs that the
+    /// client has actively subscribed to receive a notification.
+    fn notify_subscribed<W: Write>(&self, tool_name: &str, args: &Value, out: &mut W) {
+        let Ok(subs) = self.subscriptions.lock() else {
+            return;
+        };
+        if subs.is_empty() {
+            return;
+        }
+        for uri in affected_uris(tool_name, args) {
+            if subs.contains(*uri) {
+                crate::mcp::server::notify_resource_changed(out, uri);
+            }
+        }
     }
 
     /// Try to dispatch a watch tool by name; returns `None` for non-watch tools.
@@ -242,6 +351,26 @@ impl Server {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Map a tool call to the set of resource URIs it may have modified.
+///
+/// Returns a static slice of URI strings so the subscription notifier can
+/// cheaply check which subscriptions to trigger without heap allocation.
+/// Only the most directly affected URIs are listed — callers iterate and check
+/// membership against the live subscription set.
+fn affected_uris(tool_name: &str, _args: &Value) -> &'static [&'static str] {
+    match tool_name {
+        // Connection tools change the apps list and system status.
+        "ax_connect" | "ax_disconnect" => &["axterminator://apps", "axterminator://system/status"],
+        // Clipboard write changes the clipboard resource.
+        "ax_clipboard" => &["axterminator://clipboard"],
+        // All other tools may change per-app state/tree — the app name would
+        // be needed for precise URI matching, but without it we skip per-app
+        // URIs here to avoid false positives. Future phases will use the AX
+        // observer backend for precise per-app notifications.
+        _ => &[],
+    }
+}
+
 fn build_initialize_result() -> InitializeResult {
     #[cfg(feature = "watch")]
     let experimental = Some(serde_json::json!({ "claude/channel": {} }));
@@ -256,7 +385,7 @@ fn build_initialize_result() -> InitializeResult {
             },
             logging: LoggingCapability {},
             resources: ResourcesCapability {
-                subscribe: false,
+                subscribe: true,
                 list_changed: false,
             },
             prompts: PromptsCapability {
@@ -281,15 +410,25 @@ Query syntax:\n\
 \n\
 Key rules:\n\
 - ALWAYS ax_get_tree before ax_find — never guess element names\n\
-- If ax_click fails with 'AXPress unsupported' → use ax_click_at with coordinates\n\
-- Use ax_set_value for instant text, ax_type for keystroke simulation (needs focus)\n\
+- ax_click auto-falls-back to coordinate clicks when AXPress unsupported\n\
+- ax_set_value for instant text, ax_type for keystroke simulation (needs focus)\n\
+- ax_find includes semantic fallback — fuzzy matches when exact match fails\n\
+\n\
+Advanced tools:\n\
+- ax_query: natural language UI questions\n\
+- ax_analyze: detect UI patterns, infer app state, suggest actions\n\
+- ax_workflow_create/step/status: durable multi-step automation\n\
+- ax_test_run: black-box testing\n\
+- ax_app_profile: Electron app metadata\n\
+- ax_track_workflow: cross-app pattern detection\n\
+- ax_record: interaction recording for test generation\n\
 \n\
 Use prompts/get for detailed guidance:\n\
-- 'troubleshooting' — when something fails (element not found, click not working)\n\
-- 'app-guide' with app arg — app-specific playbook (Calculator, TextEdit, Safari, etc.)\n\
-- 'test-app' — step-by-step testing guide\n\
-- 'navigate-to' — reach a specific UI state\n\
-- 'extract-data' — read structured data from an app\n\
-- 'accessibility-audit' — audit app for a11y issues",
+- 'troubleshooting' — when something fails\n\
+- 'app-guide' with app arg — per-app playbook\n\
+- 'debug-ui' — debug element-not-found issues\n\
+- 'automate-workflow' — durable workflow guidance\n\
+- 'analyze-app' — comprehensive UI analysis\n\
+- 'test-app' / 'navigate-to' / 'extract-data' / 'accessibility-audit'",
     }
 }

@@ -99,6 +99,38 @@ pub(super) fn read_system_displays(uri: &str) -> Result<ResourceReadResult, Reso
     })
 }
 
+/// Read the `axterminator://clipboard` resource.
+///
+/// Invokes `osascript -e 'the clipboard'` to retrieve the current pasteboard text.
+/// Returns an empty string for the `text` field when the clipboard contains
+/// non-text content or when the AppleScript invocation fails.
+pub(super) fn read_clipboard(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let text = read_clipboard_text();
+    let payload = serde_json::json!({ "text": text });
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
+}
+
+/// Retrieve the current pasteboard text via `osascript`.
+///
+/// Returns an empty string on any failure so callers never see an error for
+/// clipboard operations — the clipboard may simply contain non-text data.
+fn read_clipboard_text() -> String {
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg("the clipboard")
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+        .unwrap_or_default()
+}
+
 /// Read the `axterminator://workflows` resource.
 ///
 /// Locks the global `WORKFLOW_TRACKER` and returns aggregate stats plus every

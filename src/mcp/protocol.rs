@@ -223,8 +223,9 @@ pub struct LoggingCapability {}
 
 /// Resource capability advertised in `initialize`.
 ///
-/// `subscribe: false` — Phase 2 provides static read access only.
-/// Reactive subscriptions are a Phase 3 feature.
+/// `subscribe: true` — Phase 3 reactive subscriptions are enabled. Clients
+/// may send `resources/subscribe` and will receive
+/// `notifications/resources/updated` when subscribed URIs change.
 #[derive(Debug, Serialize)]
 pub struct ResourcesCapability {
     pub subscribe: bool,
@@ -351,6 +352,34 @@ impl ToolCallResult {
 /// `ping` result — empty object per spec.
 #[derive(Debug, Serialize)]
 pub struct PingResult {}
+
+// ---------------------------------------------------------------------------
+// MCP resources/subscribe — Phase 3
+// ---------------------------------------------------------------------------
+
+/// `resources/subscribe` params — client sends to start receiving
+/// `notifications/resources/updated` for a specific resource URI.
+///
+/// Per MCP 2025-11-05 §6.3, the server must declare `resources.subscribe: true`
+/// in its `initialize` capabilities before clients will send this method.
+#[derive(Debug, Deserialize)]
+pub struct ResourceSubscribeParams {
+    pub uri: String,
+}
+
+/// `resources/unsubscribe` params — client sends to stop receiving updates.
+///
+/// When the session ends, all subscriptions are implicitly removed because
+/// the `Server` (and its subscription store) is dropped.
+#[derive(Debug, Deserialize)]
+pub struct ResourceUnsubscribeParams {
+    pub uri: String,
+}
+
+/// `resources/subscribe` and `resources/unsubscribe` both return an empty
+/// object per the MCP 2025-11-05 wire spec.
+#[derive(Debug, Serialize)]
+pub struct ResourceSubscribeResult {}
 
 // ---------------------------------------------------------------------------
 // MCP resources — Phase 2
