@@ -99,6 +99,83 @@ pub(super) fn read_system_displays(uri: &str) -> Result<ResourceReadResult, Reso
     })
 }
 
+/// Read the `axterminator://workflows` resource.
+///
+/// Locks the global `WORKFLOW_TRACKER` and returns aggregate stats plus every
+/// detected cross-app workflow pattern (min frequency = 2).  An empty `workflows`
+/// array is valid when fewer than two transitions have been recorded.
+pub(super) fn read_workflows(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let payload = crate::mcp::tools_innovation::workflow_tracking_data();
+    let body = serde_json::to_string(&payload)
+        .map_err(|e| ResourceError::operation_failed(format!("Serialization failed: {e}")))?;
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "application/json", body)],
+    })
+}
+
+/// Read the `axterminator://profiles` resource.
+///
+/// Instantiates a [`ProfileRegistry`](crate::electron_profiles::ProfileRegistry)
+/// with all built-in profiles and serialises each one to JSON, including
+/// capabilities, selectors, shortcuts, and CDP port.
+pub(super) fn read_profiles(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let profiles: Vec<Value> = crate::electron_profiles::builtin_profiles()
+        .iter()
+        .map(profile_to_json)
+        .collect();
+
+    let payload = json!({
+        "profile_count": profiles.len(),
+        "profiles":      profiles,
+    });
+
+    let body = serde_json::to_string(&payload)
+        .map_err(|e| ResourceError::operation_failed(format!("Serialization failed: {e}")))?;
+
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "application/json", body)],
+    })
+}
+
+/// Serialise a single [`AppProfile`](crate::electron_profiles::AppProfile) to JSON.
+fn profile_to_json(profile: &crate::electron_profiles::AppProfile) -> Value {
+    use crate::electron_profiles::AppCapability;
+
+    let capabilities: Vec<&str> = profile
+        .capabilities
+        .iter()
+        .map(|cap| match cap {
+            AppCapability::Chat => "chat",
+            AppCapability::Email => "email",
+            AppCapability::Calendar => "calendar",
+            AppCapability::CodeEditor => "code_editor",
+            AppCapability::Browser => "browser",
+            AppCapability::Terminal => "terminal",
+            AppCapability::FileManager => "file_manager",
+            AppCapability::Custom(_) => "custom",
+        })
+        .collect();
+
+    let selectors: Value = profile.selectors.iter().fold(json!({}), |mut acc, (k, v)| {
+        acc[k] = json!(v);
+        acc
+    });
+
+    let shortcuts: Value = profile.shortcuts.iter().fold(json!({}), |mut acc, (k, v)| {
+        acc[k] = json!(v);
+        acc
+    });
+
+    json!({
+        "name":         profile.name,
+        "app_id":       profile.app_id,
+        "cdp_port":     profile.cdp_port,
+        "capabilities": capabilities,
+        "selectors":    selectors,
+        "shortcuts":    shortcuts,
+    })
+}
+
 /// Read the `axterminator://spaces` virtual desktop resource.
 ///
 /// Lists all Spaces with id, type, active flag, and agent-created status.
@@ -190,8 +267,25 @@ pub(super) fn read_dynamic(
         read_app_screenshot(uri, name, registry)
     } else if uri.ends_with("/state") {
         read_app_state(uri, name, registry)
+    } else if let Some(question) = parse_query_question(uri, name) {
+        read_app_query(uri, name, question, registry)
     } else {
         Err(ResourceError::invalid_uri(uri))
+    }
+}
+
+/// Extract the `{question}` segment from a `query` template URI.
+///
+/// Expected form: `axterminator://app/{name}/query/{question}`.
+/// Returns `None` when the URI does not match this pattern or the question
+/// segment is empty.
+fn parse_query_question<'a>(uri: &'a str, app_name: &str) -> Option<&'a str> {
+    let prefix = format!("axterminator://app/{app_name}/query/");
+    let question = uri.strip_prefix(prefix.as_str())?;
+    if question.is_empty() {
+        None
+    } else {
+        Some(question)
     }
 }
 
@@ -271,6 +365,100 @@ fn read_app_state(
             }
         })
         .map_err(|_| ResourceError::not_connected(app_name))
+}
+
+/// Read `axterminator://app/{name}/query/{question}`.
+///
+/// Builds a live [`SceneGraph`](crate::scene::SceneGraph) from the app's
+/// accessibility tree and answers a percent-encoded natural-language question.
+/// The `{question}` segment should be percent-encoded (spaces as `%20`).
+///
+/// # Errors
+///
+/// - [`ResourceError::not_connected`] when the app has not been registered.
+/// - [`ResourceError::operation_failed`] when the accessibility scan fails.
+fn read_app_query(
+    uri: &str,
+    app_name: &str,
+    question: &str,
+    registry: &Arc<AppRegistry>,
+) -> Result<ResourceReadResult, ResourceError> {
+    let decoded = percent_decode(question);
+
+    registry
+        .with_app(app_name, |app| {
+            let scene = crate::intent::scan_scene(app.element)
+                .map_err(|e| ResourceError::operation_failed(format!("scan_scene failed: {e}")))?;
+
+            let result = crate::scene::SceneEngine::new().query(&decoded, &scene);
+
+            let matches_json: Vec<Value> = result
+                .matches
+                .iter()
+                .map(|m| {
+                    json!({
+                        "role":         m.element_role,
+                        "label":        m.element_label,
+                        "path":         m.element_path,
+                        "match_score":  m.match_score,
+                        "match_reason": m.match_reason,
+                        "bounds": m.bounds.map(|(x, y, w, h)| json!([x, y, w, h])),
+                    })
+                })
+                .collect();
+
+            let payload = json!({
+                "app":               app_name,
+                "question":          decoded,
+                "confidence":        result.confidence,
+                "scene_description": result.scene_description,
+                "matches":           matches_json,
+            });
+
+            Ok(ResourceReadResult {
+                contents: vec![ResourceContents::text(
+                    uri,
+                    "application/json",
+                    payload.to_string(),
+                )],
+            })
+        })
+        .map_err(|_| ResourceError::not_connected(app_name))?
+}
+
+/// Decode percent-encoded characters in a URI path segment.
+///
+/// Only replaces `%XX` sequences; non-ASCII pass through unchanged.
+/// Invalid sequences are left as-is rather than returning an error.
+fn percent_decode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        let hi = chars.next();
+        let lo = chars.next();
+        match (hi, lo) {
+            (Some(h), Some(l)) => {
+                let hex = format!("{h}{l}");
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    out.push(byte as char);
+                } else {
+                    out.push('%');
+                    out.push(h);
+                    out.push(l);
+                }
+            }
+            (Some(h), None) => {
+                out.push('%');
+                out.push(h);
+            }
+            _ => out.push('%'),
+        }
+    }
+    out
 }
 
 /// Build the JSON state object for a single window, annotated with display info.

@@ -222,7 +222,12 @@ fn tool_ax_click() -> Tool {
         name: "ax_click",
         title: "Click a UI element",
         description: "Click a UI element in background mode (no focus stealing).\n\
-            Use mode=focus only when the element requires keyboard focus (e.g. text input).",
+            Use mode=focus only when the element requires keyboard focus (e.g. text input).\n\
+            \n\
+            SAFETY: When the target element contains a destructive keyword (delete, remove,\n\
+            erase, reset, clear, wipe, destroy, terminate, uninstall, revoke, format, quit,\n\
+            close), the tool returns an error instead of clicking. Re-call with confirm=true\n\
+            to proceed after verifying the action is intentional.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -237,6 +242,13 @@ fn tool_ax_click() -> Tool {
                     "type": "string",
                     "enum": ["single", "double", "right"],
                     "default": "single"
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Set to true to confirm a destructive action and bypass \
+                        the safety gate. Only use after explicitly verifying the action is \
+                        intentional.",
+                    "default": false
                 }
             },
             "required": ["app", "query"],
@@ -245,8 +257,13 @@ fn tool_ax_click() -> Tool {
         output_schema: json!({
             "type": "object",
             "properties": {
-                "clicked": { "type": "boolean" },
-                "query":   { "type": "string" }
+                "clicked":     { "type": "boolean" },
+                "query":       { "type": "string" },
+                "destructive": {
+                    "type": "boolean",
+                    "description": "Present and true when the clicked element was identified \
+                        as potentially destructive."
+                }
             },
             "required": ["clicked"]
         }),
@@ -531,7 +548,16 @@ pub fn call_tool<W: std::io::Write>(
     match name {
         "ax_is_accessible" => handle_is_accessible(),
         "ax_connect" => handle_connect(args, registry),
-        "ax_find" => handle_find(args, registry),
+        "ax_find" => {
+            // Emit a start notification: the semantic fallback scans the full
+            // AX scene graph which can be slow for complex UIs.  The complete
+            // notification fires unconditionally so clients always see a pair.
+            let token = crate::mcp::progress::next_progress_token();
+            let _ = crate::mcp::progress::emit_progress(out, &token, 0, 1, "Searching…");
+            let result = handle_find(args, registry);
+            let _ = crate::mcp::progress::emit_progress(out, &token, 1, 1, "");
+            result
+        }
         "ax_click" => handle_click(args, registry),
         "ax_type" => handle_type(args, registry),
         "ax_set_value" => handle_set_value(args, registry),

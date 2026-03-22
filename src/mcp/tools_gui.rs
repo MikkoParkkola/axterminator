@@ -638,13 +638,15 @@ pub(crate) fn handle_assert(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
 
 /// Build a JSON tree node from an `AXUIElementRef`, recursing up to `depth`.
 ///
-/// Progress notifications are emitted by the caller via `reporter`.
+/// Emits one `notifications/progress` notification per depth layer via
+/// `reporter`, firing exactly once the first time each layer is entered.
 fn build_element_tree<W: Write>(
     element: crate::accessibility::AXUIElementRef,
     depth: usize,
     reporter: &mut Option<ProgressReporter<'_, W>>,
 ) -> serde_json::Value {
-    build_tree_node(element, depth, 0, reporter)
+    let mut emitted = vec![false; depth];
+    build_tree_node(element, depth, 0, reporter, &mut emitted)
 }
 
 /// Same as `build_element_tree` but starts from the application root element.
@@ -653,15 +655,21 @@ fn build_app_root_tree<W: Write>(
     depth: usize,
     reporter: &mut Option<ProgressReporter<'_, W>>,
 ) -> serde_json::Value {
-    build_tree_node(root, depth, 0, reporter)
+    let mut emitted = vec![false; depth];
+    build_tree_node(root, depth, 0, reporter, &mut emitted)
 }
 
 /// Recursive tree builder — one node per element.
+///
+/// `emitted[d]` tracks whether a progress notification has already been sent
+/// for depth `d`.  This guarantees exactly one notification per layer
+/// regardless of how many sibling nodes exist at that depth.
 fn build_tree_node<W: Write>(
     element: crate::accessibility::AXUIElementRef,
     max_depth: usize,
     current_depth: usize,
     reporter: &mut Option<ProgressReporter<'_, W>>,
+    emitted: &mut Vec<bool>,
 ) -> serde_json::Value {
     let role = crate::accessibility::get_string_attribute_value(element, attributes::AX_ROLE);
     let title = crate::accessibility::get_string_attribute_value(element, attributes::AX_TITLE);
@@ -672,13 +680,16 @@ fn build_tree_node<W: Write>(
         return json!({ "role": role, "title": title, "value": value, "enabled": enabled });
     }
 
-    // Emit per-layer progress when moving into the next depth level.
-    if let Some(ref mut rep) = reporter {
-        if current_depth < max_depth {
-            let layer = current_depth + 1;
-            let msg = format!("Scanning layer {layer}/{max_depth}…");
-            // Best-effort: silently ignore I/O errors in progress notifications.
-            let _ = rep.step(&msg);
+    // Emit one progress notification the first time we enter each depth layer.
+    if let Some(d) = emitted.get_mut(current_depth) {
+        if !*d {
+            *d = true;
+            if let Some(ref mut rep) = reporter {
+                let layer = current_depth + 1;
+                let msg = format!("Scanning layer {layer}/{max_depth}…");
+                // Best-effort: silently ignore I/O errors in progress notifications.
+                let _ = rep.step(&msg);
+            }
         }
     }
 
@@ -686,8 +697,7 @@ fn build_tree_node<W: Write>(
         .unwrap_or_default()
         .into_iter()
         .map(|child| {
-            let node =
-                build_tree_node::<std::io::Sink>(child, max_depth, current_depth + 1, &mut None);
+            let node = build_tree_node(child, max_depth, current_depth + 1, reporter, emitted);
             crate::accessibility::release_cf(child as core_foundation::base::CFTypeRef);
             node
         })

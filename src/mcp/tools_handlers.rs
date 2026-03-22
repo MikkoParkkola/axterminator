@@ -13,6 +13,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 
 use crate::app::AXApp;
+use crate::mcp::elicitation::is_destructive_element;
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tools::AppRegistry;
 
@@ -158,34 +159,74 @@ pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
     };
     let mode_str = args["mode"].as_str().unwrap_or("background");
     let click_type = args["click_type"].as_str().unwrap_or("single");
+    let confirmed = args["confirm"].as_bool().unwrap_or(false);
     let mode = parse_action_mode(mode_str);
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => {
-                let click_result = match click_type {
-                    "double" => el.double_click_native(mode),
-                    "right" => el.right_click_native(mode),
-                    _ => el.click_native(mode),
-                };
-                match click_result {
-                    Ok(()) => {
-                        let bounds = el.bounds();
-                        ToolCallResult::ok(
-                            json!({
-                                "clicked": true,
-                                "query": query,
-                                "bounds": bounds.map(|(x, y, w, h)| [x, y, w, h])
-                            })
-                            .to_string(),
-                        )
-                    }
-                    Err(e) => ToolCallResult::error(format!("Click failed: {e}")),
+                let destructive = is_element_destructive(&el);
+                if destructive && !confirmed {
+                    return destructive_gate_error(&query);
                 }
+                perform_click(&el, click_type, mode, &query, destructive)
             }
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
         })
         .unwrap_or_else(ToolCallResult::error)
+}
+
+/// Return `true` when the element's title or description contains a destructive keyword.
+fn is_element_destructive(el: &crate::AXElement) -> bool {
+    let title_hit = el
+        .title()
+        .as_deref()
+        .map(is_destructive_element)
+        .unwrap_or(false);
+    let desc_hit = el
+        .description()
+        .as_deref()
+        .map(is_destructive_element)
+        .unwrap_or(false);
+    title_hit || desc_hit
+}
+
+/// Build the error returned when a destructive click is blocked.
+fn destructive_gate_error(query: &str) -> ToolCallResult {
+    ToolCallResult::error(format!(
+        "Destructive action detected: clicking '{query}'. \
+         Re-call ax_click with confirm=true to proceed."
+    ))
+}
+
+/// Execute the click and build the success response.
+fn perform_click(
+    el: &crate::AXElement,
+    click_type: &str,
+    mode: crate::ActionMode,
+    query: &str,
+    destructive: bool,
+) -> ToolCallResult {
+    let click_result = match click_type {
+        "double" => el.double_click_native(mode),
+        "right" => el.right_click_native(mode),
+        _ => el.click_native(mode),
+    };
+    match click_result {
+        Ok(()) => {
+            let bounds = el.bounds();
+            let mut resp = json!({
+                "clicked": true,
+                "query": query,
+                "bounds": bounds.map(|(x, y, w, h)| [x, y, w, h])
+            });
+            if destructive {
+                resp["destructive"] = json!(true);
+            }
+            ToolCallResult::ok(resp.to_string())
+        }
+        Err(e) => ToolCallResult::error(format!("Click failed: {e}")),
+    }
 }
 
 pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
@@ -558,5 +599,65 @@ mod tests {
     #[test]
     fn parse_action_mode_focus_recognised() {
         assert_eq!(parse_action_mode("focus"), crate::ActionMode::Focus);
+    }
+
+    // ------------------------------------------------------------------
+    // Destructive gate helpers
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn destructive_gate_error_contains_query_and_confirm_hint() {
+        // GIVEN: a destructive element query
+        // WHEN: gate error is built
+        let result = destructive_gate_error("Delete All Files");
+        // THEN: error text names the query and the escape hatch
+        assert!(result.is_error);
+        let msg = &result.content[0].text;
+        assert!(
+            msg.contains("Delete All Files"),
+            "query missing from: {msg}"
+        );
+        assert!(
+            msg.contains("confirm=true"),
+            "confirm hint missing from: {msg}"
+        );
+    }
+
+    #[test]
+    fn destructive_gate_error_is_error_result() {
+        // GIVEN/WHEN: any query
+        let result = destructive_gate_error("Reset");
+        // THEN: is_error flag is set
+        assert!(result.is_error);
+    }
+
+    #[test]
+    fn confirm_arg_false_is_treated_as_unconfirmed() {
+        // GIVEN: args with explicit confirm=false (same as absent)
+        let args = json!({"app": "x", "query": "q", "confirm": false});
+        // WHEN: confirm is extracted
+        let confirmed = args["confirm"].as_bool().unwrap_or(false);
+        // THEN: treated as not confirmed
+        assert!(!confirmed);
+    }
+
+    #[test]
+    fn confirm_arg_true_is_treated_as_confirmed() {
+        // GIVEN: args with explicit confirm=true
+        let args = json!({"app": "x", "query": "q", "confirm": true});
+        // WHEN: confirm is extracted
+        let confirmed = args["confirm"].as_bool().unwrap_or(false);
+        // THEN: treated as confirmed
+        assert!(confirmed);
+    }
+
+    #[test]
+    fn confirm_arg_absent_defaults_to_false() {
+        // GIVEN: args without a confirm field
+        let args = json!({"app": "x", "query": "q"});
+        // WHEN: confirm is extracted with default
+        let confirmed = args["confirm"].as_bool().unwrap_or(false);
+        // THEN: defaults to false (unconfirmed)
+        assert!(!confirmed);
     }
 }

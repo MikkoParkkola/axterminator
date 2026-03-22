@@ -13,12 +13,14 @@
 //! to continue falling through to Phase 1.
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
 use crate::mcp::annotations;
+use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::server::WorkflowState;
 use crate::mcp::tools::AppRegistry;
@@ -438,15 +440,16 @@ fn tool_ax_record() -> Tool {
 ///
 /// Workflow tools (`ax_workflow_*`) require session state and are dispatched
 /// separately via [`call_workflow_tool`].
-pub(crate) fn call_tool_innovation(
+pub(crate) fn call_tool_innovation<W: Write>(
     name: &str,
     args: &Value,
     registry: &Arc<AppRegistry>,
+    out: &mut W,
 ) -> Option<ToolCallResult> {
     match name {
         "ax_query" => Some(handle_ax_query(args, registry)),
         "ax_app_profile" => Some(handle_ax_app_profile(args)),
-        "ax_test_run" => Some(handle_ax_test_run(args)),
+        "ax_test_run" => Some(handle_ax_test_run(args, out)),
         "ax_track_workflow" => Some(handle_ax_track_workflow(args)),
         "ax_record" => Some(handle_ax_record(args)),
         _ => None,
@@ -457,14 +460,15 @@ pub(crate) fn call_tool_innovation(
 ///
 /// Called before the stateless `call_tool_innovation` path so that the workflow
 /// tools are intercepted with proper session state access.
-pub(crate) fn call_workflow_tool(
+pub(crate) fn call_workflow_tool<W: Write>(
     name: &str,
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
+    out: &mut W,
 ) -> Option<ToolCallResult> {
     match name {
         "ax_workflow_create" => Some(handle_ax_workflow_create(args, workflows)),
-        "ax_workflow_step" => Some(handle_ax_workflow_step(args, workflows)),
+        "ax_workflow_step" => Some(handle_ax_workflow_step(args, workflows, out)),
         "ax_workflow_status" => Some(handle_ax_workflow_status(args, workflows)),
         _ => None,
     }
@@ -695,7 +699,12 @@ fn capability_to_str(cap: &crate::electron_profiles::AppCapability) -> String {
 }
 
 /// Handle `ax_test_run` — build a `TestCase` from JSON args and run it.
-fn handle_ax_test_run(args: &Value) -> ToolCallResult {
+///
+/// Emits two progress notifications: one before execution begins and one on
+/// completion.  Because `BlackboxTester::run` is synchronous, per-step
+/// notifications are not feasible without restructuring the runner; the
+/// before/after pair lets MCP clients display a spinner during the test run.
+fn handle_ax_test_run<W: Write>(args: &Value, out: &mut W) -> ToolCallResult {
     let Some(app_name) = args["app"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: app");
     };
@@ -705,6 +714,11 @@ fn handle_ax_test_run(args: &Value) -> ToolCallResult {
 
     let steps = parse_test_steps(&args["steps"]);
     let assertions = parse_test_assertions(&args["assertions"]);
+    let total = (steps.len() + assertions.len()).max(1) as u32;
+
+    let mut reporter = ProgressReporter::new(out, total);
+    // Best-effort: start notification — silently ignore I/O failures.
+    let _ = reporter.step(&format!("Running test '{test_name}'…"));
 
     let case = crate::blackbox::TestCase {
         name: test_name,
@@ -714,6 +728,8 @@ fn handle_ax_test_run(args: &Value) -> ToolCallResult {
 
     let tester = crate::blackbox::BlackboxTester::new(&app_name);
     let result = tester.run(&case);
+
+    let _ = reporter.complete("Test complete");
 
     ToolCallResult::ok(
         json!({
@@ -901,6 +917,52 @@ fn handle_workflow_stats() -> ToolCallResult {
     )
 }
 
+// ---------------------------------------------------------------------------
+// Resource endpoint helpers
+// ---------------------------------------------------------------------------
+
+/// Snapshot the global workflow tracker for the `axterminator://workflows` resource.
+///
+/// Returns a JSON object with aggregate stats and all detected workflow patterns
+/// (using the default minimum frequency of 2 occurrences).
+///
+/// # Panics
+///
+/// Panics when the tracker mutex is poisoned, which only occurs if a previous
+/// holder panicked while holding the lock — an unrecoverable state.
+pub(crate) fn workflow_tracking_data() -> serde_json::Value {
+    let tracker = WORKFLOW_TRACKER.lock().unwrap_or_else(|e| e.into_inner());
+    let stats = tracker.stats();
+    let workflows = tracker.detect_workflows(2);
+
+    let top_transition = stats
+        .top_transition
+        .map(|(from, to)| json!({ "from": from, "to": to }));
+
+    let workflows_json: Vec<serde_json::Value> = workflows
+        .iter()
+        .map(|wf| {
+            json!({
+                "name":            wf.name,
+                "apps":            wf.apps,
+                "frequency":       wf.frequency,
+                "avg_duration_ms": wf.avg_duration_ms,
+            })
+        })
+        .collect();
+
+    json!({
+        "workflows_detected": workflows_json.len(),
+        "workflows":          workflows_json,
+        "stats": {
+            "total_transitions": stats.total_transitions,
+            "distinct_apps":     stats.distinct_apps,
+            "top_app":           stats.top_app,
+            "top_transition":    top_transition,
+        },
+    })
+}
+
 /// Map a trigger string to the [`TransitionTrigger`] enum.
 fn parse_transition_trigger(s: &str) -> crate::cross_app::TransitionTrigger {
     use crate::cross_app::TransitionTrigger;
@@ -952,9 +1014,13 @@ fn handle_ax_workflow_create(
 }
 
 /// Handle `ax_workflow_step` — execute the next pending step.
-fn handle_ax_workflow_step(
+///
+/// Emits a progress notification before dispatching the step so MCP clients
+/// can track how far through the workflow execution has reached.
+fn handle_ax_workflow_step<W: Write>(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
+    out: &mut W,
 ) -> ToolCallResult {
     let Some(name) = args["name"].as_str() else {
         return ToolCallResult::error("Missing required field: name");
@@ -1003,6 +1069,17 @@ fn handle_ax_workflow_step(
     let step = state.steps[state.current_step].clone();
     let action_str = step_action_label(&step.action);
     let step_index = state.current_step;
+    let total_steps = state.steps.len() as u32;
+
+    // Emit progress before dispatching: MCP clients see "step N/total".
+    // Best-effort: silently ignore I/O failures so they never mask the result.
+    let _ = crate::mcp::progress::emit_progress(
+        out,
+        &crate::mcp::progress::next_progress_token(),
+        step_index as u32 + 1,
+        total_steps,
+        &format!("Step {}/{total_steps}: {}", step_index + 1, step.id),
+    );
 
     // Simulate step execution: checkpoint steps always succeed; others are
     // recorded as successfully dispatched (actual UI execution is async and
@@ -1213,9 +1290,14 @@ mod tests {
     fn call_tool_innovation_unknown_name_returns_none() {
         // GIVEN: name not in innovation set
         let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
         // WHEN: dispatching unknown name
-        let result =
-            super::call_tool_innovation("ax_nonexistent_innovation", &json!({}), &registry);
+        let result = super::call_tool_innovation(
+            "ax_nonexistent_innovation",
+            &json!({}),
+            &registry,
+            &mut out,
+        );
         // THEN: falls through cleanly
         assert!(result.is_none());
     }
@@ -1224,8 +1306,9 @@ mod tests {
     fn call_tool_innovation_empty_name_returns_none() {
         // GIVEN: empty name (malformed request)
         let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
         // WHEN: dispatching empty name
-        let result = super::call_tool_innovation("", &json!({}), &registry);
+        let result = super::call_tool_innovation("", &json!({}), &registry, &mut out);
         // THEN: falls through cleanly
         assert!(result.is_none());
     }
@@ -1234,6 +1317,7 @@ mod tests {
     fn call_tool_innovation_recognises_all_five_stateless_names() {
         // GIVEN: the five stateless innovation tool names (including ax_record)
         let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
         for name in &[
             "ax_query",
             "ax_app_profile",
@@ -1242,7 +1326,8 @@ mod tests {
             "ax_record",
         ] {
             // WHEN: dispatching with minimal args
-            let result = super::call_tool_innovation(name, &json!({"app": "Ghost"}), &registry);
+            let result =
+                super::call_tool_innovation(name, &json!({"app": "Ghost"}), &registry, &mut out);
             // THEN: result is Some (handler ran, even if it returned an error payload)
             assert!(
                 result.is_some(),
@@ -1255,13 +1340,15 @@ mod tests {
     fn call_tool_innovation_returns_none_for_workflow_tool_names() {
         // GIVEN: workflow tools are stateful — handled by call_workflow_tool, not here
         let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
         for name in &[
             "ax_workflow_create",
             "ax_workflow_step",
             "ax_workflow_status",
         ] {
             // WHEN: dispatching through the stateless path
-            let result = super::call_tool_innovation(name, &json!({"name": "wf"}), &registry);
+            let result =
+                super::call_tool_innovation(name, &json!({"name": "wf"}), &registry, &mut out);
             // THEN: falls through so the stateful dispatcher can pick it up
             assert!(
                 result.is_none(),
@@ -1347,7 +1434,8 @@ mod tests {
     #[test]
     fn ax_test_run_missing_app_returns_error() {
         // GIVEN: no app field
-        let result = super::handle_ax_test_run(&json!({"test_name": "t"}));
+        let mut out = Vec::<u8>::new();
+        let result = super::handle_ax_test_run(&json!({"test_name": "t"}), &mut out);
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Missing"));
     }
@@ -1355,7 +1443,8 @@ mod tests {
     #[test]
     fn ax_test_run_missing_test_name_returns_error() {
         // GIVEN: no test_name field
-        let result = super::handle_ax_test_run(&json!({"app": "TextEdit"}));
+        let mut out = Vec::<u8>::new();
+        let result = super::handle_ax_test_run(&json!({"app": "TextEdit"}), &mut out);
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Missing"));
     }
@@ -1364,8 +1453,11 @@ mod tests {
     fn ax_test_run_empty_case_passes_with_no_steps() {
         // GIVEN: minimal args — no steps, no assertions
         // WHEN: running against a ghost app (no live process needed for empty case)
-        let result =
-            super::handle_ax_test_run(&json!({"app": "__ghost__", "test_name": "empty_test"}));
+        let mut out = Vec::<u8>::new();
+        let result = super::handle_ax_test_run(
+            &json!({"app": "__ghost__", "test_name": "empty_test"}),
+            &mut out,
+        );
         // THEN: not an error; result payload has passed=true
         assert!(!result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
@@ -1375,15 +1467,37 @@ mod tests {
     }
 
     #[test]
+    fn ax_test_run_emits_progress_notifications() {
+        // GIVEN: a test with one step
+        let mut out = Vec::<u8>::new();
+        // WHEN: running
+        let _ = super::handle_ax_test_run(
+            &json!({"app": "__ghost__", "test_name": "prog_test",
+                    "steps": [{"type": "wait_for_element", "query": "X", "timeout_ms": 1}]}),
+            &mut out,
+        );
+        // THEN: at least one notifications/progress line was emitted
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains("notifications/progress"),
+            "expected progress notification in output"
+        );
+    }
+
+    #[test]
     fn ax_test_run_with_wait_step_times_out_for_ghost_app() {
         // GIVEN: one WaitForElement step against an app that doesn't exist
-        let result = super::handle_ax_test_run(&json!({
-            "app": "__ghost__",
-            "test_name": "wait_timeout",
-            "steps": [
-                { "type": "wait_for_element", "query": "Button", "timeout_ms": 1 }
-            ]
-        }));
+        let mut out = Vec::<u8>::new();
+        let result = super::handle_ax_test_run(
+            &json!({
+                "app": "__ghost__",
+                "test_name": "wait_timeout",
+                "steps": [
+                    { "type": "wait_for_element", "query": "Button", "timeout_ms": 1 }
+                ]
+            }),
+            &mut out,
+        );
         // THEN: test ran but failed
         assert!(!result.is_error, "handler itself must not error");
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
@@ -1617,8 +1731,9 @@ mod tests {
     fn ax_workflow_step_missing_name_returns_error() {
         // GIVEN: no name field
         let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
         // WHEN: stepping without a name
-        let result = super::handle_ax_workflow_step(&json!({}), &wf);
+        let result = super::handle_ax_workflow_step(&json!({}), &wf, &mut out);
         // THEN: error payload
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Missing"));
@@ -1628,8 +1743,9 @@ mod tests {
     fn ax_workflow_step_unknown_workflow_returns_error() {
         // GIVEN: workflow not created
         let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
         // WHEN: stepping into a ghost workflow
-        let result = super::handle_ax_workflow_step(&json!({"name": "ghost"}), &wf);
+        let result = super::handle_ax_workflow_step(&json!({"name": "ghost"}), &wf, &mut out);
         // THEN: error payload mentions the workflow name
         assert!(result.is_error);
         assert!(result.content[0].text.contains("ghost"));
@@ -1639,6 +1755,7 @@ mod tests {
     fn ax_workflow_step_advances_through_all_steps() {
         // GIVEN: workflow with 2 steps
         let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
         super::handle_ax_workflow_create(
             &json!({
                 "name": "seq-wf",
@@ -1651,8 +1768,8 @@ mod tests {
         );
 
         // WHEN: stepping twice
-        let r1 = super::handle_ax_workflow_step(&json!({"name": "seq-wf"}), &wf);
-        let r2 = super::handle_ax_workflow_step(&json!({"name": "seq-wf"}), &wf);
+        let r1 = super::handle_ax_workflow_step(&json!({"name": "seq-wf"}), &wf, &mut out);
+        let r2 = super::handle_ax_workflow_step(&json!({"name": "seq-wf"}), &wf, &mut out);
 
         // THEN: first step is not the last; second step completes the workflow
         let v1: serde_json::Value = serde_json::from_str(&r1.content[0].text).unwrap();
@@ -1664,17 +1781,37 @@ mod tests {
     }
 
     #[test]
+    fn ax_workflow_step_emits_progress_notification() {
+        // GIVEN: single-step workflow
+        let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
+        super::handle_ax_workflow_create(
+            &json!({"name": "prog-wf", "steps": [{"id": "s1", "action": "checkpoint"}]}),
+            &wf,
+        );
+        // WHEN: executing the step
+        let _ = super::handle_ax_workflow_step(&json!({"name": "prog-wf"}), &wf, &mut out);
+        // THEN: a progress notification was emitted
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains("notifications/progress"),
+            "expected progress notification"
+        );
+    }
+
+    #[test]
     fn ax_workflow_step_on_completed_workflow_returns_completed_true() {
         // GIVEN: single-step workflow that has been stepped to completion
         let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
         super::handle_ax_workflow_create(
             &json!({"name": "done-wf", "steps": [{"id": "s1", "action": "checkpoint"}]}),
             &wf,
         );
-        super::handle_ax_workflow_step(&json!({"name": "done-wf"}), &wf);
+        super::handle_ax_workflow_step(&json!({"name": "done-wf"}), &wf, &mut out);
 
         // WHEN: stepping again past completion
-        let result = super::handle_ax_workflow_step(&json!({"name": "done-wf"}), &wf);
+        let result = super::handle_ax_workflow_step(&json!({"name": "done-wf"}), &wf, &mut out);
 
         // THEN: completed=true, no error
         assert!(!result.is_error);
@@ -1722,7 +1859,8 @@ mod tests {
             }),
             &wf,
         );
-        super::handle_ax_workflow_step(&json!({"name": "progress-wf"}), &wf);
+        let mut out = Vec::<u8>::new();
+        super::handle_ax_workflow_step(&json!({"name": "progress-wf"}), &wf, &mut out);
 
         // WHEN: checking status after 1 step
         let result = super::handle_ax_workflow_status(&json!({"name": "progress-wf"}), &wf);
@@ -1783,8 +1921,9 @@ mod tests {
     fn call_workflow_tool_unknown_name_returns_none() {
         // GIVEN: name not in workflow set
         let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
         // WHEN: dispatching an unknown name
-        let result = super::call_workflow_tool("ax_nonexistent", &json!({}), &wf);
+        let result = super::call_workflow_tool("ax_nonexistent", &json!({}), &wf, &mut out);
         // THEN: falls through cleanly
         assert!(result.is_none());
     }
@@ -1793,13 +1932,14 @@ mod tests {
     fn call_workflow_tool_recognises_all_three_names() {
         // GIVEN: all three workflow tool names with minimal (error-triggering) args
         let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
         for name in &[
             "ax_workflow_create",
             "ax_workflow_step",
             "ax_workflow_status",
         ] {
             // WHEN: dispatching
-            let result = super::call_workflow_tool(name, &json!({}), &wf);
+            let result = super::call_workflow_tool(name, &json!({}), &wf, &mut out);
             // THEN: handler ran (Some), even if the payload is an error
             assert!(
                 result.is_some(),

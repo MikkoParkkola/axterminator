@@ -140,7 +140,7 @@ pub fn call_tool_extended<W: Write>(
         // via the Server::call_watch_tool helper instead.
         _ => {
             if let Some(result) =
-                crate::mcp::tools_innovation::call_tool_innovation(name, args, registry)
+                crate::mcp::tools_innovation::call_tool_innovation(name, args, registry, out)
             {
                 return Some(result);
             }

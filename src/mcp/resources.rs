@@ -160,6 +160,26 @@ pub fn static_resources() -> ResourceListResult {
         mime_type: "application/json",
     });
 
+    resources.push(Resource {
+        uri: "axterminator://workflows",
+        name: "detected-workflows",
+        title: "Detected Cross-App Workflows",
+        description: "Aggregate stats and detected cross-app workflow patterns observed \
+            via ax_track_workflow. Patterns repeat at least twice to appear here. \
+            Useful for discovering automation candidates across apps.",
+        mime_type: "application/json",
+    });
+
+    resources.push(Resource {
+        uri: "axterminator://profiles",
+        name: "electron-app-profiles",
+        title: "Electron App Profiles",
+        description: "All built-in Electron app profiles with capabilities, CSS selectors, \
+            keyboard shortcuts, and CDP debug ports. Covers VS Code, Slack, Chrome, \
+            Terminal, and Finder. Use selectors with CDP and shortcuts with ax_shortcut.",
+        mime_type: "application/json",
+    });
+
     ResourceListResult { resources }
 }
 
@@ -202,6 +222,16 @@ pub fn resource_templates() -> ResourceTemplateListResult {
                     "Current UI state: window titles, focused element, visible text summary.",
                 mime_type: "application/json",
             },
+            ResourceTemplate {
+                uri_template: "axterminator://app/{name}/query/{question}",
+                name: "app-scene-query",
+                title: "Natural-Language Scene Query",
+                description: "Query the live accessibility scene graph of a connected app \
+                    with a natural-language question. Returns confidence, a scene description, \
+                    and matching elements with roles, labels, and bounds. \
+                    Example: axterminator://app/Safari/query/is%20there%20a%20search%20field",
+                mime_type: "application/json",
+            },
         ],
     }
 }
@@ -233,6 +263,8 @@ pub fn read_resource(
         "axterminator://system/status" => read::read_system_status(uri, registry),
         "axterminator://system/displays" => read::read_system_displays(uri),
         "axterminator://apps" => read::read_running_apps(uri, registry),
+        "axterminator://workflows" => read::read_workflows(uri),
+        "axterminator://profiles" => read::read_profiles(uri),
         #[cfg(feature = "spaces")]
         "axterminator://spaces" => read::read_spaces(uri),
         #[cfg(feature = "audio")]
