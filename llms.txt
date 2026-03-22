@@ -219,4 +219,4 @@ cargo build --release --features cli,audio,camera,watch,spaces,http-transport
 
 ## Version
 
-0.7.0
+0.7.1
