@@ -28,6 +28,7 @@
 #![allow(hidden_glob_reexports)]
 #![allow(clippy::useless_conversion)]
 
+#[cfg(feature = "python-ext")]
 use pyo3::prelude::*;
 
 #[cfg(feature = "audio")]
@@ -80,7 +81,7 @@ pub use router::*;
 pub use sync::*;
 
 /// Action mode for element interactions
-#[pyclass(eq, eq_int, from_py_object)]
+#[cfg_attr(feature = "python-ext", pyclass(eq, eq_int, from_py_object))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActionMode {
     /// Perform action in background without stealing focus (DEFAULT)
@@ -91,6 +92,7 @@ pub enum ActionMode {
 }
 
 /// Initialize the Python module
+#[cfg(feature = "python-ext")]
 #[pymodule]
 fn axterminator(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ActionMode>()?;
@@ -132,6 +134,7 @@ fn axterminator(m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// # By PID
 /// safari = ax.app(pid=12345)
 /// ```
+#[cfg(feature = "python-ext")]
 #[pyfunction(name = "app")]
 #[pyo3(signature = (name=None, bundle_id=None, pid=None))]
 fn connect_app(name: Option<&str>, bundle_id: Option<&str>, pid: Option<u32>) -> PyResult<AXApp> {
@@ -148,6 +151,7 @@ fn connect_app(name: Option<&str>, bundle_id: Option<&str>, pid: Option<u32>) ->
 /// if not ax.is_accessibility_enabled():
 ///     print("Enable in System Preferences > Privacy > Accessibility")
 /// ```
+#[cfg(feature = "python-ext")]
 #[pyfunction]
 fn is_accessibility_enabled() -> bool {
     accessibility::check_accessibility_enabled()
@@ -157,9 +161,11 @@ fn is_accessibility_enabled() -> bool {
 ///
 /// # Arguments
 /// * `config` - Healing configuration
+#[cfg(feature = "python-ext")]
 #[pyfunction]
 fn configure_healing(config: HealingConfig) -> PyResult<()> {
     healing::set_global_config(config)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
 }
 
 #[cfg(test)]

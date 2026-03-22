@@ -34,27 +34,6 @@ jobs:
       - name: Build release binary
         run: cargo build --release --features cli --target ${{ matrix.target }}
 
-      - name: Fix Python dynamic linkage
-        run: |
-          BINARY="target/${{ matrix.target }}/release/axterminator"
-          # Find the absolute Python framework path baked into the binary
-          PYTHON_PATH=$(otool -L "$BINARY" | grep -o '/.*Python\.framework/[^ ]*' | head -1)
-          if [ -n "$PYTHON_PATH" ]; then
-            echo "Rewriting Python linkage: $PYTHON_PATH"
-            # Extract the framework-relative portion
-            FRAMEWORK_REL=$(echo "$PYTHON_PATH" | sed 's|.*/\(Python\.framework/.*\)|\1|')
-            install_name_tool -change "$PYTHON_PATH" "@rpath/$FRAMEWORK_REL" "$BINARY"
-            # Add common rpath search locations
-            install_name_tool -add_rpath /Library/Frameworks "$BINARY" 2>/dev/null || true
-            install_name_tool -add_rpath /usr/local/Frameworks "$BINARY" 2>/dev/null || true
-            install_name_tool -add_rpath /opt/homebrew/Frameworks "$BINARY" 2>/dev/null || true
-            install_name_tool -add_rpath @executable_path/../Frameworks "$BINARY" 2>/dev/null || true
-            echo "Updated linkage:"
-            otool -L "$BINARY" | grep -i python || true
-          else
-            echo "No Python framework linkage found"
-          fi
-
       - name: Rename artifacts
         run: |
           cd target/${{ matrix.target }}/release

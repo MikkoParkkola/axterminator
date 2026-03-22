@@ -29,14 +29,14 @@ required-features = ["cli"]
 # - The standalone CLI binary is built with `cargo build --bin axterminator`
 #   (default features = cli only), which links Python explicitly via build.rs.
 default = ["cli"]
-cli = ["dep:clap", "dep:clap_complete", "pyo3/auto-initialize"]
+cli = ["dep:clap", "dep:clap_complete"]
 # spaces: virtual desktop management via CGSSpace private SPI.
 # Off by default — private API, macOS 14+ tested, incompatible with App Store.
 spaces = []
 # python-ext: enables the `extension-module` linker flag that defers Python symbol
 # resolution to the embedding interpreter at runtime.  Must be DISABLED when
-# building the standalone CLI binary (which links Python explicitly via build.rs).
-python-ext = ["pyo3/extension-module"]
+# building the standalone CLI binary (which has zero Python dependency).
+python-ext = ["dep:pyo3", "pyo3/extension-module"]
 # http-transport: Streamable HTTP + SSE transport (axum, tokio-stream).
 # Feature-gated to keep the default CLI binary lean.
 http-transport = ["dep:axum", "dep:tokio-stream", "dep:rand"]
@@ -56,8 +56,9 @@ watch = ["audio", "camera", "dep:tokio-util"]
 
 [dependencies]
 # Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
-# extension-module is gated via the python-ext feature — see build.rs and [features]
-pyo3 = { version = "0.28", features = ["abi3-py39"] }
+# Optional: only compiled when the python-ext feature is enabled (maturin build).
+# The CLI binary has zero Python dependency.
+pyo3 = { version = "0.28", features = ["abi3-py39"], optional = true }
 
 # CLI (feature-gated so it's only compiled for the binary target)
 clap = { version = "4.5", features = ["derive", "wrap_help", "env"], optional = true }

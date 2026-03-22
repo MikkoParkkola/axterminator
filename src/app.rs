@@ -2,6 +2,7 @@
 
 #![allow(clippy::useless_conversion)]
 
+#[cfg(feature = "python-ext")]
 use pyo3::prelude::*;
 use std::process::Command;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ use crate::error::{AXError, AXResult};
 use crate::sync::SyncEngine;
 
 /// Application wrapper providing the main entry point for GUI automation
-#[pyclass]
+#[cfg_attr(feature = "python-ext", pyclass)]
 pub struct AXApp {
     /// Process ID of the application
     pub(crate) pid: i32,
@@ -46,6 +47,7 @@ impl std::fmt::Debug for AXApp {
 unsafe impl Send for AXApp {}
 unsafe impl Sync for AXApp {}
 
+#[cfg(feature = "python-ext")]
 #[pymethods]
 impl AXApp {
     /// Get the process ID
@@ -233,6 +235,7 @@ impl AXApp {
     }
 
     /// Connect to an application — `PyResult` shim for `#[pymethods]`.
+    #[cfg(feature = "python-ext")]
     pub fn connect(
         name: Option<&str>,
         bundle_id: Option<&str>,

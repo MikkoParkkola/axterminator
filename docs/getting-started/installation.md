@@ -40,7 +40,7 @@ curl -L --fail -o /usr/local/bin/axterminator \
 chmod +x /usr/local/bin/axterminator
 ```
 
-**Note:** The prebuilt binary requires Python 3.9+ installed on the system. If you see `dyld: Library not loaded` errors mentioning `Python.framework`, build from source instead.
+The prebuilt binary is fully self-contained — no Python or other runtime dependencies required.
 
 ### Build from Source
 
@@ -121,7 +121,6 @@ else:
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `dyld: Library not loaded: .../Python.framework/...` | Prebuilt binary can't find system Python | Build from source: `cargo build --release --features cli` |
 | `command not found: axterminator` | Binary not in PATH | Use full path or `cargo install axterminator --features cli` |
 | `error: no matching package` on crates.io | Rust toolchain too old | Update: `rustup update stable` |
 | Python `import axterminator` fails | Missing Rust extension | Rebuild: `pip install maturin && maturin develop` |

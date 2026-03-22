@@ -36,7 +36,7 @@ fn main() {
     // runtime via the embedding interpreter.
     //
     // When `python-ext` is *disabled* (i.e. building the standalone CLI binary),
-    // we must link libpython explicitly so the linker can resolve Python symbols.
+    // pyo3 is not a dependency at all — no Python linking is needed or performed.
     //
     // Cargo exposes enabled features as `CARGO_FEATURE_<UPPER>` env vars inside
     // build scripts, so this detection is reliable across all targets in the crate.
@@ -46,16 +46,9 @@ fn main() {
         // Python extension (.so / .dylib): delegate symbol resolution to the
         // embedding interpreter via -undefined dynamic_lookup.
         pyo3_build_config::add_extension_module_link_args();
-    } else {
-        // Standalone binary: link libpython explicitly.
-        let config = pyo3_build_config::get();
-        if let Some(lib_dir) = config.lib_dir.as_ref() {
-            println!("cargo:rustc-link-search=native={lib_dir}");
-        }
-        if let Some(lib_name) = config.lib_name.as_ref() {
-            println!("cargo:rustc-link-lib=dylib={lib_name}");
-        }
     }
+    // When python-ext is disabled, don't link Python at all.
+    // The CLI binary has zero Python dependency.
 }
 
 /// Compile `src/camera_objc.m` into a static library that Cargo links.

@@ -69,7 +69,7 @@ chmod +x ~/.local/bin/axterminator
 ~/.local/bin/axterminator check
 ```
 
-**NOTE**: The prebuilt binary requires Python 3.9+ installed on the system. If you see a `dyld: Library not loaded` error mentioning `Python.framework`, fall back to Option A (build from source).
+The prebuilt binary is fully self-contained — no Python or other runtime dependencies required.
 
 ### Option D: PyPI (Python library only, NOT the MCP server)
 
@@ -202,11 +202,9 @@ ax_find query="description:equals"
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `dyld: Library not loaded: .../Python.framework/...` | Prebuilt binary needs Python | Build from source (Option A) |
 | `Accessibility: DISABLED` | No permission | See PERMISSIONS section |
 | `Element not found` for short labels like "1" | App uses AXDescription not AXTitle | Use `description:1` or check tree with `ax_get_tree` |
 | `Application not found` | App not running or wrong name | Use bundle ID: `ax_connect app="com.apple.calculator"` |
-| Binary works in source tree but not when copied | macOS library path issue | Use full path to source build, or build with `cargo install` |
 
 ## Feature Flags (build-time)
 

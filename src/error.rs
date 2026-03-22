@@ -1,7 +1,5 @@
 //! Error types for `AXTerminator`
 
-use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::*;
 use thiserror::Error;
 
 /// `AXTerminator` error types
@@ -38,9 +36,10 @@ pub enum AXError {
     SystemError(String),
 }
 
-impl From<AXError> for PyErr {
-    fn from(err: AXError) -> PyErr {
-        PyRuntimeError::new_err(err.to_string())
+#[cfg(feature = "python-ext")]
+impl From<AXError> for pyo3::PyErr {
+    fn from(err: AXError) -> pyo3::PyErr {
+        pyo3::exceptions::PyRuntimeError::new_err(err.to_string())
     }
 }
 

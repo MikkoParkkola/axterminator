@@ -2,6 +2,7 @@
 
 #![allow(clippy::useless_conversion)]
 
+#[cfg(feature = "python-ext")]
 use pyo3::prelude::*;
 use std::time::Duration;
 
@@ -12,7 +13,7 @@ use crate::error::{AXError, AXResult};
 use crate::ActionMode;
 
 /// Wrapper for an accessibility element
-#[pyclass(from_py_object)]
+#[cfg_attr(feature = "python-ext", pyclass(from_py_object))]
 #[derive(Debug)]
 pub struct AXElement {
     /// Raw accessibility element reference
@@ -39,7 +40,7 @@ impl Clone for AXElement {
 unsafe impl Send for AXElement {}
 unsafe impl Sync for AXElement {}
 
-#[pymethods]
+// Pure-Rust accessors — always compiled, used by the CLI, MCP server, and tests.
 impl AXElement {
     /// Get the element's role (e.g., "`AXButton`", "`AXTextField`")
     pub fn role(&self) -> Option<String> {
@@ -84,7 +85,7 @@ impl AXElement {
     }
 
     /// Check if the element exists in the UI
-    fn exists(&self) -> bool {
+    pub fn exists(&self) -> bool {
         self.role().is_some()
     }
 
@@ -94,7 +95,13 @@ impl AXElement {
         let size = accessibility::get_size_attribute(self.element)?;
         Some((position.x, position.y, size.width, size.height))
     }
+}
 
+// Python extension methods — only compiled when the python-ext feature is active.
+// These wrap the `_native` methods into `PyResult`-returning forms expected by pyo3.
+#[cfg(feature = "python-ext")]
+#[pymethods]
+impl AXElement {
     /// Click the element
     ///
     /// # Arguments
@@ -160,6 +167,29 @@ impl AXElement {
         self.find_child(query, timeout)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
+
+    // pyo3 needs the pure-Rust accessors exposed as Python properties.
+    // `#[getter(name)]` sets the Python attribute name; the Rust fn name is prefixed
+    // to avoid collision with the plain `impl AXElement` methods above.
+    #[getter(role)]
+    fn py_role(&self) -> Option<String> { self.role() }
+    #[getter(title)]
+    fn py_title(&self) -> Option<String> { self.title() }
+    #[getter(value)]
+    fn py_value(&self) -> Option<String> { self.value() }
+    #[getter(description)]
+    fn py_description(&self) -> Option<String> { self.description() }
+    #[getter(label)]
+    fn py_label(&self) -> Option<String> { self.label() }
+    #[getter(identifier)]
+    fn py_identifier(&self) -> Option<String> { self.identifier() }
+    #[getter(enabled)]
+    fn py_enabled(&self) -> bool { self.enabled() }
+    #[getter(focused)]
+    fn py_focused(&self) -> bool { self.focused() }
+    fn exists_py(&self) -> bool { self.exists() }
+    #[getter(bounds)]
+    fn py_bounds(&self) -> Option<(f64, f64, f64, f64)> { self.bounds() }
 }
 
 impl AXElement {
@@ -226,7 +256,8 @@ impl AXElement {
     }
 
     /// Perform click action (pyo3 wrapper — converts to PyErr).
-    // Called from #[pymethods] block; only visible to Rust when python-ext is active.
+    // Only compiled when python-ext is active; dead_code suppressed for CLI builds.
+    #[cfg(feature = "python-ext")]
     #[allow(dead_code)]
     fn perform_click(&self, mode: ActionMode) -> PyResult<()> {
         self.perform_click_native(mode)
@@ -339,7 +370,8 @@ impl AXElement {
     }
 
     /// Bring the element to focus (public wrapper for Python)
-    // Called from #[pymethods] block; only visible to Rust when python-ext is active.
+    // Only compiled when python-ext is active; dead_code suppressed for CLI builds.
+    #[cfg(feature = "python-ext")]
     #[allow(dead_code)]
     fn bring_to_focus(&self) -> PyResult<()> {
         self.bring_to_focus_internal()

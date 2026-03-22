@@ -14,6 +14,7 @@
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, TCFType};
 use core_foundation::string::CFString;
+#[cfg(feature = "python-ext")]
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -43,25 +44,52 @@ pub enum HealStrategy {
 }
 
 /// Healing configuration
-#[pyclass(from_py_object)]
+#[cfg_attr(feature = "python-ext", pyclass(from_py_object))]
 #[derive(Debug, Clone)]
 pub struct HealingConfig {
     /// Ordered list of strategies to try
-    #[pyo3(get, set)]
     pub strategies: Vec<String>,
     /// Maximum time budget for healing (ms)
-    #[pyo3(get, set)]
     pub max_heal_time_ms: u64,
     /// Whether to cache successful heals
-    #[pyo3(get, set)]
     pub cache_healed: bool,
 }
 
+#[cfg(feature = "python-ext")]
 #[pymethods]
 impl HealingConfig {
     #[new]
     #[pyo3(signature = (strategies=None, max_heal_time_ms=100, cache_healed=true))]
-    fn new(strategies: Option<Vec<String>>, max_heal_time_ms: u64, cache_healed: bool) -> Self {
+    fn py_new(strategies: Option<Vec<String>>, max_heal_time_ms: u64, cache_healed: bool) -> Self {
+        Self::new(strategies, max_heal_time_ms, cache_healed)
+    }
+
+    #[getter]
+    fn strategies(&self) -> Vec<String> { self.strategies.clone() }
+    #[setter]
+    fn set_strategies(&mut self, v: Vec<String>) { self.strategies = v; }
+
+    #[getter]
+    fn max_heal_time_ms(&self) -> u64 { self.max_heal_time_ms }
+    #[setter]
+    fn set_max_heal_time_ms(&mut self, v: u64) { self.max_heal_time_ms = v; }
+
+    #[getter]
+    fn cache_healed(&self) -> bool { self.cache_healed }
+    #[setter]
+    fn set_cache_healed(&mut self, v: bool) { self.cache_healed = v; }
+}
+
+impl HealingConfig {
+    /// Construct a `HealingConfig` with optional strategy list.
+    ///
+    /// Used by tests and Rust-native callers. The `#[pymethods]` block provides
+    /// the same constructor to Python via pyo3 when the `python-ext` feature is active.
+    pub fn new(
+        strategies: Option<Vec<String>>,
+        max_heal_time_ms: u64,
+        cache_healed: bool,
+    ) -> Self {
         Self {
             strategies: strategies.unwrap_or_else(|| {
                 vec![
@@ -106,10 +134,12 @@ static HEALING_CACHE: std::sync::LazyLock<RwLock<HashMap<String, ElementQuery>>>
     std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Set the global healing configuration
-pub fn set_global_config(config: HealingConfig) -> PyResult<()> {
+///
+/// Returns `AXResult` in all builds; the Python extension wraps this at call site.
+pub fn set_global_config(config: HealingConfig) -> crate::error::AXResult<()> {
     let mut global = GLOBAL_CONFIG
         .write()
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| crate::error::AXError::SystemError(e.to_string()))?;
     *global = Some(config);
     Ok(())
 }
@@ -593,6 +623,9 @@ fn try_by_position(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEleme
     }
 }
 
+// VLM-based visual detection requires an active Python interpreter and is only
+// available when the python-ext feature is enabled.
+#[cfg(feature = "python-ext")]
 fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement> {
     // VLM-based visual matching using Python MLX/Claude/GPT-4o
     //
@@ -644,6 +677,12 @@ fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement
         return find_element_at_position(root, x, y);
     }
 
+    None
+}
+
+// CLI / no-python build: VLM visual strategy is unavailable; always return None.
+#[cfg(not(feature = "python-ext"))]
+fn try_by_visual(_query: &ElementQuery, _root: AXUIElementRef) -> Option<AXElement> {
     None
 }
 

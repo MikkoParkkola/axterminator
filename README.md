@@ -141,7 +141,6 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `dyld: Library not loaded: .../Python.framework/...` | Prebuilt binary can't find Python | Build from source instead |
 | `Accessibility: DISABLED` | No permission granted | System Settings > Privacy & Security > Accessibility |
 | `Element not found` for short labels | App uses `AXDescription` not `AXTitle` | Try `description:label` or inspect with `axterminator tree` |
 | `Application not found` | Wrong name or app not running | Use bundle ID: `--bundle-id com.apple.calculator` |
