@@ -56,11 +56,7 @@ impl HealingConfig {
     /// Construct a `HealingConfig` with optional strategy list.
     ///
     /// Used by tests and Rust-native callers.
-    pub fn new(
-        strategies: Option<Vec<String>>,
-        max_heal_time_ms: u64,
-        cache_healed: bool,
-    ) -> Self {
+    pub fn new(strategies: Option<Vec<String>>, max_heal_time_ms: u64, cache_healed: bool) -> Self {
         Self {
             strategies: strategies.unwrap_or_else(|| {
                 vec![

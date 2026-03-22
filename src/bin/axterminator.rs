@@ -503,6 +503,7 @@ fn print_element_tree(el: &axterminator::AXElement, indent: usize, max_depth: us
     let role = el.role().unwrap_or_else(|| "?".into());
     let label = el
         .title()
+        .or_else(|| el.description())
         .or_else(|| el.label())
         .or_else(|| el.value())
         .unwrap_or_default();
@@ -512,6 +513,12 @@ fn print_element_tree(el: &axterminator::AXElement, indent: usize, max_depth: us
         format!(" \"{label}\"")
     };
     println!("{prefix}{role}{suffix}");
+
+    if indent < max_depth {
+        for child in el.children() {
+            print_element_tree(&child, indent + 1, max_depth);
+        }
+    }
 }
 
 fn cmd_apps() -> Result<()> {

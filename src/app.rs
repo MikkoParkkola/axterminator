@@ -277,58 +277,92 @@ impl AXApp {
         Ok(AXElement::new(main_window_ref as AXUIElementRef))
     }
 
-    /// Perform breadth-first search for element matching criteria
+    /// Perform breadth-first search for element matching criteria.
     ///
-    /// Memory management:
-    /// - Root element (self.element) is NOT retained - it's borrowed from self
-    /// - Children from `cf_array_to_vec` ARE retained and must be released if not used
-    /// - The matching element is returned with ownership (retained)
+    /// Searches within application windows first to exclude menu bars and system
+    /// UI elements (AXMenuBar, AXMenu, AXMenuItem) from the traversal. Falls
+    /// back to searching from the app root when no windows are present.
+    ///
+    /// # Memory management
+    /// - `self.element` is NOT retained — it is borrowed from `self`.
+    /// - Elements returned by `cf_array_to_vec` ARE retained; callers must
+    ///   release them when no longer needed.
+    /// - The matched element is returned with its existing retain count (owned).
     fn breadth_first_search(&self, criteria: &SearchCriteria) -> AXResult<AXElement> {
         use core_foundation::base::CFTypeRef;
         use std::collections::VecDeque;
 
-        // First check the root element itself
-        if self.element_matches(self.element, criteria) {
-            // Need to retain since self owns the original
-            let _ = accessibility::retain_cf(self.element as CFTypeRef);
-            return Ok(AXElement::new(self.element));
-        }
+        let mut queue: VecDeque<AXUIElementRef> = VecDeque::new();
 
-        // Queue holds (element, is_root) - root doesn't need releasing
-        let mut queue: VecDeque<(AXUIElementRef, bool)> = VecDeque::new();
-
-        // Get children of root (these are retained by cf_array_to_vec)
-        if let Ok(children_ref) = get_attribute(self.element, attributes::AX_CHILDREN) {
-            if let Some(children) = cf_array_to_vec(children_ref) {
-                for child in children {
-                    queue.push_back((child, false)); // not root, needs release
+        // Prefer window-scoped search: excludes AXMenuBar and global UI elements.
+        let mut seeded_from_windows = false;
+        if let Ok(windows_ref) = get_attribute(self.element, attributes::AX_WINDOWS) {
+            if let Some(windows) = cf_array_to_vec(windows_ref) {
+                for win in &windows {
+                    if self.element_matches(*win, criteria) {
+                        // Release all other retained window refs before returning.
+                        for other in &windows {
+                            if !std::ptr::eq(*other, *win) {
+                                accessibility::release_cf(*other as CFTypeRef);
+                            }
+                        }
+                        accessibility::release_cf(windows_ref);
+                        return Ok(AXElement::new(*win));
+                    }
+                    // Seed the queue with this window's children.
+                    if let Ok(children_ref) = get_attribute(*win, attributes::AX_CHILDREN) {
+                        if let Some(children) = cf_array_to_vec(children_ref) {
+                            for child in children {
+                                queue.push_back(child);
+                            }
+                        }
+                        accessibility::release_cf(children_ref);
+                    }
+                    // Window ref is no longer needed — we only use its children.
+                    accessibility::release_cf(*win as CFTypeRef);
                 }
+                seeded_from_windows = true;
             }
-            accessibility::release_cf(children_ref);
+            accessibility::release_cf(windows_ref);
         }
 
-        while let Some((current, _is_root)) = queue.pop_front() {
-            // Check if current element matches criteria
+        // Fallback: no windows found — search from the app root element.
+        if !seeded_from_windows {
+            if self.element_matches(self.element, criteria) {
+                // Retain because self owns the original; AXElement takes ownership.
+                let _ = accessibility::retain_cf(self.element as CFTypeRef);
+                return Ok(AXElement::new(self.element));
+            }
+            if let Ok(children_ref) = get_attribute(self.element, attributes::AX_CHILDREN) {
+                if let Some(children) = cf_array_to_vec(children_ref) {
+                    for child in children {
+                        queue.push_back(child);
+                    }
+                }
+                accessibility::release_cf(children_ref);
+            }
+        }
+
+        // BFS over the queue; all elements are retained by cf_array_to_vec.
+        while let Some(current) = queue.pop_front() {
             if self.element_matches(current, criteria) {
-                // Element is already retained from cf_array_to_vec, pass ownership
-                // Release remaining elements in queue
-                for (elem, _) in queue {
+                // Release every element still waiting in the queue.
+                for elem in queue {
                     accessibility::release_cf(elem as CFTypeRef);
                 }
                 return Ok(AXElement::new(current));
             }
 
-            // Get children and add to queue (they're retained by cf_array_to_vec)
             if let Ok(children_ref) = get_attribute(current, attributes::AX_CHILDREN) {
                 if let Some(children) = cf_array_to_vec(children_ref) {
                     for child in children {
-                        queue.push_back((child, false));
+                        queue.push_back(child);
                     }
                 }
                 accessibility::release_cf(children_ref);
             }
 
-            // Release this element since we didn't match it
+            // Did not match — release this element.
             accessibility::release_cf(current as CFTypeRef);
         }
 
@@ -348,8 +382,8 @@ impl AXApp {
             ];
             let found = attrs.iter().any(|attr| {
                 get_attribute(element, attr).is_ok_and(|r| {
-                    let matched = cf_string_to_string(r)
-                        .is_some_and(|s| s.contains(needle.as_str()));
+                    let matched =
+                        cf_string_to_string(r).is_some_and(|s| s.contains(needle.as_str()));
                     accessibility::release_cf(r);
                     matched
                 })

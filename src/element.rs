@@ -92,6 +92,18 @@ impl AXElement {
         let size = accessibility::get_size_attribute(self.element)?;
         Some((position.x, position.y, size.width, size.height))
     }
+
+    /// Get the element's direct children.
+    ///
+    /// Returns an empty `Vec` when the element has no children or the
+    /// accessibility API reports an error (e.g. the element is a leaf node).
+    pub fn children(&self) -> Vec<AXElement> {
+        accessibility::get_children(self.element)
+            .unwrap_or_default()
+            .into_iter()
+            .map(AXElement::new)
+            .collect()
+    }
 }
 
 impl AXElement {

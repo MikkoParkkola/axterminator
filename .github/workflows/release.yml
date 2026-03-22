@@ -32,30 +32,18 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --features cli --target ${{ matrix.target }}
+        run: cargo build --release --locked --features cli --target ${{ matrix.target }}
 
       - name: Rename artifacts
         run: |
           cd target/${{ matrix.target }}/release
-          # CLI binary
-          if [ -f axterminator ]; then
-            cp axterminator axterminator-${{ matrix.target }}
-          fi
-          # Library
-          if [ -f libaxterminator.dylib ]; then
-            cp libaxterminator.dylib axterminator-${{ matrix.target }}.dylib
-          fi
-          if [ -f libaxterminator.rlib ]; then
-            cp libaxterminator.rlib axterminator-${{ matrix.target }}.rlib
-          fi
+          cp axterminator axterminator-${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: axterminator-${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/release/axterminator-${{ matrix.target }}
-            target/${{ matrix.target }}/release/axterminator-${{ matrix.target }}.*
+          path: target/${{ matrix.target }}/release/axterminator-${{ matrix.target }}
 
   release:
     name: Create GitHub Release
@@ -75,7 +63,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.dylib" -o -name "*.rlib" -o -name "axterminator-*-apple-darwin" \) -exec cp {} release/ \;
+          find artifacts -type f -name "axterminator-*-apple-darwin" -exec cp {} release/ \;
           cd release
           ls -la
           sha256sum * > checksums-sha256.txt || shasum -a 256 * > checksums-sha256.txt
