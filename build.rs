@@ -1,4 +1,18 @@
 fn main() {
+    // Embed Info.plist into every binary target so CoreLocation (and other
+    // TCC-gated frameworks) can display system permission dialogs from CLI
+    // tools.  Without an embedded plist, `requestWhenInUseAuthorization`
+    // silently returns kCLAuthorizationStatusDenied for CLI tools.
+    //
+    // `rustc-link-arg-bins` applies only to [[bin]] targets, leaving the
+    // rlib clean.  The path is relative to the workspace root at link time.
+    let plist = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/Info.plist");
+    println!("cargo:rustc-link-arg-bins=-sectcreate");
+    println!("cargo:rustc-link-arg-bins=__TEXT");
+    println!("cargo:rustc-link-arg-bins=__info_plist");
+    println!("cargo:rustc-link-arg-bins={plist}");
+    println!("cargo:rerun-if-changed=resources/Info.plist");
+
     // macOS frameworks needed for accessibility API
     println!("cargo:rustc-link-lib=framework=ApplicationServices");
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
