@@ -116,6 +116,22 @@ bool axt_sck_is_available(void) {
 /// On macOS 14+, this sets SCStreamConfiguration.width=0, height=0 with
 /// capturesAudio=true, which avoids the Screen Recording TCC permission dialog.
 ///
+/// ## Thread safety
+///
+/// ScreenCaptureKit requires that `getShareableContent` and
+/// `startCaptureWithCompletionHandler:` be initiated from a thread that has
+/// an active CoreFoundation run loop — or equivalently, from a GCD queue that
+/// the framework's internal machinery can schedule callbacks back onto.  When
+/// called from a raw POSIX/std::thread (as Rust's `std::thread::spawn` creates),
+/// SCK returns "Failed due to an invalid parameter" from `startCapture`.
+///
+/// Fix: perform the two SCK control operations (`getShareableContent` and
+/// `startCapture`) synchronously on the main dispatch queue via
+/// `dispatch_sync(dispatch_get_main_queue(), …)`.  The calling thread is always
+/// a Rust background thread, so dispatching to main never deadlocks.
+/// The duration sleep and `stopCapture` remain on a global concurrent queue
+/// so we do not block the main run loop for the full capture window.
+///
 /// The caller is responsible for calling `axt_sck_free_result` to release
 /// the returned sample buffer.
 AXTSCKCaptureResult axt_sck_capture_system_audio(float duration_secs) {
@@ -129,122 +145,171 @@ AXTSCKCaptureResult axt_sck_capture_system_audio(float duration_secs) {
     }
 
     if (@available(macOS 14.0, *)) {
-        // Synchronisation: we block the calling thread while async SCK ops complete.
-        dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+        // The outer semaphore gates the calling Rust thread until the entire
+        // SCK setup, capture, and teardown cycle completes.
+        dispatch_semaphore_t doneSem = dispatch_semaphore_create(0);
 
-        __block SCShareableContent *sharedContent = nil;
-        __block NSError *contentError = nil;
+        // Heap-allocate the result so the main-queue block can write into it
+        // after this stack frame has returned (it hasn't — we wait on doneSem —
+        // but being explicit about ownership avoids subtle ARC/block-copy bugs).
+        __block AXTSCKCaptureResult blockResult = {0};
+        float captureDuration = duration_secs;
 
-        // 1. Get shareable content (displays).
-        [SCShareableContent getShareableContentExcludingDesktopWindows:NO
-                                                  onScreenWindowsOnly:YES
-                                                    completionHandler:^(SCShareableContent *content,
-                                                                        NSError *error) {
-            sharedContent = content;
-            contentError = error;
-            dispatch_semaphore_signal(sem);
-        }];
-        dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+        // Dispatch the SCK control operations to the main queue.  SCK's
+        // completion handlers are delivered on internal GCD queues, but the
+        // *initiating* call must come from a proper dispatch context.  The main
+        // queue is the simplest correct choice: it always has a run loop, and
+        // we are never called from the main thread.
+        dispatch_async(dispatch_get_main_queue(), ^{
 
-        if (contentError || !sharedContent || sharedContent.displays.count == 0) {
-            result.error_code = 2;
-            snprintf(result.error_msg, sizeof(result.error_msg),
-                     "No display available for SCK content filter: %s",
-                     contentError ? contentError.localizedDescription.UTF8String : "no displays");
-            return result;
-        }
+            // ---- Step 1: Get shareable content (must be on a dispatch queue) ----
+            __block SCShareableContent *sharedContent = nil;
+            __block NSError *contentError = nil;
+            dispatch_semaphore_t contentSem = dispatch_semaphore_create(0);
 
-        // 2. Create content filter from the first display.
-        SCDisplay *display = sharedContent.displays.firstObject;
-        SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display
-                                                          excludingWindows:@[]];
+            [SCShareableContent getShareableContentExcludingDesktopWindows:NO
+                                                      onScreenWindowsOnly:YES
+                                                        completionHandler:^(SCShareableContent *content,
+                                                                            NSError *error) {
+                sharedContent = content;
+                contentError = error;
+                dispatch_semaphore_signal(contentSem);
+            }];
+            dispatch_semaphore_wait(contentSem,
+                                    dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
 
-        // 3. Configure audio-only stream: width=0, height=0 avoids Screen Recording permission.
-        SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
-        config.width = 0;
-        config.height = 0;
-        config.capturesAudio = YES;
-        config.excludesCurrentProcessAudio = YES;
-        config.channelCount = 1;       // Mono — matches our 16kHz mono pipeline.
-        config.sampleRate = 48000;     // Capture at 48kHz, Rust will downsample.
+            if (contentError || !sharedContent || sharedContent.displays.count == 0) {
+                blockResult.error_code = 2;
+                snprintf(blockResult.error_msg, sizeof(blockResult.error_msg),
+                         "No display available for SCK content filter: %s",
+                         contentError
+                             ? contentError.localizedDescription.UTF8String
+                             : "no displays");
+                dispatch_semaphore_signal(doneSem);
+                return;
+            }
 
-        // 4. Create stream and delegate.
-        NSError *streamError = nil;
-        SCStream *stream = [[SCStream alloc] initWithFilter:filter
-                                              configuration:config
-                                                   delegate:nil];
+            // ---- Step 2: Build content filter ----
+            SCDisplay *display = sharedContent.displays.firstObject;
+            SCContentFilter *filter =
+                [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
 
-        AXTSCKAudioDelegate *delegate = [[AXTSCKAudioDelegate alloc] init];
-        BOOL added = [stream addStreamOutput:delegate
-                                        type:SCStreamOutputTypeAudio
-                          sampleHandlerQueue:dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0)
-                                       error:&streamError];
-        if (!added || streamError) {
-            result.error_code = 3;
-            snprintf(result.error_msg, sizeof(result.error_msg),
-                     "Failed to add stream output: %s",
-                     streamError ? streamError.localizedDescription.UTF8String : "unknown");
-            return result;
-        }
+            // ---- Step 3: Configure audio-only stream ----
+            // width=0, height=0 suppresses Screen Recording TCC permission.
+            SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
+            config.width = 0;
+            config.height = 0;
+            config.capturesAudio = YES;
+            config.excludesCurrentProcessAudio = YES;
+            config.channelCount = 1;   // Mono — matches our 16 kHz mono pipeline.
+            config.sampleRate = 48000; // Capture at 48 kHz, Rust will downsample.
 
-        // 5. Start capture.
-        __block NSError *startError = nil;
-        dispatch_semaphore_t startSem = dispatch_semaphore_create(0);
-        [stream startCaptureWithCompletionHandler:^(NSError *error) {
-            startError = error;
-            dispatch_semaphore_signal(startSem);
-        }];
-        dispatch_semaphore_wait(startSem, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+            // ---- Step 4: Create stream and attach delegate ----
+            SCStream *stream = [[SCStream alloc] initWithFilter:filter
+                                                  configuration:config
+                                                       delegate:nil];
 
-        if (startError) {
-            result.error_code = 3;
-            snprintf(result.error_msg, sizeof(result.error_msg),
-                     "SCStream start failed: %s", startError.localizedDescription.UTF8String);
-            return result;
-        }
+            AXTSCKAudioDelegate *delegate = [[AXTSCKAudioDelegate alloc] init];
+            NSError *streamError = nil;
+            BOOL added = [stream addStreamOutput:delegate
+                                            type:SCStreamOutputTypeAudio
+                              sampleHandlerQueue:dispatch_get_global_queue(
+                                                     QOS_CLASS_USER_INTERACTIVE, 0)
+                                           error:&streamError];
+            if (!added || streamError) {
+                blockResult.error_code = 3;
+                snprintf(blockResult.error_msg, sizeof(blockResult.error_msg),
+                         "Failed to add stream output: %s",
+                         streamError
+                             ? streamError.localizedDescription.UTF8String
+                             : "unknown");
+                dispatch_semaphore_signal(doneSem);
+                return;
+            }
 
-        // 6. Capture for the requested duration.
-        [NSThread sleepForTimeInterval:(NSTimeInterval)duration_secs];
+            // ---- Step 5: Start capture (also requires a proper dispatch context) ----
+            __block NSError *startError = nil;
+            dispatch_semaphore_t startSem = dispatch_semaphore_create(0);
+            [stream startCaptureWithCompletionHandler:^(NSError *error) {
+                startError = error;
+                dispatch_semaphore_signal(startSem);
+            }];
+            dispatch_semaphore_wait(startSem,
+                                    dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
 
-        // 7. Stop capture.
-        delegate.capturing = NO;
-        dispatch_semaphore_t stopSem = dispatch_semaphore_create(0);
-        [stream stopCaptureWithCompletionHandler:^(NSError * _Nullable __unused stopError) {
-            dispatch_semaphore_signal(stopSem);
-        }];
-        dispatch_semaphore_wait(stopSem, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+            if (startError) {
+                blockResult.error_code = 3;
+                snprintf(blockResult.error_msg, sizeof(blockResult.error_msg),
+                         "SCStream start failed: %s",
+                         startError.localizedDescription.UTF8String);
+                dispatch_semaphore_signal(doneSem);
+                return;
+            }
 
-        // 8. Convert captured PCM data to float samples for Rust.
-        NSData *pcmBytes;
-        @synchronized (delegate.pcmData) {
-            pcmBytes = [delegate.pcmData copy];
-        }
+            // ---- Step 6 & 7: Sleep + stop on a global queue ----
+            // Move off the main queue for the blocking sleep so the main run
+            // loop remains responsive during the capture window.
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
 
-        if (pcmBytes.length == 0) {
-            // No audio captured — might be silence or no system audio playing.
-            result.sample_count = 0;
-            result.samples = NULL;
-            result.sample_rate = (float)delegate.sampleRate;
-            result.channels = delegate.channels;
-            result.error_code = 0;
-            return result;
-        }
+                [NSThread sleepForTimeInterval:(NSTimeInterval)captureDuration];
 
-        // SCK delivers audio as 32-bit float PCM (kAudioFormatFlagIsFloat).
-        int float_count = (int)(pcmBytes.length / sizeof(float));
-        float *out = (float *)malloc(float_count * sizeof(float));
-        if (!out) {
-            result.error_code = 3;
-            snprintf(result.error_msg, sizeof(result.error_msg), "malloc failed for audio buffer");
-            return result;
-        }
-        memcpy(out, pcmBytes.bytes, float_count * sizeof(float));
+                // Signal the delegate to stop accumulating samples.
+                delegate.capturing = NO;
 
-        result.samples = out;
-        result.sample_count = float_count;
-        result.sample_rate = (float)delegate.sampleRate;
-        result.channels = delegate.channels;
-        result.error_code = 0;
+                // ---- Step 7: Stop capture ----
+                dispatch_semaphore_t stopSem = dispatch_semaphore_create(0);
+                [stream stopCaptureWithCompletionHandler:^(NSError * _Nullable __unused e) {
+                    dispatch_semaphore_signal(stopSem);
+                }];
+                dispatch_semaphore_wait(stopSem,
+                                        dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+
+                // ---- Step 8: Copy PCM data out for Rust ----
+                NSData *pcmBytes;
+                @synchronized (delegate.pcmData) {
+                    pcmBytes = [delegate.pcmData copy];
+                }
+
+                if (pcmBytes.length == 0) {
+                    // Silence or no system audio — not an error.
+                    blockResult.sample_count = 0;
+                    blockResult.samples = NULL;
+                    blockResult.sample_rate = (float)delegate.sampleRate;
+                    blockResult.channels = delegate.channels;
+                    blockResult.error_code = 0;
+                    dispatch_semaphore_signal(doneSem);
+                    return;
+                }
+
+                // SCK delivers 32-bit float PCM (kAudioFormatFlagIsFloat).
+                int float_count = (int)(pcmBytes.length / sizeof(float));
+                float *out = (float *)malloc((size_t)float_count * sizeof(float));
+                if (!out) {
+                    blockResult.error_code = 3;
+                    snprintf(blockResult.error_msg, sizeof(blockResult.error_msg),
+                             "malloc failed for audio buffer");
+                    dispatch_semaphore_signal(doneSem);
+                    return;
+                }
+                memcpy(out, pcmBytes.bytes, (size_t)float_count * sizeof(float));
+
+                blockResult.samples = out;
+                blockResult.sample_count = float_count;
+                blockResult.sample_rate = (float)delegate.sampleRate;
+                blockResult.channels = delegate.channels;
+                blockResult.error_code = 0;
+                dispatch_semaphore_signal(doneSem);
+            }); // end global-queue block
+        }); // end main-queue block
+
+        // Block the calling Rust thread until the full capture cycle finishes.
+        // Timeout: duration + 15 s headroom for startup/teardown.
+        dispatch_time_t timeout = dispatch_time(
+            DISPATCH_TIME_NOW,
+            (int64_t)((captureDuration + 15.0f) * (float)NSEC_PER_SEC));
+        dispatch_semaphore_wait(doneSem, timeout);
+
+        result = blockResult;
         return result;
     }
 

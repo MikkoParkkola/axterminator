@@ -19,6 +19,13 @@
 //! - The capture thread honours the `running` flag on every iteration and stops
 //!   cleanly before `CaptureSession::drop` returns.
 //!
+//! ## Screen diff
+//!
+//! When screen capture is enabled, [`CaptureConfig::screen_diff_threshold`]
+//! controls deduplication: a new frame is only stored when its perceptual diff
+//! score (fraction of 16×16 luminance cells that changed) meets or exceeds the
+//! threshold.  Use `0.0` to store every frame regardless.
+//!
 //! ## Feature gate
 //!
 //! This module compiles when `--features audio` is set.  Screen capture uses
@@ -35,6 +42,7 @@
 //!     audio: true,
 //!     transcribe: true,
 //!     screen: false,
+//!     screen_diff_threshold: 0.05,
 //!     buffer_seconds: 60,
 //! };
 //! let session = CaptureSession::start(cfg);
@@ -43,6 +51,8 @@
 //! drop(session); // graceful shutdown
 //! # }
 //! ```
+
+pub mod screen_diff;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -200,6 +210,18 @@ pub struct CaptureConfig {
     ///
     /// Default: 60 s → 960 000 samples → ~3.7 MB.
     pub buffer_seconds: u32,
+    /// Minimum perceptual diff score `[0.0, 1.0]` required to store a new frame.
+    ///
+    /// The diff score is the fraction of 16×16 luminance grid cells that changed
+    /// by more than a small perceptual threshold between consecutive frames.
+    ///
+    /// - `0.0` — store every frame (no deduplication).
+    /// - `0.05` (default) — skip frames where fewer than 5 % of cells changed.
+    /// - `1.0` — only store frames where every grid cell changed.
+    ///
+    /// Byte-identical frames (score `0.0`) are always skipped regardless of this
+    /// threshold.
+    pub screen_diff_threshold: f32,
 }
 
 impl Default for CaptureConfig {
@@ -209,6 +231,7 @@ impl Default for CaptureConfig {
             transcribe: true,
             screen: false,
             buffer_seconds: 60,
+            screen_diff_threshold: 0.05,
         }
     }
 }
@@ -257,6 +280,10 @@ pub struct CaptureSession {
     config: CaptureConfig,
     /// Wall-clock start instant for elapsed tracking.
     started_at: Instant,
+    /// Count of screen frames that passed the diff threshold and were stored.
+    frames_captured: Arc<AtomicU64>,
+    /// Count of screen frames that were skipped because the diff was below threshold.
+    frames_skipped: Arc<AtomicU64>,
 }
 
 /// Counter for session IDs (shared across the process lifetime).
@@ -294,6 +321,8 @@ impl CaptureSession {
         let audio_buffer = Arc::new(Mutex::new(AudioRingBuffer::new(capacity)));
         let state = Arc::new(Mutex::new(CaptureState::default()));
         let running = Arc::new(AtomicBool::new(true));
+        let frames_captured = Arc::new(AtomicU64::new(0));
+        let frames_skipped = Arc::new(AtomicU64::new(0));
         let id = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
         let session_id = format!("{id:016x}");
         let started_at = Instant::now();
@@ -303,6 +332,8 @@ impl CaptureSession {
             Arc::clone(&audio_buffer),
             Arc::clone(&state),
             Arc::clone(&running),
+            Arc::clone(&frames_captured),
+            Arc::clone(&frames_skipped),
         );
 
         Self {
@@ -314,6 +345,8 @@ impl CaptureSession {
             handle: Some(handle),
             config,
             started_at,
+            frames_captured,
+            frames_skipped,
         }
     }
 
@@ -386,6 +419,18 @@ impl CaptureSession {
         self.state.lock().ok()?.latest_frame.clone()
     }
 
+    /// Number of screen frames that passed the diff threshold and were stored.
+    #[must_use]
+    pub fn frames_captured(&self) -> u64 {
+        self.frames_captured.load(Ordering::Relaxed)
+    }
+
+    /// Number of screen frames that were skipped because the diff was below threshold.
+    #[must_use]
+    pub fn frames_skipped(&self) -> u64 {
+        self.frames_skipped.load(Ordering::Relaxed)
+    }
+
     /// Expose the config for status queries.
     #[must_use]
     pub fn config(&self) -> &CaptureConfig {
@@ -422,11 +467,20 @@ fn spawn_capture_thread(
     audio_buffer: Arc<Mutex<AudioRingBuffer>>,
     state: Arc<Mutex<CaptureState>>,
     running: Arc<AtomicBool>,
+    frames_captured: Arc<AtomicU64>,
+    frames_skipped: Arc<AtomicU64>,
 ) -> JoinHandle<()> {
     thread::Builder::new()
         .name("ax-capture".to_string())
         .spawn(move || {
-            run_capture_loop(config, audio_buffer, state, running);
+            run_capture_loop(
+                config,
+                audio_buffer,
+                state,
+                running,
+                frames_captured,
+                frames_skipped,
+            );
         })
         .expect("failed to spawn capture thread")
 }
@@ -437,12 +491,15 @@ fn run_capture_loop(
     audio_buffer: Arc<Mutex<AudioRingBuffer>>,
     state: Arc<Mutex<CaptureState>>,
     running: Arc<AtomicBool>,
+    frames_captured: Arc<AtomicU64>,
+    frames_skipped: Arc<AtomicU64>,
 ) {
     let started = Instant::now();
     let mut last_screen_capture = Instant::now()
         .checked_sub(Duration::from_secs(SCREEN_POLL_SECS))
         .unwrap_or(Instant::now());
     let mut segment_offset_ms: u64 = 0;
+    let mut prev_fingerprint: Option<screen_diff::ScreenFingerprint> = None;
 
     while running.load(Ordering::Acquire) {
         if config.audio {
@@ -457,7 +514,14 @@ fn run_capture_loop(
         }
 
         if config.screen && last_screen_capture.elapsed() >= Duration::from_secs(SCREEN_POLL_SECS) {
-            capture_screen_snapshot(&state, started);
+            capture_screen_snapshot(
+                &state,
+                started,
+                config.screen_diff_threshold,
+                &mut prev_fingerprint,
+                &frames_captured,
+                &frames_skipped,
+            );
             last_screen_capture = Instant::now();
         }
 
@@ -536,43 +600,80 @@ fn transcribe_and_store(
     }
 }
 
-/// Capture a single screenshot and store it as the latest frame.
+/// Capture a single screenshot and conditionally store it based on diff score.
 ///
 /// Uses the existing `CGWindowListCreateImage` path (no Screen Recording needed
 /// for the virtual display composited view on macOS 14+).
-fn capture_screen_snapshot(state: &Arc<Mutex<CaptureState>>, started: Instant) {
-    let timestamp = {
-        let elapsed = started.elapsed();
-        let secs = elapsed.as_secs();
-        // Simple elapsed-offset ISO-ish stamp; real wall-clock would need
-        // std::time::SystemTime which we keep out of the hot path.
-        format!("T+{secs}s")
+///
+/// The frame is stored only when its diff score against `prev_fingerprint` meets
+/// or exceeds `threshold`.  On first capture (`prev_fingerprint` is `None`) the
+/// frame is always stored.  The counters `frames_captured` and `frames_skipped`
+/// are incremented accordingly.
+fn capture_screen_snapshot(
+    state: &Arc<Mutex<CaptureState>>,
+    started: Instant,
+    threshold: f32,
+    prev_fingerprint: &mut Option<screen_diff::ScreenFingerprint>,
+    frames_captured: &Arc<AtomicU64>,
+    frames_skipped: &Arc<AtomicU64>,
+) {
+    let elapsed_secs = started.elapsed().as_secs();
+    let timestamp = format!("T+{elapsed_secs}s");
+
+    let (png_base64, width, height, png_bytes) = match capture_primary_display_png() {
+        Ok(result) => result,
+        Err(e) => {
+            warn!(error = %e, "screen snapshot failed");
+            return;
+        }
     };
 
-    // Attempt to capture the primary display via core-graphics.
-    match capture_primary_display_png() {
-        Ok((png_base64, width, height)) => {
-            let frame = ScreenFrame {
-                png_base64,
-                timestamp,
-                width,
-                height,
-            };
-            match state.lock() {
-                Ok(mut guard) => guard.latest_frame = Some(frame),
-                Err(e) => warn!("state lock poisoned during screen capture: {e}"),
-            }
+    let fingerprint = screen_diff::ScreenFingerprint::from_png_bytes(&png_bytes);
+
+    let should_store = match prev_fingerprint.as_ref() {
+        None => true, // first frame — always store
+        Some(prev) => {
+            let diff = screen_diff::ScreenDiff::compare(prev, &fingerprint);
+            let significant = diff.is_significant(threshold);
+            debug!(
+                score = diff.score,
+                threshold,
+                significant,
+                "screen diff"
+            );
+            significant
         }
-        Err(e) => warn!(error = %e, "screen snapshot failed"),
+    };
+
+    if should_store {
+        let frame = ScreenFrame {
+            png_base64,
+            timestamp,
+            width,
+            height,
+        };
+        match state.lock() {
+            Ok(mut guard) => guard.latest_frame = Some(frame),
+            Err(e) => warn!("state lock poisoned during screen capture: {e}"),
+        }
+        *prev_fingerprint = Some(fingerprint);
+        frames_captured.fetch_add(1, Ordering::Relaxed);
+    } else {
+        frames_skipped.fetch_add(1, Ordering::Relaxed);
     }
 }
 
-/// Capture the primary display and return a base64-encoded PNG with dimensions.
+/// Capture the primary display and return a base64-encoded PNG, raw PNG bytes,
+/// and logical display dimensions.
+///
+/// Returns `(png_base64, width, height, raw_png_bytes)`.  The raw bytes are
+/// returned alongside the base64 so the caller can fingerprint the frame
+/// without redundant re-encoding or disk I/O.
 ///
 /// Uses `screencapture -x -D 1` (no UI sound, primary display) which is
 /// available on all macOS versions and requires no additional permissions.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn capture_primary_display_png() -> Result<(String, u32, u32), String> {
+fn capture_primary_display_png() -> Result<(String, u32, u32, Vec<u8>), String> {
     use base64::Engine as _;
     use core_graphics::display::CGDisplay;
     use std::process::Command;
@@ -601,7 +702,7 @@ fn capture_primary_display_png() -> Result<(String, u32, u32), String> {
     let _ = std::fs::remove_file(&tmp);
 
     let png_base64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
-    Ok((png_base64, width, height))
+    Ok((png_base64, width, height, png_bytes))
 }
 
 // ---------------------------------------------------------------------------
@@ -777,49 +878,46 @@ mod tests {
         let mut cfg = CaptureConfig::default();
         let cfg2 = cfg.clone();
         cfg.audio = false;
-        assert!(cfg2.audio);
+        assert!(!cfg.audio, "mutation must affect original");
+        assert!(cfg2.audio, "clone must remain unaffected");
     }
 
     // -----------------------------------------------------------------------
     // CaptureSession lifecycle
     // -----------------------------------------------------------------------
 
-    #[test]
-    fn capture_session_starts_with_unique_session_ids() {
-        // GIVEN: two sessions started sequentially (no audio, nothing to capture)
-        let cfg = CaptureConfig {
+    /// No-op config (no audio/screen/transcribe) with a tiny buffer.
+    ///
+    /// Uses `..CaptureConfig::default()` so this helper stays forward-compatible
+    /// when new fields are added to `CaptureConfig`.
+    fn idle_config(buffer_seconds: u32) -> CaptureConfig {
+        CaptureConfig {
             audio: false,
             transcribe: false,
             screen: false,
-            buffer_seconds: 1,
-        };
-        let s1 = CaptureSession::start(cfg.clone());
-        let s2 = CaptureSession::start(cfg);
+            buffer_seconds,
+            ..CaptureConfig::default()
+        }
+    }
+
+    #[test]
+    fn capture_session_starts_with_unique_session_ids() {
+        // GIVEN: two sessions started sequentially (no audio, nothing to capture)
+        let s1 = CaptureSession::start(idle_config(1));
+        let s2 = CaptureSession::start(idle_config(1));
         // THEN: IDs differ
         assert_ne!(s1.session_id, s2.session_id);
     }
 
     #[test]
     fn capture_session_is_running_after_start() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
         assert!(session.is_running());
     }
 
     #[test]
     fn capture_session_stop_halts_background_thread() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let mut session = CaptureSession::start(cfg);
+        let mut session = CaptureSession::start(idle_config(1));
         session.stop();
         assert!(!session.is_running());
     }
@@ -827,102 +925,54 @@ mod tests {
     #[test]
     fn capture_session_drop_stops_thread_without_panic() {
         // GIVEN: session with nothing to capture
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
         // WHEN: dropped
         {
-            let _session = CaptureSession::start(cfg);
+            let _session = CaptureSession::start(idle_config(1));
         }
         // THEN: no panic; test completes
     }
 
     #[test]
     fn capture_session_stop_is_idempotent() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let mut session = CaptureSession::start(cfg);
+        let mut session = CaptureSession::start(idle_config(1));
         session.stop();
         session.stop(); // second call must not panic
     }
 
     #[test]
     fn capture_session_audio_buffer_seconds_initially_zero() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 60,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(60));
         // Nothing has been captured yet.
         assert!(session.audio_buffer_seconds() < 1.0);
     }
 
     #[test]
     fn capture_session_transcript_segment_count_initially_zero() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
         assert_eq!(session.transcript_segment_count(), 0);
     }
 
     #[test]
     fn capture_session_read_transcription_empty_returns_empty_vec() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
         assert!(session.read_transcription(30).is_empty());
     }
 
     #[test]
     fn capture_session_read_audio_samples_empty_returns_empty() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
         assert!(session.read_audio_samples(1.0).is_empty());
     }
 
     #[test]
     fn capture_session_latest_frame_initially_none() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
         assert!(session.latest_frame().is_none());
     }
 
     #[test]
     fn capture_session_duration_ms_advances() {
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
         let t0 = session.duration_ms();
         std::thread::sleep(Duration::from_millis(5));
         let t1 = session.duration_ms();
@@ -931,15 +981,10 @@ mod tests {
 
     #[test]
     fn capture_session_config_is_accessible() {
-        let cfg = CaptureConfig {
-            audio: true,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 30,
-        };
         let session = CaptureSession::start(CaptureConfig {
             audio: false,
-            ..cfg.clone()
+            buffer_seconds: 30,
+            ..CaptureConfig::default()
         });
         assert_eq!(session.config().buffer_seconds, 30);
     }
@@ -951,13 +996,7 @@ mod tests {
     #[test]
     fn read_transcription_filters_by_time_window() {
         // GIVEN: session with manually injected segments
-        let cfg = CaptureConfig {
-            audio: false,
-            transcribe: false,
-            screen: false,
-            buffer_seconds: 1,
-        };
-        let session = CaptureSession::start(cfg);
+        let session = CaptureSession::start(idle_config(1));
 
         // Inject two segments directly into shared state.
         {
@@ -986,5 +1025,145 @@ mod tests {
         // and BOTH segments pass.  Skip the fine-grained window assertion
         // — a 1-second session window test would be flaky in CI.
         let _ = session.read_transcription(1);
+    }
+
+    // -----------------------------------------------------------------------
+    // CaptureConfig — screen_diff_threshold
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn capture_config_default_screen_diff_threshold_is_five_percent() {
+        // GIVEN: default config
+        let cfg = CaptureConfig::default();
+        // THEN: threshold defaults to 5 %
+        assert!((cfg.screen_diff_threshold - 0.05).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn capture_config_screen_diff_threshold_zero_stored() {
+        // GIVEN: explicit zero threshold (store every frame)
+        let cfg = CaptureConfig {
+            screen_diff_threshold: 0.0,
+            ..CaptureConfig::default()
+        };
+        assert_eq!(cfg.screen_diff_threshold, 0.0);
+    }
+
+    #[test]
+    fn capture_config_screen_diff_threshold_one_stored() {
+        let cfg = CaptureConfig {
+            screen_diff_threshold: 1.0,
+            ..CaptureConfig::default()
+        };
+        assert_eq!(cfg.screen_diff_threshold, 1.0);
+    }
+
+    #[test]
+    fn capture_config_screen_diff_threshold_propagates_to_session() {
+        // GIVEN: session with explicit non-default threshold
+        let session = CaptureSession::start(CaptureConfig {
+            screen_diff_threshold: 0.10,
+            ..idle_config(1)
+        });
+        // THEN: stored in config accessor
+        assert!((session.config().screen_diff_threshold - 0.10).abs() < f32::EPSILON);
+    }
+
+    // -----------------------------------------------------------------------
+    // Diff counters — initial state
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn capture_session_frames_captured_initially_zero() {
+        // GIVEN: session with screen capture disabled
+        let session = CaptureSession::start(idle_config(1));
+        // THEN: no frames ever captured
+        assert_eq!(session.frames_captured(), 0);
+    }
+
+    #[test]
+    fn capture_session_frames_skipped_initially_zero() {
+        // GIVEN: session with screen capture disabled
+        let session = CaptureSession::start(idle_config(1));
+        // THEN: no frames ever skipped
+        assert_eq!(session.frames_skipped(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Diff logic — driven via ScreenFingerprint/ScreenDiff directly
+    // (avoids needing screencapture hardware in CI)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn diff_first_frame_always_significant() {
+        // GIVEN: no previous fingerprint (first capture simulation)
+        let threshold = 0.05_f32;
+        let pixels = vec![100u8; 16 * 16 * 4];
+        let fp = screen_diff::ScreenFingerprint::from_raw_pixels(&pixels, 16, 16, 4);
+
+        // Simulate the "no previous fingerprint" branch in the capture loop.
+        let prev: Option<screen_diff::ScreenFingerprint> = None;
+        let should_store = match prev.as_ref() {
+            None => true,
+            Some(p) => screen_diff::ScreenDiff::compare(p, &fp).is_significant(threshold),
+        };
+        assert!(should_store, "first frame must always be stored");
+    }
+
+    #[test]
+    fn diff_identical_consecutive_frame_is_not_significant_at_default_threshold() {
+        // GIVEN: two identical raw-pixel frames
+        let pixels = vec![128u8; 32 * 32 * 4];
+        let fp = screen_diff::ScreenFingerprint::from_raw_pixels(&pixels, 32, 32, 4);
+        let diff = screen_diff::ScreenDiff::compare(&fp, &fp);
+        // THEN: byte-identical → score 0.0 → not significant at 5 %
+        assert_eq!(diff.score, 0.0);
+        assert!(!diff.is_significant(0.05));
+    }
+
+    #[test]
+    fn diff_fully_changed_frame_is_significant_at_default_threshold() {
+        // GIVEN: all-black vs all-white
+        let black = vec![0u8; 32 * 32 * 4];
+        let white = vec![255u8; 32 * 32 * 4];
+        let fp_prev = screen_diff::ScreenFingerprint::from_raw_pixels(&black, 32, 32, 4);
+        let fp_next = screen_diff::ScreenFingerprint::from_raw_pixels(&white, 32, 32, 4);
+        let diff = screen_diff::ScreenDiff::compare(&fp_prev, &fp_next);
+        assert_eq!(diff.score, 1.0);
+        assert!(diff.is_significant(0.05));
+    }
+
+    #[test]
+    fn diff_minor_change_below_5pct_threshold_is_not_significant() {
+        // GIVEN: 16×16 frames where only one pixel in one cell changes heavily,
+        //        but another byte is touched to ensure hash differs.
+        let mut pixels_a = vec![100u8; 16 * 16 * 4];
+        let mut pixels_b = vec![100u8; 16 * 16 * 4];
+        pixels_b[0] = 0; // changes one pixel in cell (0,0)
+        pixels_b[1] = 0;
+        pixels_b[2] = 0;
+        pixels_a[63 * 4] = 99; // differentiate hash without affecting another cell's mean
+        let fp_a = screen_diff::ScreenFingerprint::from_raw_pixels(&pixels_a, 16, 16, 4);
+        let fp_b = screen_diff::ScreenFingerprint::from_raw_pixels(&pixels_b, 16, 16, 4);
+        let diff = screen_diff::ScreenDiff::compare(&fp_a, &fp_b);
+        // THEN: score < 0.05 → below default threshold
+        assert!(diff.score < 0.05, "score was {}", diff.score);
+        assert!(!diff.is_significant(0.05));
+    }
+
+    #[test]
+    fn diff_zero_threshold_always_stores_any_nonzero_score() {
+        // GIVEN: threshold = 0.0 makes every frame (even score 0.0) significant
+        assert!(screen_diff::ScreenDiff { score: 0.0 }.is_significant(0.0));
+        assert!(screen_diff::ScreenDiff { score: 0.001 }.is_significant(0.0));
+    }
+
+    #[test]
+    fn diff_hash_only_fallback_returns_one_when_bytes_differ() {
+        // GIVEN: two fingerprints from different non-PNG bytes (no grid available)
+        let fp1 = screen_diff::ScreenFingerprint::from_png_bytes(b"bytes_a");
+        let fp2 = screen_diff::ScreenFingerprint::from_png_bytes(b"bytes_b");
+        // THEN: hash differs, no grid → score = 1.0 (conservative: treat as changed)
+        assert_eq!(screen_diff::ScreenDiff::compare(&fp1, &fp2).score, 1.0);
     }
 }

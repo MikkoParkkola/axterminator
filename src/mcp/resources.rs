@@ -169,6 +169,39 @@ pub fn static_resources() -> ResourceListResult {
         mime_type: "application/json",
     });
 
+    #[cfg(feature = "audio")]
+    {
+        resources.push(Resource {
+            uri: "axterminator://capture/transcription",
+            name: "capture-transcription",
+            title: "Live Transcription Buffer",
+            description: "Current transcription buffer from the active capture session. \
+                Returns all segments accumulated since session start together with a joined \
+                `text` field. Subscribe to receive notifications when new speech is recognised. \
+                Requires an active session started with ax_start_capture.",
+            mime_type: "application/json",
+        });
+        resources.push(Resource {
+            uri: "axterminator://capture/screen",
+            name: "capture-screen",
+            title: "Latest Screen Frame",
+            description: "Most recently captured screen frame as a base64-encoded PNG. \
+                Subscribe to receive notifications when a new frame is stored \
+                (triggered by perceptual diff exceeding the session threshold). \
+                Requires screen capture enabled in ax_start_capture.",
+            mime_type: "image/png",
+        });
+        resources.push(Resource {
+            uri: "axterminator://capture/status",
+            name: "capture-status",
+            title: "Capture Session Status",
+            description: "Health and fill-level snapshot of the active capture session: \
+                running flag, session_id, duration_ms, audio_buffer_seconds, and \
+                transcript_segment count. Subscribe to track session lifecycle events.",
+            mime_type: "application/json",
+        });
+    }
+
     resources.push(Resource {
         uri: "axterminator://workflows",
         name: "detected-workflows",
@@ -281,6 +314,12 @@ pub fn read_resource(
         "axterminator://audio/devices" => read::read_audio_devices(uri),
         #[cfg(feature = "camera")]
         "axterminator://camera/devices" => read::read_camera_devices(uri),
+        #[cfg(feature = "audio")]
+        "axterminator://capture/transcription" => read::read_capture_transcription(uri),
+        #[cfg(feature = "audio")]
+        "axterminator://capture/screen" => read::read_capture_screen(uri),
+        #[cfg(feature = "audio")]
+        "axterminator://capture/status" => read::read_capture_status(uri),
         other => read::read_dynamic(other, registry),
     }
 }
@@ -785,5 +824,158 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let result = read_resource("axterminator://camera/devices", &registry).unwrap();
         assert_eq!(result.contents[0].mime_type, "application/json");
+    }
+
+    // -----------------------------------------------------------------------
+    // Capture resources (feature = "audio")
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn static_resources_contains_all_three_capture_uris() {
+        // GIVEN: audio feature enabled
+        let list = static_resources();
+        let uris: Vec<&str> = list.resources.iter().map(|r| r.uri).collect();
+        // THEN: all three live-capture resources are advertised
+        assert!(
+            uris.contains(&"axterminator://capture/transcription"),
+            "capture/transcription must be in static resource list"
+        );
+        assert!(
+            uris.contains(&"axterminator://capture/screen"),
+            "capture/screen must be in static resource list"
+        );
+        assert!(
+            uris.contains(&"axterminator://capture/status"),
+            "capture/status must be in static resource list"
+        );
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_capture_status_no_session_returns_running_false() {
+        // GIVEN: no active capture session
+        // (stop any session that a concurrent test may have left behind)
+        let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading capture/status
+        let result = read_resource("axterminator://capture/status", &registry)
+            .expect("capture/status must not error when no session running");
+        // THEN: running=false JSON
+        assert_eq!(result.contents.len(), 1);
+        assert_eq!(result.contents[0].mime_type, "application/json");
+        let v: serde_json::Value =
+            serde_json::from_str(result.contents[0].text.as_ref().unwrap()).unwrap();
+        assert_eq!(v["running"], false);
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_capture_transcription_no_session_returns_empty_segments() {
+        // GIVEN: no active session
+        let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading capture/transcription
+        let result = read_resource("axterminator://capture/transcription", &registry)
+            .expect("capture/transcription must succeed with no session");
+        let v: serde_json::Value =
+            serde_json::from_str(result.contents[0].text.as_ref().unwrap()).unwrap();
+        // THEN: empty arrays, running=false
+        assert_eq!(v["running"], false);
+        assert!(v["segments"].is_array());
+        assert_eq!(v["segments"].as_array().unwrap().len(), 0);
+        assert_eq!(v["text"], "");
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_capture_screen_no_session_returns_running_false_json() {
+        // GIVEN: no active session
+        let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading capture/screen
+        let result = read_resource("axterminator://capture/screen", &registry)
+            .expect("capture/screen must succeed with no session");
+        // THEN: JSON (no frame) with running=false
+        assert_eq!(result.contents[0].mime_type, "application/json");
+        let v: serde_json::Value =
+            serde_json::from_str(result.contents[0].text.as_ref().unwrap()).unwrap();
+        assert_eq!(v["running"], false);
+        assert_eq!(v["frame_available"], false);
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_capture_status_active_session_returns_running_true() {
+        // GIVEN: started idle session (no audio/screen to avoid hardware)
+        let _ = crate::mcp::tools_capture::handle_ax_start_capture(&serde_json::json!({
+            "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5
+        }));
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading capture/status
+        let result = read_resource("axterminator://capture/status", &registry).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(result.contents[0].text.as_ref().unwrap()).unwrap();
+        // THEN: running=true, session_id present
+        assert_eq!(v["running"], true, "session must report running");
+        assert!(v["session_id"].is_string(), "session_id must be present");
+        // Cleanup
+        let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_capture_transcription_active_session_returns_running_true() {
+        // GIVEN: started idle session
+        let _ = crate::mcp::tools_capture::handle_ax_start_capture(&serde_json::json!({
+            "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5
+        }));
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading capture/transcription
+        let result = read_resource("axterminator://capture/transcription", &registry).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(result.contents[0].text.as_ref().unwrap()).unwrap();
+        // THEN: running=true, segments array present
+        assert_eq!(v["running"], true);
+        assert!(v["segments"].is_array());
+        assert!(v["text"].is_string());
+        // Cleanup
+        let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn read_capture_screen_active_session_no_frame_returns_json() {
+        // GIVEN: started idle session (screen=false so no frame is captured)
+        let _ = crate::mcp::tools_capture::handle_ax_start_capture(&serde_json::json!({
+            "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5
+        }));
+        let registry = Arc::new(AppRegistry::default());
+        // WHEN: reading capture/screen
+        let result = read_resource("axterminator://capture/screen", &registry).unwrap();
+        // THEN: JSON payload (no blob) because no frame was captured yet
+        assert_eq!(result.contents[0].mime_type, "application/json");
+        let v: serde_json::Value =
+            serde_json::from_str(result.contents[0].text.as_ref().unwrap()).unwrap();
+        assert_eq!(v["frame_available"], false);
+        // Cleanup
+        let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
+    }
+
+    #[cfg(feature = "audio")]
+    #[test]
+    fn capture_resource_uris_are_distinct() {
+        // GIVEN: static resource list with audio feature
+        let list = static_resources();
+        let capture_uris: Vec<&str> = list
+            .resources
+            .iter()
+            .filter(|r| r.uri.starts_with("axterminator://capture/"))
+            .map(|r| r.uri)
+            .collect();
+        // THEN: exactly 3 capture resources, all unique
+        assert_eq!(capture_uris.len(), 3, "expected 3 capture resources");
+        let unique: std::collections::HashSet<_> = capture_uris.iter().collect();
+        assert_eq!(unique.len(), 3, "all capture URIs must be unique");
     }
 }

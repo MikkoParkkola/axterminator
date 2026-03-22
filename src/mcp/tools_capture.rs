@@ -42,8 +42,12 @@ use crate::mcp::protocol::{Tool, ToolCallResult};
 ///
 /// `OnceLock` initialises on first access; the inner `Mutex<Option<…>>`
 /// lets handlers atomically swap sessions.
+///
+/// Exposed as `pub(crate)` so that resource read handlers in
+/// [`super::resources_read`] can query session state without duplicating
+/// the global-store logic.
 #[cfg(feature = "audio")]
-fn global_session() -> &'static Mutex<Option<CaptureSession>> {
+pub(crate) fn global_session() -> &'static Mutex<Option<CaptureSession>> {
     static STORE: OnceLock<Mutex<Option<CaptureSession>>> = OnceLock::new();
     STORE.get_or_init(|| Mutex::new(None))
 }
@@ -107,6 +111,15 @@ fn tool_ax_start_capture() -> Tool {
                     "default": 60,
                     "minimum": 5,
                     "maximum": 300
+                },
+                "screen_diff_threshold": {
+                    "type": "number",
+                    "description": "Minimum perceptual diff score [0.0, 1.0] to store a new frame. \
+                        Default 0.05 skips frames where fewer than 5% of 16x16 luminance cells changed. \
+                        Use 0.0 to store every frame.",
+                    "default": 0.05,
+                    "minimum": 0.0,
+                    "maximum": 1.0
                 }
             },
             "additionalProperties": false
@@ -222,6 +235,8 @@ fn tool_ax_capture_status() -> Tool {
             ring buffer (≤ `buffer_seconds` from ax_start_capture).\n\
             `transcript_segments` is the total number of recognised speech segments \
             accumulated since the session started.\n\
+            `frames_captured` is the count of screen frames stored (passed diff threshold).\n\
+            `frames_skipped` is the count of screen frames dropped (below diff threshold).\n\
             \n\
             Example: `{}`",
         input_schema: json!({ "type": "object", "additionalProperties": false }),
@@ -232,7 +247,9 @@ fn tool_ax_capture_status() -> Tool {
                 "session_id":            { "type": "string" },
                 "duration_ms":           { "type": "integer" },
                 "audio_buffer_seconds":  { "type": "number" },
-                "transcript_segments":   { "type": "integer" }
+                "transcript_segments":   { "type": "integer" },
+                "frames_captured":       { "type": "integer" },
+                "frames_skipped":        { "type": "integer" }
             },
             "required": ["running"]
         }),
@@ -346,6 +363,8 @@ pub(crate) fn handle_ax_capture_status() -> ToolCallResult {
                     "duration_ms":          session.duration_ms(),
                     "audio_buffer_seconds": session.audio_buffer_seconds(),
                     "transcript_segments":  session.transcript_segment_count(),
+                    "frames_captured":      session.frames_captured(),
+                    "frames_skipped":       session.frames_skipped(),
                 })
                 .to_string(),
             ),
@@ -368,7 +387,28 @@ fn parse_capture_config(args: &Value) -> CaptureConfig {
         buffer_seconds: args["buffer_seconds"]
             .as_u64()
             .map_or(60, |v| v.clamp(5, 300) as u32),
+        screen_diff_threshold: args["screen_diff_threshold"]
+            .as_f64()
+            .map_or(0.05, |v| v.clamp(0.0, 1.0) as f32),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+/// A process-wide mutex that serialises all tests that touch the global
+/// capture session singleton.  Because the singleton is shared across test
+/// threads, tests that start/stop a session must hold this lock for their
+/// entire duration to prevent races with other tests that assert on the
+/// no-session state.
+///
+/// Exposed as `pub(crate)` so that sibling test modules (e.g.
+/// `resources::tests`) can acquire the same lock.
+#[cfg(test)]
+pub(crate) fn session_test_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +494,7 @@ mod tests {
         assert!(!cfg.screen);
         assert!(cfg.transcribe);
         assert_eq!(cfg.buffer_seconds, 60);
+        assert!((cfg.screen_diff_threshold - 0.05).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -462,12 +503,14 @@ mod tests {
             "audio": false,
             "screen": true,
             "transcribe": false,
-            "buffer_seconds": 120
+            "buffer_seconds": 120,
+            "screen_diff_threshold": 0.10
         }));
         assert!(!cfg.audio);
         assert!(cfg.screen);
         assert!(!cfg.transcribe);
         assert_eq!(cfg.buffer_seconds, 120);
+        assert!((cfg.screen_diff_threshold - 0.10).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -482,12 +525,85 @@ mod tests {
         assert_eq!(cfg.buffer_seconds, 300);
     }
 
+    #[test]
+    fn parse_capture_config_clamps_screen_diff_threshold_below_zero() {
+        // GIVEN: threshold below 0.0 clamped to 0.0
+        let cfg = parse_capture_config(&json!({ "screen_diff_threshold": -0.5 }));
+        assert_eq!(cfg.screen_diff_threshold, 0.0);
+    }
+
+    #[test]
+    fn parse_capture_config_clamps_screen_diff_threshold_above_one() {
+        // GIVEN: threshold above 1.0 clamped to 1.0
+        let cfg = parse_capture_config(&json!({ "screen_diff_threshold": 99.0 }));
+        assert_eq!(cfg.screen_diff_threshold, 1.0);
+    }
+
+    #[test]
+    fn parse_capture_config_screen_diff_threshold_zero_stored() {
+        let cfg = parse_capture_config(&json!({ "screen_diff_threshold": 0.0 }));
+        assert_eq!(cfg.screen_diff_threshold, 0.0);
+    }
+
+    #[test]
+    fn ax_capture_status_output_schema_includes_diff_stat_fields() {
+        // GIVEN: tool declaration
+        let tool = tool_ax_capture_status();
+        let props = &tool.output_schema["properties"];
+        // THEN: diff stat fields are present
+        assert!(
+            props.get("frames_captured").is_some(),
+            "frames_captured missing from output schema"
+        );
+        assert!(
+            props.get("frames_skipped").is_some(),
+            "frames_skipped missing from output schema"
+        );
+    }
+
+    #[test]
+    fn ax_start_capture_schema_has_screen_diff_threshold_field() {
+        // GIVEN: tool declaration
+        let tool = tool_ax_start_capture();
+        let props = &tool.input_schema["properties"];
+        let thr = &props["screen_diff_threshold"];
+        // THEN: bounds are correct
+        assert_eq!(thr["minimum"], 0.0);
+        assert_eq!(thr["maximum"], 1.0);
+        assert!((thr["default"].as_f64().unwrap_or(99.0) - 0.05).abs() < 1e-6);
+    }
+
+    #[test]
+    fn handle_ax_capture_status_returns_diff_counters_when_session_active() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        // GIVEN: active session (no audio, no screen — counters start at 0)
+        let _ = handle_ax_stop_capture(&json!({}));
+        let start = handle_ax_start_capture(&json!({
+            "audio": false,
+            "transcribe": false,
+            "screen": false
+        }));
+        assert!(!start.is_error, "{}", start.content[0].text);
+
+        // WHEN: status queried
+        let status = handle_ax_capture_status();
+        assert!(!status.is_error);
+        let v: Value = serde_json::from_str(&status.content[0].text).unwrap();
+
+        // THEN: diff counters are present and zero (no screen capture occurred)
+        assert_eq!(v["frames_captured"], 0, "frames_captured should be 0");
+        assert_eq!(v["frames_skipped"], 0, "frames_skipped should be 0");
+
+        let _ = handle_ax_stop_capture(&json!({}));
+    }
+
     // -----------------------------------------------------------------------
     // Handlers — no active session
     // -----------------------------------------------------------------------
 
     #[test]
     fn handle_ax_capture_status_no_session_returns_running_false() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running (stop any lingering global state).
         let _ = handle_ax_stop_capture(&json!({}));
 
@@ -503,6 +619,7 @@ mod tests {
 
     #[test]
     fn handle_ax_get_transcription_no_session_returns_error() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running.
         let _ = handle_ax_stop_capture(&json!({}));
 
@@ -513,6 +630,7 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_no_session_returns_stopped_false() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running.
         let _ = handle_ax_stop_capture(&json!({}));
 
@@ -528,6 +646,7 @@ mod tests {
 
     #[test]
     fn start_stop_lifecycle_produces_valid_json() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         // GIVEN: start a session with no audio (avoids hardware dependency)
         let start_result = handle_ax_start_capture(&json!({
             "audio": false,
