@@ -400,14 +400,14 @@ fn resources_read_unconnected_app_returns_error() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn prompts_list_returns_four_prompts() {
+fn prompts_list_returns_six_prompts() {
     let mut s = Server::new();
     initialize_server(&mut s);
     let req = make_request(20, "prompts/list", None);
     let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
     let v: Value = serde_json::to_value(&resp).unwrap();
     let prompts = v["result"]["prompts"].as_array().unwrap();
-    assert_eq!(prompts.len(), 4);
+    assert_eq!(prompts.len(), 6);
 }
 
 #[test]

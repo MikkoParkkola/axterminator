@@ -266,16 +266,25 @@ fn build_initialize_result() -> InitializeResult {
             title: "AXTerminator - macOS GUI Automation",
         },
         instructions: "\
-AXTerminator: background-first macOS GUI automation.\n\
+AXTerminator: background-first macOS GUI automation via Accessibility API.\n\
 \n\
-Workflow:\n\
-1. ax_is_accessible — verify permissions\n\
-2. ax_connect — connect to an app by name, bundle ID, or PID\n\
-3. ax_find — locate elements (self-healing, 7 strategies)\n\
-4. ax_click / ax_type / ax_set_value — interact\n\
-5. ax_screenshot — visual context\n\
-6. ax_wait_idle — wait for UI to settle before asserting state\n\
+Workflow: ax_connect → ax_get_tree (ALWAYS look first) → ax_find → interact → verify.\n\
 \n\
-All actions run in background mode by default (no focus stealing).",
+Query syntax:\n\
+- Simple text: query=\"Save\" — matches title/description/value/label/id (OR)\n\
+- Prefixed: query=\"role:AXButton\" or \"description:7\" or \"value:42\" (AND when combined)\n\
+\n\
+Key rules:\n\
+- ALWAYS ax_get_tree before ax_find — never guess element names\n\
+- If ax_click fails with 'AXPress unsupported' → use ax_click_at with coordinates\n\
+- Use ax_set_value for instant text, ax_type for keystroke simulation (needs focus)\n\
+\n\
+Use prompts/get for detailed guidance:\n\
+- 'troubleshooting' — when something fails (element not found, click not working)\n\
+- 'app-guide' with app arg — app-specific playbook (Calculator, TextEdit, Safari, etc.)\n\
+- 'test-app' — step-by-step testing guide\n\
+- 'navigate-to' — reach a specific UI state\n\
+- 'extract-data' — read structured data from an app\n\
+- 'accessibility-audit' — audit app for a11y issues",
     }
 }
