@@ -121,7 +121,15 @@ pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
                 };
                 match click_result {
                     Ok(()) => {
-                        ToolCallResult::ok(json!({"clicked": true, "query": query}).to_string())
+                        let bounds = el.bounds();
+                        ToolCallResult::ok(
+                            json!({
+                                "clicked": true,
+                                "query": query,
+                                "bounds": bounds.map(|(x, y, w, h)| [x, y, w, h])
+                            })
+                            .to_string(),
+                        )
                     }
                     Err(e) => ToolCallResult::error(format!("Click failed: {e}")),
                 }

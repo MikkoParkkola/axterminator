@@ -218,42 +218,160 @@ impl AXApp {
         self.breadth_first_search(&criteria)
     }
 
-    /// Capture screenshot of the application
+    /// Capture screenshot of the application's frontmost window.
+    ///
+    /// Uses `CGWindowListCopyWindowInfo` to find the window ID by PID,
+    /// then `screencapture -l <windowID>` for the actual capture. Falls back to
+    /// a region-based capture derived from the AX window bounds when the
+    /// primary method fails.
     fn capture_screenshot(&self) -> AXResult<Vec<u8>> {
-        // Use screencapture command for now
+        let wid = self.cg_window_id()?;
         let temp_path = format!("/tmp/axterminator_screenshot_{}.png", self.pid);
 
         let output = Command::new("screencapture")
-            .args(["-l", &self.window_id()?, "-o", "-x", &temp_path])
+            .args(["-l", &wid.to_string(), "-o", "-x", &temp_path])
             .output()
             .map_err(|e| AXError::SystemError(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(AXError::SystemError("Screenshot failed".into()));
+            return self.capture_screenshot_fallback();
         }
 
         let data = std::fs::read(&temp_path).map_err(|e| AXError::SystemError(e.to_string()))?;
         let _ = std::fs::remove_file(&temp_path);
-
         Ok(data)
     }
 
-    /// Get window ID for screencapture
-    fn window_id(&self) -> AXResult<String> {
-        // Get window ID via CGWindowListCopyWindowInfo
-        let output = Command::new("osascript")
-            .args([
-                "-e",
-                &format!(
-                    "tell application \"System Events\" to id of window 1 of (processes whose unix id is {})",
-                    self.pid
-                ),
-            ])
+    /// Return the `CGWindowID` for this app's frontmost normal window.
+    ///
+    /// Iterates the system-wide window list via `CGWindowListCopyWindowInfo`,
+    /// filters by owner PID and window layer 0 (normal windows only, excluding
+    /// menu bars, overlays, and other system-managed layers), and returns the
+    /// first matching window number.
+    ///
+    /// # Safety
+    ///
+    /// The `CGWindowListCopyWindowInfo` FFI call is safe: both arguments are
+    /// plain integer constants and the function does not dereference any
+    /// caller-supplied pointer. All CF objects are wrapped immediately under
+    /// ownership/get rules, so no leaks occur on the Rust side.
+    fn cg_window_id(&self) -> AXResult<u32> {
+        use core_foundation::array::CFArray;
+        use core_foundation::base::{CFType, TCFType};
+        use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+        use core_foundation::number::{CFNumber, CFNumberRef};
+        use core_foundation::string::CFString;
+
+        #[link(name = "CoreGraphics", kind = "framework")]
+        extern "C" {
+            fn CGWindowListCopyWindowInfo(
+                option: u32,
+                relative_to: u32,
+            ) -> core_foundation::array::CFArrayRef;
+        }
+
+        const K_CG_WINDOW_LIST_OPTION_ALL: u32 = 0;
+        const K_CG_NULL_WINDOW_ID: u32 = 0;
+
+        // SAFETY: constants-only call; returns a +1 retained CFArray or NULL.
+        let array_ref =
+            unsafe { CGWindowListCopyWindowInfo(K_CG_WINDOW_LIST_OPTION_ALL, K_CG_NULL_WINDOW_ID) };
+
+        if array_ref.is_null() {
+            return Err(AXError::SystemError(
+                "CGWindowListCopyWindowInfo returned null".into(),
+            ));
+        }
+
+        // SAFETY: array_ref is +1 retained (Create rule).
+        let array = unsafe { CFArray::<CFType>::wrap_under_create_rule(array_ref) };
+
+        let pid_key = CFString::new("kCGWindowOwnerPID");
+        let wid_key = CFString::new("kCGWindowNumber");
+        let layer_key = CFString::new("kCGWindowLayer");
+
+        for i in 0..array.len() {
+            let Some(entry) = array.get(i) else { continue };
+
+            // SAFETY: each entry in CGWindowListCopyWindowInfo is a CFDictionary.
+            let dict = unsafe {
+                CFDictionary::<CFString, CFType>::wrap_under_get_rule(
+                    entry.as_concrete_TypeRef() as CFDictionaryRef
+                )
+            };
+
+            let Some(pid_cf) = dict.find(&pid_key) else {
+                continue;
+            };
+            // SAFETY: kCGWindowOwnerPID values are always CFNumber.
+            let pid_num = unsafe {
+                CFNumber::wrap_under_get_rule(pid_cf.as_concrete_TypeRef() as CFNumberRef)
+            };
+            let Some(pid) = pid_num.to_i32() else {
+                continue;
+            };
+            if pid != self.pid {
+                continue;
+            }
+
+            // Layer 0 = normal application window; skip menu bars, overlays, etc.
+            if let Some(layer_cf) = dict.find(&layer_key) {
+                // SAFETY: kCGWindowLayer values are always CFNumber.
+                let layer_num = unsafe {
+                    CFNumber::wrap_under_get_rule(layer_cf.as_concrete_TypeRef() as CFNumberRef)
+                };
+                if layer_num.to_i32().is_some_and(|l| l != 0) {
+                    continue;
+                }
+            }
+
+            let Some(wid_cf) = dict.find(&wid_key) else {
+                continue;
+            };
+            // SAFETY: kCGWindowNumber values are always CFNumber.
+            let wid_num = unsafe {
+                CFNumber::wrap_under_get_rule(wid_cf.as_concrete_TypeRef() as CFNumberRef)
+            };
+            if let Some(wid) = wid_num.to_i32() {
+                return Ok(wid as u32);
+            }
+        }
+
+        Err(AXError::SystemError(format!(
+            "No window found for PID {} via CGWindowListCopyWindowInfo",
+            self.pid
+        )))
+    }
+
+    /// Fallback screenshot using the AX window bounds for a region capture.
+    ///
+    /// Invoked when the window-ID path fails (e.g., sandboxed app, missing
+    /// Screen Recording permission for the CGWindowList API).
+    fn capture_screenshot_fallback(&self) -> AXResult<Vec<u8>> {
+        let windows = self.get_windows()?;
+        let win = windows
+            .first()
+            .ok_or_else(|| AXError::SystemError("No windows to screenshot".into()))?;
+        let (x, y, w, h) = win
+            .bounds()
+            .ok_or_else(|| AXError::SystemError("Window has no bounds".into()))?;
+
+        let temp_path = format!("/tmp/axterminator_screenshot_{}.png", self.pid);
+        let region = format!("{},{},{},{}", x as i32, y as i32, w as i32, h as i32);
+        let output = Command::new("screencapture")
+            .args(["-R", &region, "-x", &temp_path])
             .output()
             .map_err(|e| AXError::SystemError(e.to_string()))?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(stdout.trim().to_string())
+        if !output.status.success() {
+            return Err(AXError::ActionFailed(
+                "Screenshot failed (both window-id and region methods)".into(),
+            ));
+        }
+
+        let data = std::fs::read(&temp_path).map_err(|e| AXError::SystemError(e.to_string()))?;
+        let _ = std::fs::remove_file(&temp_path);
+        Ok(data)
     }
 
     /// Get all windows

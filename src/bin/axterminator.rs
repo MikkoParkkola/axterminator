@@ -487,17 +487,19 @@ fn cmd_tree(app: Option<&str>, bundle_id: Option<&str>, depth: usize) -> Result<
         return Ok(());
     }
 
+    let mut total = 0;
     for (i, win) in windows.iter().enumerate() {
         let title = win.title().unwrap_or_else(|| format!("Window {i}"));
         println!("Window[{i}]: {title}");
-        print_element_tree(win, 1, depth);
+        total += print_element_tree(win, 1, depth);
     }
+    println!("\n({total} elements)");
     Ok(())
 }
 
-fn print_element_tree(el: &axterminator::AXElement, indent: usize, max_depth: usize) {
+fn print_element_tree(el: &axterminator::AXElement, indent: usize, max_depth: usize) -> usize {
     if indent > max_depth {
-        return;
+        return 0;
     }
     let prefix = "  ".repeat(indent);
     let role = el.role().unwrap_or_else(|| "?".into());
@@ -507,18 +509,44 @@ fn print_element_tree(el: &axterminator::AXElement, indent: usize, max_depth: us
         .or_else(|| el.label())
         .or_else(|| el.value())
         .unwrap_or_default();
-    let suffix = if label.is_empty() {
+    let label_suffix = if label.is_empty() {
         String::new()
     } else {
         format!(" \"{label}\"")
     };
-    println!("{prefix}{role}{suffix}");
 
+    let bounds_suffix = if let Some((x, y, w, h)) = el.bounds() {
+        format!(" [{x:.0},{y:.0} {w:.0}x{h:.0}]")
+    } else {
+        String::new()
+    };
+
+    let interactive = matches!(
+        role.as_str(),
+        "AXButton"
+            | "AXTextField"
+            | "AXTextArea"
+            | "AXCheckBox"
+            | "AXRadioButton"
+            | "AXSlider"
+            | "AXPopUpButton"
+            | "AXMenuButton"
+    );
+    let state_suffix = if interactive && !el.enabled() {
+        " [disabled]"
+    } else {
+        ""
+    };
+
+    println!("{prefix}{role}{label_suffix}{bounds_suffix}{state_suffix}");
+
+    let mut count = 1;
     if indent < max_depth {
         for child in el.children() {
-            print_element_tree(&child, indent + 1, max_depth);
+            count += print_element_tree(&child, indent + 1, max_depth);
         }
     }
+    count
 }
 
 fn cmd_apps() -> Result<()> {

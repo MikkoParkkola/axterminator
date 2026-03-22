@@ -169,14 +169,63 @@ impl AXElement {
     }
 
     /// Perform click action — returns `AXResult`.
+    ///
+    /// Attempts `AXPress` first. If the action is unsupported by the element
+    /// (reported as [`AXError::BackgroundNotSupported`] or [`AXError::ActionFailed`]),
+    /// falls back transparently to a coordinate-based CGEvent click at the
+    /// element's center.
     fn perform_click_native(&self, mode: ActionMode) -> AXResult<()> {
-        match mode {
+        let press_result = match mode {
             ActionMode::Background => perform_action(self.element, actions::AX_PRESS),
             ActionMode::Focus => {
                 self.bring_to_focus_internal()?;
                 perform_action(self.element, actions::AX_PRESS)
             }
+        };
+
+        match press_result {
+            Ok(()) => Ok(()),
+            Err(AXError::BackgroundNotSupported(_)) | Err(AXError::ActionFailed(_)) => {
+                self.click_at_center()
+            }
+            Err(e) => Err(e),
         }
+    }
+
+    /// Click at the element's center via CGEvent (coordinate-based).
+    ///
+    /// Used as an automatic fallback when `AXPress` is unsupported by the element.
+    fn click_at_center(&self) -> AXResult<()> {
+        use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType, CGMouseButton};
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+        use core_graphics::geometry::CGPoint;
+
+        let (x, y, w, h) = self.bounds().ok_or_else(|| {
+            AXError::ActionFailed(
+                "Cannot fall back to coordinate click: element has no bounds".into(),
+            )
+        })?;
+
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|()| AXError::ActionFailed("Failed to create CGEventSource".into()))?;
+
+        let point = CGPoint::new(x + w / 2.0, y + h / 2.0);
+
+        let down = CGEvent::new_mouse_event(
+            source.clone(),
+            CGEventType::LeftMouseDown,
+            point,
+            CGMouseButton::Left,
+        )
+        .map_err(|()| AXError::ActionFailed("Failed to create mouse down event".into()))?;
+        down.post(CGEventTapLocation::HID);
+
+        let up =
+            CGEvent::new_mouse_event(source, CGEventType::LeftMouseUp, point, CGMouseButton::Left)
+                .map_err(|()| AXError::ActionFailed("Failed to create mouse up event".into()))?;
+        up.post(CGEventTapLocation::HID);
+
+        Ok(())
     }
 
     /// Perform show menu action (right-click)
