@@ -211,6 +211,11 @@ impl Server {
                 return r;
             }
         }
+        if let Some(result) =
+            crate::mcp::tools_innovation::call_workflow_tool(name, args, &self.workflows)
+        {
+            return result;
+        }
         call_tool(name, args, &self.registry, out)
     }
 

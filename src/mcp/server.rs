@@ -23,8 +23,9 @@
 //! | `prompts/list` | 2 | [`server_handlers`] |
 //! | `prompts/get` | 2 | [`server_handlers`] |
 
+use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde_json::json;
 #[cfg(test)]
@@ -51,10 +52,24 @@ pub(super) enum Phase {
     Running,
 }
 
+/// Tracks the in-progress state of a single durable workflow across MCP calls.
+pub(crate) struct WorkflowState {
+    /// The ordered steps that make up this workflow.
+    pub steps: Vec<crate::durable_steps::DurableStep>,
+    /// Zero-based index of the next step to execute.
+    pub current_step: usize,
+    /// Results accumulated from already-executed steps.
+    pub results: Vec<crate::durable_steps::WorkflowResult>,
+    /// Whether all steps have been executed successfully.
+    pub completed: bool,
+}
+
 /// MCP stdio server state.
 pub(super) struct Server {
     pub(super) registry: Arc<AppRegistry>,
     pub(super) phase: Phase,
+    /// Active durable workflows, keyed by workflow name.
+    pub(super) workflows: Arc<Mutex<HashMap<String, WorkflowState>>>,
     #[cfg(feature = "watch")]
     pub(super) watch_state: Arc<crate::mcp::tools_watch::WatchState>,
 }
@@ -64,6 +79,7 @@ impl Server {
         Self {
             registry: Arc::new(AppRegistry::default()),
             phase: Phase::Uninitialized,
+            workflows: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(feature = "watch")]
             watch_state: Arc::new(crate::mcp::tools_watch::WatchState::new()),
         }

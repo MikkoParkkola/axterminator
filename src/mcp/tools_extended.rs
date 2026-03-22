@@ -43,6 +43,10 @@ pub use crate::mcp::tools_spaces::spaces_tools;
 #[cfg(feature = "watch")]
 pub use crate::mcp::tools_watch::{watch_tools, WatchState};
 
+// Re-export docker browser tools.
+#[cfg(feature = "docker")]
+pub use crate::mcp::tools_docker::docker_tools;
+
 // ---------------------------------------------------------------------------
 // Tool registry
 // ---------------------------------------------------------------------------
@@ -69,6 +73,8 @@ pub fn extended_tools() -> Vec<Tool> {
     tools.extend(camera_tools());
     #[cfg(feature = "watch")]
     tools.extend(watch_tools());
+    #[cfg(feature = "docker")]
+    tools.extend(docker_tools());
     tools.extend(crate::mcp::tools_innovation::innovation_tools());
     tools
 }
@@ -125,6 +131,10 @@ pub fn call_tool_extended<W: Write>(
         "ax_gesture_detect" => Some(crate::mcp::tools_camera::handle_ax_gesture_detect(args)),
         #[cfg(feature = "camera")]
         "ax_gesture_listen" => Some(crate::mcp::tools_camera::handle_ax_gesture_listen(args)),
+        #[cfg(feature = "docker")]
+        "ax_browser_launch" => Some(crate::mcp::tools_docker::handle_ax_browser_launch(args)),
+        #[cfg(feature = "docker")]
+        "ax_browser_stop" => Some(crate::mcp::tools_docker::handle_ax_browser_stop(args)),
         // Watch tools require a WatchState which is not available in the stateless
         // extended dispatcher.  These are dispatched by the server's handle_tools_call
         // via the Server::call_watch_tool helper instead.
@@ -160,18 +170,19 @@ mod tests {
 
     #[test]
     fn extended_tools_count_matches_feature_set() {
-        // GIVEN: Phase 3 GUI base (7) + innovation (4) = 11 + optional feature extensions
+        // GIVEN: Phase 3 GUI base (7) + innovation (8) = 15 + optional feature extensions
         // WHEN: requesting extended tools
         let tools = super::extended_tools();
         // THEN: count is deterministic per feature set
-        let base = 11usize; // Phase 3 GUI (7) + innovation (4)
+        let base = 15usize; // Phase 3 GUI (7) + innovation (8, incl. ax_record)
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
         let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
+        let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
         assert_eq!(
             tools.len(),
-            base + extra_spaces + extra_audio + extra_camera + extra_watch
+            base + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
         );
     }
 

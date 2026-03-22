@@ -44,6 +44,10 @@ camera = []
 # Pushes events to Claude Code sessions via MCP notifications/claude/channel.
 # Implies audio + camera + tokio/time. Off by default.
 watch = ["audio", "camera", "dep:tokio-util"]
+# docker: Neko browser containers as isolated test targets via Docker CLI.
+# Exposes ax_browser_launch and ax_browser_stop MCP tools.
+# Off by default — requires Docker daemon; not needed for native-app testing.
+docker = []
 
 [dependencies]
 # CLI (feature-gated so it's only compiled for the binary target)

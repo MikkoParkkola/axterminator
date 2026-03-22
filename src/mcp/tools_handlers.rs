@@ -48,13 +48,17 @@ pub(crate) fn handle_connect(args: &Value, registry: &Arc<AppRegistry>) -> ToolC
             #[allow(clippy::cast_sign_loss)]
             let connected_pid = app.pid as u32;
             let bundle = app.bundle_id.clone();
+            let app_type = crate::router::detect_app_type(bundle.as_deref().unwrap_or(""), app.pid)
+                .name()
+                .to_string();
             registry.insert(alias.to_string(), app);
             ToolCallResult::ok(
                 json!({
                     "connected": true,
                     "alias": alias,
                     "pid": connected_pid,
-                    "bundle_id": bundle
+                    "bundle_id": bundle,
+                    "app_type": app_type
                 })
                 .to_string(),
             )
@@ -74,7 +78,8 @@ pub(crate) fn handle_find(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
         .with_app(&app_name, |app| {
             match app.find_native(&query, Some(timeout_ms)) {
                 Ok(el) => {
-                    let bounds_arr = el.bounds().map(|(x, y, w, h)| {
+                    let bounds_tuple = el.bounds();
+                    let bounds_arr = bounds_tuple.map(|(x, y, w, h)| {
                         serde_json::Value::Array(vec![
                             serde_json::json!(x),
                             serde_json::json!(y),
@@ -82,6 +87,7 @@ pub(crate) fn handle_find(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
                             serde_json::json!(h),
                         ])
                     });
+                    let locator = build_locator(el.role(), el.title(), bounds_tuple);
                     ToolCallResult::ok(
                         json!({
                             "found": true,
@@ -89,7 +95,8 @@ pub(crate) fn handle_find(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
                             "title": el.title(),
                             "value": el.value(),
                             "enabled": el.enabled(),
-                            "bounds": bounds_arr
+                            "bounds": bounds_arr,
+                            "locator": locator
                         })
                         .to_string(),
                     )
@@ -369,6 +376,22 @@ pub(crate) fn handle_wait_idle(args: &Value, registry: &Arc<AppRegistry>) -> Too
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/// Build a healing-compatible locator from element attributes and bounds.
+///
+/// Agents can store this locator and pass it back in future calls to reliably
+/// re-identify the element even after minor UI layout changes.
+fn build_locator(
+    role: Option<String>,
+    title: Option<String>,
+    bounds: Option<(f64, f64, f64, f64)>,
+) -> Value {
+    json!({
+        "role": role,
+        "title": title,
+        "bounds": bounds.map(|(x, y, w, h)| [x, y, w, h])
+    })
+}
 
 /// Extract the mandatory `app` and `query` string fields from an argument object.
 pub(crate) fn extract_app_query(args: &Value) -> Result<(String, String), String> {
