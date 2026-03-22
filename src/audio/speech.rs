@@ -47,6 +47,13 @@ impl SpeechAuthStatus {
 /// All recognition runs locally (`requiresOnDeviceRecognition = true`).
 /// No audio data is sent over the network.
 ///
+/// `language` selects the `SFSpeechRecognizer` locale (BCP-47 tag, e.g.
+/// `"en-US"`, `"fi-FI"`, `"ja-JP"`).  Pass `None` for the default `"en-US"`.
+///
+/// **Note:** On-device model quality varies significantly by language.
+/// English is solid; less common languages may have very low accuracy.
+/// Check `SFSpeechRecognizer(locale:)?.isAvailable` for your target locale.
+///
 /// Returns the transcribed text, which may be empty for silent input.
 ///
 /// # Errors
@@ -59,12 +66,13 @@ impl SpeechAuthStatus {
 /// ```ignore
 /// use axterminator::audio::{AudioData, transcribe};
 /// let silent = AudioData::silent(1.0);
-/// let text = transcribe(&silent).unwrap_or_default();
+/// let text = transcribe(&silent, None).unwrap_or_default();
 /// assert!(text.is_empty() || !text.is_empty()); // either is valid
 /// ```
-pub fn transcribe(audio: &AudioData) -> Result<String, AudioError> {
-    debug!(samples = audio.samples.len(), "transcribing audio");
-    transcribe_with_sf_speech(audio)
+pub fn transcribe(audio: &AudioData, language: Option<&str>) -> Result<String, AudioError> {
+    let locale = language.unwrap_or("en-US");
+    debug!(samples = audio.samples.len(), locale, "transcribing audio");
+    transcribe_with_sf_speech(audio, locale)
 }
 
 /// Synthesize `text` as speech and play it through the default audio output.
@@ -187,7 +195,7 @@ fn request_speech_authorization() -> Result<(), AudioError> {
 /// Ensures speech recognition permission is obtained before attempting
 /// transcription.  Writes a temporary WAV file in `/tmp`, runs the
 /// recognizer, then deletes it.
-fn transcribe_with_sf_speech(audio: &AudioData) -> Result<String, AudioError> {
+fn transcribe_with_sf_speech(audio: &AudioData, locale: &str) -> Result<String, AudioError> {
     // Ensure authorization is present — this is the fix for BUG #26.
     // When status is NotDetermined the system dialog is shown and we block
     // until the user responds.  Without this call, SFSpeechRecognizer silently
@@ -199,7 +207,7 @@ fn transcribe_with_sf_speech(audio: &AudioData) -> Result<String, AudioError> {
     let tmp_path = write_temp_wav(&wav_bytes)
         .map_err(|e| AudioError::Framework(format!("Temp file write failed: {e}")))?;
 
-    let result = run_sf_speech_recognizer(&tmp_path);
+    let result = run_sf_speech_recognizer(&tmp_path, locale);
 
     // Always delete the temp file, even on error.
     let _ = std::fs::remove_file(&tmp_path);
@@ -241,13 +249,12 @@ fn write_temp_wav(bytes: &[u8]) -> Result<String, std::io::Error> {
 ///
 /// Errors from the recognition task are surfaced as [`AudioError::Transcription`]
 /// rather than silently producing an empty result.
-fn run_sf_speech_recognizer(wav_path: &str) -> Result<String, AudioError> {
-    let recognizer = create_sf_speech_recognizer().ok_or_else(|| {
-        AudioError::Transcription(
-            "SFSpeechRecognizer unavailable — check that speech recognition \
-             is enabled and the locale (en-US) is supported on this device"
-                .to_string(),
-        )
+fn run_sf_speech_recognizer(wav_path: &str, locale: &str) -> Result<String, AudioError> {
+    let recognizer = create_sf_speech_recognizer(locale).ok_or_else(|| {
+        AudioError::Transcription(format!(
+            "SFSpeechRecognizer unavailable for locale \"{locale}\" — check that speech \
+             recognition is enabled and the locale is supported on this device"
+        ))
     })?;
 
     // Verify the recognizer is actually available (device might not support on-device).
@@ -383,8 +390,9 @@ fn recognize_async(
     }
 }
 
-/// Create `SFSpeechRecognizer` for `en-US`.
-fn create_sf_speech_recognizer() -> Option<*mut Object> {
+/// Create `SFSpeechRecognizer` for the given BCP-47 locale (e.g. `"en-US"`,
+/// `"fi-FI"`, `"ja-JP"`).
+fn create_sf_speech_recognizer(locale_tag: &str) -> Option<*mut Object> {
     let cls = objc_class("SFSpeechRecognizer");
     if cls.is_null() {
         return None;
@@ -393,7 +401,7 @@ fn create_sf_speech_recognizer() -> Option<*mut Object> {
     if locale_cls.is_null() {
         return None;
     }
-    let locale_id = ns_string_from_str("en-US");
+    let locale_id = ns_string_from_str(locale_tag);
     let locale: *mut Object =
         unsafe { msg_send![locale_cls, localeWithLocaleIdentifier: locale_id] };
 

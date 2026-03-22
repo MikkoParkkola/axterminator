@@ -44,6 +44,10 @@ camera = []
 # Pushes events to Claude Code sessions via MCP notifications/claude/channel.
 # Implies audio + camera + tokio/time. Off by default.
 watch = ["audio", "camera", "dep:tokio-util"]
+# context: geolocation via CoreLocation. Off by default — requires Location Services
+# TCC permission. System context (battery, volume, dark mode, etc.) and clipboard
+# are always available without this feature flag.
+context = []
 # docker: Neko browser containers as isolated test targets via Docker CLI.
 # Exposes ax_browser_launch and ax_browser_stop MCP tools.
 # Off by default — requires Docker daemon; not needed for native-app testing.

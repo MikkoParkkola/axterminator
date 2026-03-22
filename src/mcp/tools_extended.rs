@@ -75,6 +75,7 @@ pub fn extended_tools() -> Vec<Tool> {
     tools.extend(watch_tools());
     #[cfg(feature = "docker")]
     tools.extend(docker_tools());
+    tools.extend(crate::mcp::tools_context::context_tools());
     tools.extend(crate::mcp::tools_innovation::innovation_tools());
     tools
 }
@@ -135,6 +136,9 @@ pub fn call_tool_extended<W: Write>(
         "ax_browser_launch" => Some(crate::mcp::tools_docker::handle_ax_browser_launch(args)),
         #[cfg(feature = "docker")]
         "ax_browser_stop" => Some(crate::mcp::tools_docker::handle_ax_browser_stop(args)),
+        "ax_system_context" => Some(crate::mcp::tools_context::handle_ax_system_context()),
+        #[cfg(feature = "context")]
+        "ax_location" => Some(crate::mcp::tools_context::handle_ax_location(args)),
         // Watch tools require a WatchState which is not available in the stateless
         // extended dispatcher.  These are dispatched by the server's handle_tools_call
         // via the Server::call_watch_tool helper instead.
@@ -170,11 +174,13 @@ mod tests {
 
     #[test]
     fn extended_tools_count_matches_feature_set() {
-        // GIVEN: Phase 3 GUI base (7) + innovation (15) = 22 + optional feature extensions
+        // GIVEN: Phase 3 GUI base (7) + context (2-3) + innovation (15) = 24-25 + optional feature extensions
         // WHEN: requesting extended tools
         let tools = super::extended_tools();
         // THEN: count is deterministic per feature set
         let base = 22usize; // Phase 3 GUI (7) + innovation (15)
+        let context_base = 1usize; // system_context (always on); clipboard is in innovation
+        let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
@@ -182,7 +188,7 @@ mod tests {
         let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
         assert_eq!(
             tools.len(),
-            base + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
+            base + context_base + extra_context_location + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
         );
     }
 

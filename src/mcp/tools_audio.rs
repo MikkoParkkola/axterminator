@@ -37,14 +37,24 @@ fn tool_ax_listen() -> Tool {
             true the audio is also transcribed on-device via SFSpeechRecognizer (macOS 13+, \
             no cloud — privacy-preserving).\n\
             \n\
+            On macOS 14+, system audio capture uses ScreenCaptureKit in audio-only mode \
+            (width=0, height=0) which does NOT require Screen Recording permission.\n\
+            \n\
             Sources:\n\
             - `\"microphone\"` — default input device (requires TCC microphone permission)\n\
-            - `\"system\"` — system audio output loopback\n\
+            - `\"system\"` — system audio output loopback (macOS 14+: no Screen Recording needed)\n\
             \n\
             Duration is capped at 30 seconds. The call returns within `duration + 1s`.\n\
             \n\
+            For long captures, set `max_chunk_secs` to split audio into smaller segments \
+            (reduces peak MCP payload size). A 30s capture at 16kHz mono = ~960KB WAV → \
+            ~1.3MB base64. Chunking into 5s segments keeps each under ~220KB.\n\
+            \n\
             Example: verify an error sound played\n\
-            `{\"duration\": 3, \"source\": \"system\", \"transcribe\": false}`",
+            `{\"duration\": 3, \"source\": \"system\", \"transcribe\": false}`\n\
+            \n\
+            Example: transcribe Finnish speech\n\
+            `{\"duration\": 10, \"transcribe\": true, \"language\": \"fi-FI\"}`",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -65,6 +75,23 @@ fn tool_ax_listen() -> Tool {
                     "type": "boolean",
                     "description": "When true, return a text transcript in addition to raw audio",
                     "default": false
+                },
+                "language": {
+                    "type": "string",
+                    "description": "BCP-47 locale for speech recognition (default \"en-US\"). \
+                        On-device model quality varies by language — English is solid, less \
+                        common languages may have low accuracy. Examples: \"en-US\", \"fi-FI\", \
+                        \"ja-JP\", \"de-DE\", \"fr-FR\", \"es-ES\", \"zh-Hans\"",
+                    "default": "en-US"
+                },
+                "max_chunk_secs": {
+                    "type": "number",
+                    "description": "When set, split the captured audio into chunks of at most \
+                        this many seconds. Returns a `chunks` array instead of a single \
+                        `base64_wav`. Useful for keeping MCP payload size manageable on \
+                        longer recordings.",
+                    "minimum": 1.0,
+                    "maximum": 30.0
                 }
             },
             "additionalProperties": false
@@ -72,13 +99,27 @@ fn tool_ax_listen() -> Tool {
         output_schema: json!({
             "type": "object",
             "properties": {
-                "captured":     { "type": "boolean" },
-                "duration_ms":  { "type": "integer" },
-                "sample_rate":  { "type": "integer" },
-                "base64_wav":   { "type": "string" },
-                "transcript":   { "type": "string" }
+                "captured":       { "type": "boolean" },
+                "duration_ms":    { "type": "integer" },
+                "sample_rate":    { "type": "integer" },
+                "size_bytes":     { "type": "integer", "description": "WAV payload size before base64" },
+                "base64_wav":     { "type": "string" },
+                "transcript":     { "type": "string" },
+                "chunks": {
+                    "type": "array",
+                    "description": "Present when max_chunk_secs is set",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "index":       { "type": "integer" },
+                            "duration_ms": { "type": "integer" },
+                            "size_bytes":  { "type": "integer" },
+                            "base64_wav":  { "type": "string" }
+                        }
+                    }
+                }
             },
-            "required": ["captured", "duration_ms", "sample_rate", "base64_wav"]
+            "required": ["captured", "duration_ms", "sample_rate", "size_bytes"]
         }),
         annotations: annotations::READ_ONLY,
     }
@@ -171,6 +212,8 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
     let duration = args["duration"].as_f64().unwrap_or(5.0) as f32;
     let source = args["source"].as_str().unwrap_or("microphone");
     let do_transcribe = args["transcribe"].as_bool().unwrap_or(false);
+    let language = args["language"].as_str();
+    let max_chunk_secs = args["max_chunk_secs"].as_f64().map(|v| v as f32);
 
     // AC5: validate duration cap before touching any hardware.
     if let Err(e) = crate::audio::validate_duration(duration) {
@@ -193,12 +236,12 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
         }
     };
 
-    let base64_wav = audio_data.to_wav_base64();
     let duration_ms = audio_data.duration_ms();
     let sample_rate = audio_data.sample_rate;
+    let size_bytes = audio_data.wav_size_bytes();
 
     let transcript = if do_transcribe {
-        match crate::audio::transcribe(&audio_data) {
+        match crate::audio::transcribe(&audio_data, language) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!(error = %e, "transcription failed — returning audio without transcript");
@@ -209,12 +252,37 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
         None
     };
 
-    let mut payload = json!({
-        "captured":    true,
-        "duration_ms": duration_ms,
-        "sample_rate": sample_rate,
-        "base64_wav":  base64_wav,
-    });
+    // Chunking: split audio into smaller segments to keep MCP payload manageable.
+    let mut payload = if let Some(chunk_secs) = max_chunk_secs {
+        let chunks = audio_data.into_chunks(chunk_secs);
+        let chunks_json: Vec<Value> = chunks
+            .iter()
+            .enumerate()
+            .map(|(i, chunk)| {
+                json!({
+                    "index":       i,
+                    "duration_ms": chunk.duration_ms(),
+                    "size_bytes":  chunk.wav_size_bytes(),
+                    "base64_wav":  chunk.to_wav_base64(),
+                })
+            })
+            .collect();
+        json!({
+            "captured":    true,
+            "duration_ms": duration_ms,
+            "sample_rate": sample_rate,
+            "size_bytes":  size_bytes,
+            "chunks":      chunks_json,
+        })
+    } else {
+        json!({
+            "captured":    true,
+            "duration_ms": duration_ms,
+            "sample_rate": sample_rate,
+            "size_bytes":  size_bytes,
+            "base64_wav":  audio_data.to_wav_base64(),
+        })
+    };
 
     if let Some(t) = transcript {
         payload["transcript"] = serde_json::Value::String(t);
