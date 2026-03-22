@@ -5,6 +5,91 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-22
+
+### Breaking
+- **Python package removed.** PyPI versions yanked. Use the Rust binary only.
+- Crate type changed from cdylib+rlib to rlib only.
+- PyO3 dependency removed entirely — binary has zero Python linkage.
+
+### Added
+
+#### Tools (34 total, was 19)
+- `ax_query`: natural language UI questions via SceneEngine
+- `ax_analyze`: UI pattern detection (14 patterns), app state inference, action suggestions
+- `ax_visual_diff`: pixel-level visual regression testing
+- `ax_a11y_audit`: WCAG accessibility compliance audit (1.1.1, 1.3.1, 4.1.2)
+- `ax_clipboard`: read/write system clipboard
+- `ax_run_script`: AppleScript/JXA execution (blocked in safe/sandboxed mode)
+- `ax_session_info`: server session state
+- `ax_undo`: undo last N actions via Cmd+Z
+- `ax_workflow_create/step/status`: durable multi-step workflows with checkpoint/resume
+- `ax_record`: interaction recording for test generation
+- `ax_track_workflow`: cross-app workflow pattern detection
+- `ax_test_run`: black-box desktop testing
+- `ax_app_profile`: Electron app metadata (VS Code, Slack, etc.)
+- `ax_browser_launch/stop`: Docker browser containers (feature: docker)
+
+#### MCP Protocol
+- **Tasks API**: tasks/list, tasks/result, tasks/cancel — async tool execution
+- **Sampling**: server advertises sampling capability, ax_find_visual returns
+  screenshot + sampling request when client supports it
+- **Resource subscriptions**: resources/subscribe, notifications/resources/updated
+- **Progress notifications**: ax_get_tree, ax_test_run, ax_workflow_step emit progress
+- **Elicitation**: destructive action gate on ax_click (confirm:true required)
+
+#### Prompts (10 total, was 4)
+- `troubleshooting`: when something fails
+- `app-guide`: per-app playbook (Calculator, TextEdit, Safari, Chrome, Finder, Notes)
+- `automate-workflow`: durable workflow creation guidance
+- `debug-ui`: debug element-not-found issues
+- `cross-app-copy`: cross-application data transfer
+- `analyze-app`: comprehensive UI analysis
+
+#### Resources (6 static + 4 templates)
+- `axterminator://clipboard`: system clipboard contents
+- `axterminator://workflows`: cross-app workflow patterns
+- `axterminator://profiles`: Electron app profiles registry
+- `axterminator://app/{name}/query/{question}`: natural language scene queries
+
+#### Security Model
+- 3-tier security modes: normal/safe/sandboxed (AXTERMINATOR_SECURITY_MODE)
+- App allowlist/denylist (~/.config/axterminator/security.toml)
+- Rate limiting (50 rps default, configurable)
+- Action audit log (~/.local/share/axterminator/audit.jsonl)
+
+#### AI Agent Support
+- `llms.txt` at repo root for machine-readable installation
+- MCP instructions with progressive disclosure (compact L1 → prompts L2)
+
+### Changed
+- `ax_find`: OR semantics for simple text queries (was AND), searches
+  AXTitle + AXDescription + AXValue + AXLabel + AXIdentifier
+- `ax_find`: semantic fallback via SemanticFinder when exact match fails
+- `ax_find`: includes healing locator in response for session persistence
+- `ax_click`: auto-falls-back to CGEvent coordinate click when AXPress unsupported
+- `ax_click`: response includes element bounds
+- `ax_connect`: returns `app_type` (native/electron/webview) via router detection
+- `ax_screenshot`: uses CGWindowListCopyWindowInfo (was broken AppleScript)
+- `ax_get_tree`: optional `format="llm"` for token-optimized output
+- `tree` CLI: recursion works, shows bounds, disabled state, element count
+- Search scoped to windows (excludes menus and system UI)
+
+### Fixed
+- Release binary linked to absolute Python framework path (crashes on every machine)
+- Standalone binary used PyO3 before Python interpreter initialized
+- Simple text search required ALL attributes to match (AND instead of OR)
+- AXDescription and AXValue never checked during element search
+- Tree CLI only printed one level (no recursion)
+- Screenshot failed on most apps (AppleScript window-id lookup broken)
+
+### Removed
+- Python package (pyproject.toml, python/ directory, 12 test files)
+- PyO3 dependency
+- cdylib crate type
+- Python-specific CI jobs (maturin develop, pytest)
+- All Python references from documentation
+
 ## [0.6.1] - 2026-03-20
 
 ### Changed
