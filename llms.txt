@@ -13,6 +13,60 @@ AXTerminator is an MCP server that gives you (the AI agent) the ability to see a
 - Rust toolchain (for building from source — RECOMMENDED)
 - Accessibility permission granted to the host app
 
+## Check for Existing Installation
+
+Before installing, check if axterminator is already installed:
+
+```bash
+# Check if binary exists
+which axterminator 2>/dev/null || echo "NOT INSTALLED"
+
+# If installed, check version
+axterminator check 2>/dev/null
+# Look at the "Version:" line — current release is 0.8.0
+```
+
+If already installed at an older version, follow the Upgrade section below.
+If not installed, follow Installation.
+
+## Upgrade
+
+```bash
+# Option 1: Homebrew (simplest)
+brew upgrade axterminator
+
+# Option 2: cargo
+cargo install axterminator --features cli --force
+
+# Option 3: Build from source (if cloned previously)
+cd /path/to/axterminator-src
+git pull origin main
+cargo build --release --features cli
+cp target/release/axterminator ~/.local/bin/axterminator
+
+# Option 4: Download prebuilt binary (replace existing)
+ARCH=$(uname -m)
+case "$ARCH" in
+  arm64) TARGET="aarch64-apple-darwin" ;;
+  x86_64) TARGET="x86_64-apple-darwin" ;;
+esac
+curl -L --fail -o ~/.local/bin/axterminator \
+  "https://github.com/MikkoParkkola/axterminator/releases/latest/download/axterminator-${TARGET}"
+chmod +x ~/.local/bin/axterminator
+```
+
+After upgrading, verify:
+```bash
+axterminator check
+# Should show the new version
+```
+
+**IMPORTANT for upgrades from v0.6.x:**
+- Python is no longer required. The binary is fully self-contained.
+- If you have `pip install axterminator`, uninstall it: `pip uninstall axterminator`
+- MCP config does not need to change — same binary, same `mcp serve` command.
+- The PyPI package is deprecated and yanked.
+
 ## Installation (Preferred → Fallback)
 
 ### Option A: Build from source (RECOMMENDED)
@@ -210,6 +264,8 @@ ax_find query="description:equals"
 | `Accessibility: DISABLED` | No permission | See PERMISSIONS section |
 | `Element not found` for short labels like "1" | App uses AXDescription not AXTitle | Use `description:1` or check tree with `ax_get_tree` |
 | `Application not found` | App not running or wrong name | Use bundle ID: `ax_connect app="com.apple.calculator"` |
+| Old version (missing tools) | Outdated binary | See Upgrade section above |
+| `pip install axterminator` fails | PyPI package yanked | Use Rust binary (Options A-C). Python package is deprecated. |
 
 ## Feature Flags (build-time)
 
