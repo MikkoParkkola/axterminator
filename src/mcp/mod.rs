@@ -49,6 +49,7 @@ pub mod tools_extended;
 pub mod tools_gui;
 pub(crate) mod tools_gui_events;
 pub(crate) mod tools_handlers;
+pub mod tools_innovation;
 pub mod tools_spaces;
 #[cfg(feature = "watch")]
 pub mod tools_watch;

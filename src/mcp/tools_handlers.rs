@@ -94,12 +94,54 @@ pub(crate) fn handle_find(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
                         .to_string(),
                     )
                 }
-                Err(_) => ToolCallResult::error(format!(
-                    "Element not found: '{query}' (timeout: {timeout_ms}ms)"
-                )),
+                // Semantic fallback: try fuzzy matching on the scene graph.
+                Err(_) => semantic_find_fallback(app, &query),
             }
         })
         .unwrap_or_else(ToolCallResult::error)
+}
+
+/// Semantic fallback when exact element search fails.
+///
+/// Builds a [`crate::intent::SceneGraph`] from the app's live AX tree and
+/// uses bigram-based fuzzy matching via [`crate::semantic_find::SemanticFinder`]
+/// to find the closest element.  Returns a result with `"semantic_match": true`
+/// when confidence ≥ 0.3, or an error when nothing is close enough.
+fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResult {
+    use crate::semantic_find::{FindQuery, SemanticFinder};
+
+    // Build scene graph from the live AX tree.
+    let scene = match crate::intent::scan_scene(app.element) {
+        Ok(s) => s,
+        Err(_) => {
+            return ToolCallResult::error(format!(
+                "Element not found: '{query}' (semantic fallback also failed)"
+            ))
+        }
+    };
+
+    let finder = SemanticFinder;
+    let fq = FindQuery::new(query);
+    let result = finder.find(&scene, &fq);
+
+    if let Some(top) = result.matches.first() {
+        if top.score >= 0.3 {
+            return ToolCallResult::ok(
+                json!({
+                    "found": true,
+                    "semantic_match": true,
+                    "confidence": top.score,
+                    "role": top.role,
+                    "label": top.label,
+                    "bounds": top.bounds.map(|(x, y, w, h)| [x, y, w, h]),
+                    "reasoning": top.reasoning
+                })
+                .to_string(),
+            );
+        }
+    }
+
+    ToolCallResult::error(format!("Element not found: '{query}'"))
 }
 
 pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {

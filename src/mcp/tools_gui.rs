@@ -180,7 +180,12 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
             \n\
             Each node has: `role`, `title`, `value`, `enabled`, and `children`.\n\
             Depth 1 returns only immediate children; depth 3 (default) covers most UIs.\n\
-            Emits progress notifications while scanning each depth layer.",
+            Emits progress notifications while scanning each depth layer.\n\
+            \n\
+            When `format` is `\"llm\"`, returns a token-optimised plain-text summary of the \
+            application state (app name, selection, navigation, content) built from the \
+            CopilotState snapshot instead of the raw element tree. Use this when you want \
+            a compact context for an LLM rather than the full element hierarchy.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -198,6 +203,13 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
                     "default": 3,
                     "minimum": 1,
                     "maximum": 10
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["default", "llm"],
+                    "description": "Output format. \"llm\" returns a token-optimised CopilotState \
+                        summary; \"default\" (or omitted) returns the full element tree.",
+                    "default": "default"
                 }
             },
             "required": ["app"],
@@ -209,7 +221,11 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
                 "found": { "type": "boolean" },
                 "tree": {
                     "type": "object",
-                    "description": "Nested element tree"
+                    "description": "Nested element tree (default format)"
+                },
+                "llm_summary": {
+                    "type": "string",
+                    "description": "Token-optimised plain-text summary (llm format)"
                 }
             },
             "required": ["found"]
@@ -440,6 +456,13 @@ pub(crate) fn handle_get_tree<W: Write>(
     let Some(app_name) = args["app"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: app");
     };
+
+    // When format == "llm", skip the element tree entirely and return a
+    // token-optimised CopilotState summary built from the live AX tree.
+    if args["format"].as_str() == Some("llm") {
+        return handle_get_tree_llm_format(&app_name, registry);
+    }
+
     let depth = args["depth"].as_u64().unwrap_or(3).clamp(1, 10) as usize;
     let query = args["query"].as_str().map(str::to_string);
 
@@ -469,6 +492,30 @@ pub(crate) fn handle_get_tree<W: Write>(
 
             let tree = build_app_root_tree(root_element, depth, &mut reporter);
             ToolCallResult::ok(json!({"found": true, "tree": tree}).to_string())
+        })
+        .unwrap_or_else(ToolCallResult::error)
+}
+
+/// Return a token-optimised CopilotState summary of the application.
+///
+/// Reads the live AX tree via [`crate::copilot_state::read_copilot_state`] and
+/// formats it with [`crate::copilot_format::format_for_llm`].  The resulting
+/// plain text is compact enough to drop directly into an LLM system prompt.
+fn handle_get_tree_llm_format(app_name: &str, registry: &Arc<AppRegistry>) -> ToolCallResult {
+    use crate::copilot_format::{format_for_llm, FormatOptions};
+    use crate::copilot_state::read_copilot_state;
+
+    registry
+        .with_app(app_name, |app| {
+            let state = read_copilot_state(app.element);
+            let summary = format_for_llm(&state, &FormatOptions::default());
+            ToolCallResult::ok(
+                json!({
+                    "found": true,
+                    "llm_summary": summary
+                })
+                .to_string(),
+            )
         })
         .unwrap_or_else(ToolCallResult::error)
 }

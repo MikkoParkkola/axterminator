@@ -69,6 +69,7 @@ pub fn extended_tools() -> Vec<Tool> {
     tools.extend(camera_tools());
     #[cfg(feature = "watch")]
     tools.extend(watch_tools());
+    tools.extend(crate::mcp::tools_innovation::innovation_tools());
     tools
 }
 
@@ -127,7 +128,14 @@ pub fn call_tool_extended<W: Write>(
         // Watch tools require a WatchState which is not available in the stateless
         // extended dispatcher.  These are dispatched by the server's handle_tools_call
         // via the Server::call_watch_tool helper instead.
-        _ => None,
+        _ => {
+            if let Some(result) =
+                crate::mcp::tools_innovation::call_tool_innovation(name, args, registry)
+            {
+                return Some(result);
+            }
+            None
+        }
     }
 }
 
@@ -152,11 +160,11 @@ mod tests {
 
     #[test]
     fn extended_tools_count_matches_feature_set() {
-        // GIVEN: Phase 3 base (7) + optional feature extensions
+        // GIVEN: Phase 3 GUI base (7) + innovation (4) = 11 + optional feature extensions
         // WHEN: requesting extended tools
         let tools = super::extended_tools();
         // THEN: count is deterministic per feature set
-        let base = 7usize;
+        let base = 11usize; // Phase 3 GUI (7) + innovation (4)
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };

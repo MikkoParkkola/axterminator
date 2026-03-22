@@ -119,7 +119,7 @@ fn tools_list_returns_correct_count_for_feature_set() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     // THEN: count is a deterministic function of active features
     let count = v["result"]["tools"].as_array().unwrap().len();
-    let base = 19usize;
+    let base = 23usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (4)
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
     let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
