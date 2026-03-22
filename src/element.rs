@@ -338,7 +338,7 @@ impl AXElement {
     }
 
     /// Find a child element with timeout
-    fn find_child(&self, query: &str, timeout: Option<Duration>) -> AXResult<AXElement> {
+    pub fn find_child(&self, query: &str, timeout: Option<Duration>) -> AXResult<AXElement> {
         use std::time::Instant;
 
         let start = Instant::now();

@@ -198,7 +198,7 @@ impl AXApp {
     }
 
     /// Find element by role and attributes
-    fn find_element_by_role(
+    pub fn find_element_by_role(
         &self,
         role: &str,
         title: Option<&str>,
@@ -270,7 +270,7 @@ impl AXApp {
     }
 
     /// Get main window
-    fn get_main_window(&self) -> AXResult<AXElement> {
+    pub fn get_main_window(&self) -> AXResult<AXElement> {
         // get_attribute returns a retained reference (Copy rule)
         let main_window_ref = get_attribute(self.element, attributes::AX_MAIN_WINDOW)?;
         // AXElement::new takes ownership of the retained reference

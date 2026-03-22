@@ -596,6 +596,7 @@ fn try_by_visual(_query: &ElementQuery, _root: AXUIElementRef) -> Option<AXEleme
 }
 
 /// Capture screenshot of the window containing the root element
+#[allow(dead_code)]
 fn capture_window_screenshot(root: AXUIElementRef) -> Option<Vec<u8>> {
     use std::process::Command;
 
@@ -636,6 +637,7 @@ fn capture_window_screenshot(root: AXUIElementRef) -> Option<Vec<u8>> {
 }
 
 /// Get window dimensions
+#[allow(dead_code)]
 fn get_window_dimensions(root: AXUIElementRef) -> Option<(f64, f64)> {
     // Try to get size from the root element or its window
     if let Some(size) = crate::accessibility::get_size_attribute(root) {
@@ -669,6 +671,7 @@ fn get_window_dimensions(root: AXUIElementRef) -> Option<(f64, f64)> {
 }
 
 /// Find element at given screen coordinates
+#[allow(dead_code)]
 fn find_element_at_position(
     root: AXUIElementRef,
     target_x: f64,
