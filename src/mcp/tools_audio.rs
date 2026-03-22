@@ -90,7 +90,9 @@ fn tool_ax_listen() -> Tool {
                         \"apple\" uses SFSpeechRecognizer (on-device, macOS 13+). \
                         \"parakeet\" uses NVIDIA Parakeet TDT 0.6B v3 via ONNX Runtime \
                         (25 European languages, auto language detection — model download \
-                        required: huggingface-cli download nvidia/parakeet-tdt-0.6b-v3 \
+                        required: huggingface-cli download istupakov/parakeet-tdt-0.6b-v3-onnx \
+                        encoder-model.onnx encoder-model.onnx.data decoder_joint-model.onnx \
+                        nemo128.onnx vocab.txt config.json \
                         --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3).",
                     "default": "apple"
                 },

@@ -725,15 +725,23 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn transcribe_with_engine_parakeet_without_feature_returns_error() {
+    fn transcribe_with_engine_parakeet_routes_correctly() {
         // GIVEN: parakeet engine requested at runtime
-        // WHEN: parakeet feature is not compiled in (or model absent when it is)
-        // THEN: returns transcription_error (either feature-absent or model-absent)
+        // WHEN: parakeet feature is compiled in
+        // THEN: if model files are present, returns Ok; if absent, returns transcription_error.
+        //       If feature is not compiled in, the stub returns transcription_error.
         let audio = crate::audio::AudioData::silent(0.1);
         let result = transcribe_with_engine(&audio, None, AudioEngine::Parakeet);
-        // Always an error: either the feature stub fires, or the model is missing.
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().code(), "transcription_error");
+        match result {
+            Ok(text) => {
+                // Model files present — transcription succeeded (silence → empty or short text)
+                assert!(text.len() < 200, "unexpected long transcription for silence");
+            }
+            Err(e) => {
+                // Model files absent or feature not compiled — transcription_error
+                assert_eq!(e.code(), "transcription_error");
+            }
+        }
     }
 
     // -----------------------------------------------------------------------

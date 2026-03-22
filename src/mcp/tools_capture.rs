@@ -387,9 +387,10 @@ fn parse_capture_config(args: &Value) -> CaptureConfig {
         buffer_seconds: args["buffer_seconds"]
             .as_u64()
             .map_or(60, |v| v.clamp(5, 300) as u32),
+        #[allow(clippy::cast_possible_truncation)]
         screen_diff_threshold: args["screen_diff_threshold"]
             .as_f64()
-            .map_or(0.05, |v| v.clamp(0.0, 1.0) as f32),
+            .map_or(0.05_f32, |v| v.clamp(0.0, 1.0) as f32),
     }
 }
 
@@ -683,6 +684,7 @@ mod tests {
 
     #[test]
     fn start_capture_twice_replaces_old_session() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         // GIVEN: start first session
         let r1 = handle_ax_start_capture(&json!({
             "audio": false, "transcribe": false, "screen": false
@@ -732,6 +734,7 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_capture_status_dispatches() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         use crate::mcp::tools::AppRegistry;
         use std::sync::Arc;
 
@@ -752,6 +755,7 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_get_transcription_no_session_returns_error() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
         use crate::mcp::tools::AppRegistry;
         use std::sync::Arc;
 

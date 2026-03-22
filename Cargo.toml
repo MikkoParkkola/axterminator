@@ -55,8 +55,10 @@ docker = []
 # parakeet: NVIDIA Parakeet TDT 0.6B v3 ONNX Runtime ASR backend.
 # Provides high-quality multilingual (25 European languages) speech-to-text as
 # an optional engine alongside SFSpeechRecognizer.  Requires the `audio` feature.
-# Model files (~1.2 GB) must be downloaded separately:
-#   huggingface-cli download nvidia/parakeet-tdt-0.6b-v3 model.onnx tokenizer.json \
+# Model files (~2.5 GB) must be downloaded separately:
+#   huggingface-cli download istupakov/parakeet-tdt-0.6b-v3-onnx \
+#     encoder-model.onnx encoder-model.onnx.data decoder_joint-model.onnx \
+#     nemo128.onnx vocab.txt config.json \
 #     --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3
 # The `ort` crate uses pre-built ONNX Runtime binaries (no manual SDK install).
 parakeet = ["audio", "dep:ort"]

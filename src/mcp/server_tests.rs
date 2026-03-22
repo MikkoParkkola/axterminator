@@ -1798,6 +1798,9 @@ fn resources_subscribe_capture_screen_stores_uri() {
 #[cfg(feature = "audio")]
 #[test]
 fn ax_start_capture_subscribed_emits_capture_status_notification() {
+    let _guard = crate::mcp::tools_capture::session_test_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     // GIVEN: initialized server subscribed to all three capture URIs
     let mut s = Server::new();
     initialize_server(&mut s);
@@ -1842,6 +1845,9 @@ fn ax_start_capture_subscribed_emits_capture_status_notification() {
 #[cfg(feature = "audio")]
 #[test]
 fn ax_stop_capture_subscribed_emits_capture_status_notification() {
+    let _guard = crate::mcp::tools_capture::session_test_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     // GIVEN: initialized server with active session, subscribed to capture/status
     let _ = crate::mcp::tools_capture::handle_ax_start_capture(&json!({
         "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5

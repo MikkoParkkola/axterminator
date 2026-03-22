@@ -854,6 +854,9 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_status_no_session_returns_running_false() {
+        let _guard = crate::mcp::tools_capture::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: no active capture session
         // (stop any session that a concurrent test may have left behind)
         let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
@@ -872,6 +875,9 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_transcription_no_session_returns_empty_segments() {
+        let _guard = crate::mcp::tools_capture::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: no active session
         let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
         let registry = Arc::new(AppRegistry::default());
@@ -890,6 +896,9 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_screen_no_session_returns_running_false_json() {
+        let _guard = crate::mcp::tools_capture::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: no active session
         let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
         let registry = Arc::new(AppRegistry::default());
@@ -907,6 +916,9 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_status_active_session_returns_running_true() {
+        let _guard = crate::mcp::tools_capture::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: started idle session (no audio/screen to avoid hardware)
         let _ = crate::mcp::tools_capture::handle_ax_start_capture(&serde_json::json!({
             "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5
@@ -926,6 +938,9 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_transcription_active_session_returns_running_true() {
+        let _guard = crate::mcp::tools_capture::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: started idle session
         let _ = crate::mcp::tools_capture::handle_ax_start_capture(&serde_json::json!({
             "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5
@@ -946,6 +961,9 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_screen_active_session_no_frame_returns_json() {
+        let _guard = crate::mcp::tools_capture::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: started idle session (screen=false so no frame is captured)
         let _ = crate::mcp::tools_capture::handle_ax_start_capture(&serde_json::json!({
             "audio": false, "transcribe": false, "screen": false, "buffer_seconds": 5

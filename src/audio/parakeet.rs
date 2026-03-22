@@ -6,35 +6,46 @@
 //!
 //! ## Architecture
 //!
+//! Parakeet TDT is a Token-and-Duration Transducer (TDT) model with three
+//! ONNX components:
+//!
 //! ```text
 //! AudioData (f32 @ 16 kHz)
-//!     └─► log-mel spectrogram (80 mel bins, 25 ms frame, 10 ms hop)
-//!             └─► ONNX Runtime session (parakeet-tdt-0.6b-v3/model.onnx)
-//!                     └─► token ids  ──►  vocab decode  ──►  String
+//!     └─► nemo128.onnx (mel-spectrogram preprocessor, 128-dim features)
+//!             └─► encoder-model.onnx (Conformer encoder → 1024-dim, /8 subsampling)
+//!                     └─► decoder_joint-model.onnx (LSTM decoder + joiner)
+//!                             └─► TDT greedy decode → token IDs → vocab decode → String
 //! ```
 //!
 //! ## Model files
 //!
 //! On first use the module checks for:
-//! - `~/.axterminator/models/parakeet-tdt-0.6b-v3/model.onnx`
-//! - `~/.axterminator/models/parakeet-tdt-0.6b-v3/tokenizer.json`
+//! - `~/.axterminator/models/parakeet-tdt-0.6b-v3/nemo128.onnx`       (preprocessor)
+//! - `~/.axterminator/models/parakeet-tdt-0.6b-v3/encoder-model.onnx` (+ `.data` sidecar)
+//! - `~/.axterminator/models/parakeet-tdt-0.6b-v3/decoder_joint-model.onnx`
+//! - `~/.axterminator/models/parakeet-tdt-0.6b-v3/vocab.txt`
 //!
-//! If either file is absent the function returns
-//! [`AudioError::Transcription`] with a clear message instructing the user to
-//! download the model.
+//! If any file is absent the function returns [`AudioError::Transcription`]
+//! with a clear message instructing the user to download the model.
 //!
-//! ## Mel spectrogram parameters (match Parakeet pre-processing)
+//! Download command:
+//! ```text
+//! pip install huggingface_hub
+//! huggingface-cli download istupakov/parakeet-tdt-0.6b-v3-onnx \
+//!   encoder-model.onnx encoder-model.onnx.data decoder_joint-model.onnx \
+//!   nemo128.onnx vocab.txt config.json \
+//!   --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3
+//! ```
 //!
-//! | Parameter      | Value  |
-//! |----------------|--------|
-//! | Sample rate    | 16 000 Hz |
-//! | FFT size       | 512    |
-//! | Hop length     | 160 samples (10 ms) |
-//! | Win length     | 400 samples (25 ms) |
-//! | Mel bins       | 80     |
-//! | Freq range     | 0 – 8 000 Hz |
-//! | Log floor      | 1e-5   |
-//! | Normalization  | global mean / std (NeMo defaults) |
+//! ## TDT Decoding
+//!
+//! The decoder_joint model outputs logits of size `vocab_size + num_durations`
+//! (8193 + 5 = 8198).  At each step:
+//! - Token logits (0..8192) select the vocabulary token (8192 = blank).
+//! - Duration logits (0..4) select how many encoder frames to skip.
+//! - If token is blank: advance by max(1, duration).
+//! - If token is non-blank: emit token, update decoder state.
+//!   If duration > 0, also advance encoder position.
 
 use std::path::{Path, PathBuf};
 
@@ -43,32 +54,26 @@ use tracing::{debug, info, warn};
 use super::{AudioData, AudioError};
 
 // ---------------------------------------------------------------------------
-// Constants — mel spectrogram hyper-parameters
+// Constants — TDT model parameters
 // ---------------------------------------------------------------------------
 
-/// FFT window size in samples.
-const FFT_SIZE: usize = 512;
+/// Vocabulary size (tokens 0..8192, where 8192 = blank).
+const VOCAB_SIZE: usize = 8193;
 
-/// Hop size between consecutive frames (10 ms @ 16 kHz).
-const HOP_LENGTH: usize = 160;
+/// Blank token ID in the TDT vocabulary.
+const BLANK_TOKEN: i32 = 8192;
 
-/// Analysis window length (25 ms @ 16 kHz).
-const WIN_LENGTH: usize = 400;
+/// Number of TDT duration classes (durations 0..4).
+const NUM_DURATIONS: usize = 5;
 
-/// Number of mel filter banks.
-const N_MELS: usize = 80;
+/// LSTM hidden dimension in the prediction network.
+const PRED_HIDDEN_DIM: usize = 640;
 
-/// Upper cutoff frequency for the mel filter bank (Hz).
-const MEL_FMAX: f64 = 8_000.0;
+/// Encoder output dimension.
+const ENCODER_DIM: usize = 1024;
 
-/// Log-mel floor: `log(max(power, LOG_FLOOR))`.
-const LOG_FLOOR: f32 = 1e-5;
-
-/// NeMo global mean subtracted during normalisation.
-const GLOBAL_MEAN: f32 = -5.017;
-
-/// NeMo global std used for normalisation.
-const GLOBAL_STD: f32 = 2.698;
+/// Maximum symbols emitted per encoder frame (prevents infinite loops).
+const MAX_SYMBOLS_PER_STEP: usize = 10;
 
 // ---------------------------------------------------------------------------
 // Model directory layout
@@ -91,14 +96,24 @@ pub(crate) fn model_dir() -> Result<PathBuf, AudioError> {
         .join("parakeet-tdt-0.6b-v3"))
 }
 
-/// Path to the ONNX model file.
-pub(crate) fn model_onnx_path() -> Result<PathBuf, AudioError> {
-    Ok(model_dir()?.join("model.onnx"))
+/// Path to the mel-spectrogram preprocessor ONNX model.
+pub(crate) fn preprocessor_path() -> Result<PathBuf, AudioError> {
+    Ok(model_dir()?.join("nemo128.onnx"))
 }
 
-/// Path to the tokenizer JSON file.
-pub(crate) fn tokenizer_json_path() -> Result<PathBuf, AudioError> {
-    Ok(model_dir()?.join("tokenizer.json"))
+/// Path to the Conformer encoder ONNX model.
+pub(crate) fn encoder_path() -> Result<PathBuf, AudioError> {
+    Ok(model_dir()?.join("encoder-model.onnx"))
+}
+
+/// Path to the decoder+joiner ONNX model.
+pub(crate) fn decoder_joint_path() -> Result<PathBuf, AudioError> {
+    Ok(model_dir()?.join("decoder_joint-model.onnx"))
+}
+
+/// Path to the vocabulary text file.
+pub(crate) fn vocab_path() -> Result<PathBuf, AudioError> {
+    Ok(model_dir()?.join("vocab.txt"))
 }
 
 /// Return `true` when all required model files are present on disk.
@@ -117,8 +132,14 @@ pub(crate) fn tokenizer_json_path() -> Result<PathBuf, AudioError> {
 /// ```
 #[must_use]
 pub fn model_files_present() -> bool {
-    model_onnx_path().map(|p| p.exists()).unwrap_or(false)
-        && tokenizer_json_path().map(|p| p.exists()).unwrap_or(false)
+    preprocessor_path()
+        .map(|p| p.exists())
+        .unwrap_or(false)
+        && encoder_path().map(|p| p.exists()).unwrap_or(false)
+        && decoder_joint_path()
+            .map(|p| p.exists())
+            .unwrap_or(false)
+        && vocab_path().map(|p| p.exists()).unwrap_or(false)
 }
 
 /// Log download instructions when model files are absent.
@@ -129,10 +150,10 @@ pub fn log_download_instructions() {
     warn!(
         "Parakeet model files not found. \
          Download them from HuggingFace with:\n\
-         \n  mkdir -p ~/.axterminator/models/parakeet-tdt-0.6b-v3\n\
-         \n  # requires `huggingface-cli` (pip install huggingface_hub)\n\
-         \n  huggingface-cli download nvidia/parakeet-tdt-0.6b-v3 \\\n\
-         \n    model.onnx tokenizer.json \\\n\
+         \n  pip install huggingface_hub\n\
+         \n  huggingface-cli download istupakov/parakeet-tdt-0.6b-v3-onnx \\\n\
+         \n    encoder-model.onnx encoder-model.onnx.data \\\n\
+         \n    decoder_joint-model.onnx nemo128.onnx vocab.txt config.json \\\n\
          \n    --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3\n"
     );
 }
@@ -143,11 +164,15 @@ pub fn log_download_instructions() {
 
 /// Transcribe `audio` using the ONNX Parakeet TDT model.
 ///
-/// Requires `model.onnx` and `tokenizer.json` to be present under
+/// Requires all model files to be present under
 /// `~/.axterminator/models/parakeet-tdt-0.6b-v3/`.  When the files are
 /// absent this function returns a descriptive error — it never attempts
-/// a network download (download must be triggered by the user or a separate
-/// setup workflow).
+/// a network download.
+///
+/// The pipeline runs three ONNX models in sequence:
+/// 1. `nemo128.onnx` — mel-spectrogram preprocessor (waveform → 128-dim features)
+/// 2. `encoder-model.onnx` — Conformer encoder (features → 1024-dim encodings)
+/// 3. `decoder_joint-model.onnx` — LSTM decoder + joiner (TDT greedy decoding)
 ///
 /// The `_language` parameter is accepted for API uniformity with the Apple
 /// path but is currently ignored: Parakeet performs automatic language
@@ -162,23 +187,33 @@ pub fn transcribe_parakeet(
     audio: &AudioData,
     _language: Option<&str>,
 ) -> Result<String, AudioError> {
-    let onnx_path = model_onnx_path()?;
-    let tok_path = tokenizer_json_path()?;
+    let preproc_path = preprocessor_path()?;
+    let enc_path = encoder_path()?;
+    let dec_path = decoder_joint_path()?;
+    let voc_path = vocab_path()?;
 
-    validate_model_files(&onnx_path, &tok_path)?;
+    validate_model_files(&preproc_path, &enc_path, &dec_path, &voc_path)?;
 
     debug!(
         samples = audio.samples.len(),
         sample_rate = audio.sample_rate,
-        "computing log-mel spectrogram for Parakeet"
+        "running Parakeet TDT inference pipeline"
     );
 
-    let features = compute_log_mel_spectrogram(&audio.samples);
-    let n_frames = features.len() / N_MELS;
-    debug!(n_frames, n_mels = N_MELS, "mel spectrogram computed");
+    // Step 1: Mel-spectrogram preprocessing
+    let (features, feature_len) = run_preprocessor(&audio.samples, &preproc_path)?;
+    debug!(feature_len, "preprocessor complete");
 
-    let token_ids = run_onnx_inference(&features, n_frames, &onnx_path)?;
-    let transcript = decode_token_ids(&token_ids, &tok_path)?;
+    // Step 2: Conformer encoder
+    let (enc_out, enc_len) = run_encoder(&features, feature_len, &enc_path)?;
+    debug!(enc_len, "encoder complete");
+
+    // Step 3: TDT greedy decoding
+    let token_ids = run_tdt_greedy_decode(&enc_out, enc_len, &dec_path)?;
+    debug!(n_tokens = token_ids.len(), "TDT decode complete");
+
+    // Step 4: Vocabulary lookup
+    let transcript = decode_token_ids(&token_ids, &voc_path)?;
 
     info!(
         transcript = transcript.as_str(),
@@ -191,136 +226,437 @@ pub fn transcribe_parakeet(
 // Validation
 // ---------------------------------------------------------------------------
 
-fn validate_model_files(onnx_path: &Path, tok_path: &Path) -> Result<(), AudioError> {
-    if !onnx_path.exists() || !tok_path.exists() {
+fn validate_model_files(
+    preproc: &Path,
+    encoder: &Path,
+    decoder: &Path,
+    vocab: &Path,
+) -> Result<(), AudioError> {
+    let missing: Vec<&str> = [
+        (preproc, "nemo128.onnx"),
+        (encoder, "encoder-model.onnx"),
+        (decoder, "decoder_joint-model.onnx"),
+        (vocab, "vocab.txt"),
+    ]
+    .iter()
+    .filter(|(p, _)| !p.exists())
+    .map(|(_, name)| *name)
+    .collect();
+
+    if !missing.is_empty() {
         log_download_instructions();
-        return Err(AudioError::Transcription(
-            "Parakeet model files not downloaded. \
-             Run `huggingface-cli download nvidia/parakeet-tdt-0.6b-v3 model.onnx tokenizer.json \
-             --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3` to install them."
-                .to_string(),
-        ));
+        return Err(AudioError::Transcription(format!(
+            "Parakeet model files not downloaded (missing: {}). \
+             Run `huggingface-cli download istupakov/parakeet-tdt-0.6b-v3-onnx \
+             encoder-model.onnx encoder-model.onnx.data decoder_joint-model.onnx \
+             nemo128.onnx vocab.txt config.json \
+             --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3` to install them.",
+            missing.join(", ")
+        )));
     }
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// ONNX Runtime inference
+// ONNX Runtime — Preprocessor (nemo128.onnx)
 // ---------------------------------------------------------------------------
 
-/// Load the ONNX session and run the encoder→decoder pipeline on `features`.
+/// Run the mel-spectrogram preprocessor on raw waveform samples.
 ///
-/// `features` is a flat `Vec<f32>` in row-major order with shape
-/// `[1, N_MELS, n_frames]`.  The function returns a `Vec<i64>` of output
-/// token IDs.
-///
-/// # Errors
-///
-/// Returns [`AudioError::Transcription`] on any ONNX Runtime failure.
-fn run_onnx_inference(
-    features: &[f32],
-    n_frames: usize,
+/// Takes f32 samples at 16 kHz and returns 128-dim features with shape
+/// `[1, 128, T]` as a flat `Vec<f32>` plus the number of time frames `T`.
+fn run_preprocessor(
+    samples: &[f32],
     onnx_path: &Path,
-) -> Result<Vec<i64>, AudioError> {
+) -> Result<(Vec<f32>, usize), AudioError> {
     use ort::session::Session;
     use ort::value::Tensor;
 
     let mut session = Session::builder()
-        .map_err(|e| AudioError::Transcription(format!("ONNX session builder failed: {e}")))?
+        .map_err(|e| AudioError::Transcription(format!("Preprocessor session builder failed: {e}")))?
         .commit_from_file(onnx_path)
         .map_err(|e| {
-            AudioError::Transcription(format!("Failed to load ONNX model from {onnx_path:?}: {e}"))
+            AudioError::Transcription(format!(
+                "Failed to load preprocessor from {onnx_path:?}: {e}"
+            ))
         })?;
 
-    // Shape: [batch=1, n_mels=80, n_frames].  `from_array` takes a boxed slice.
+    let n_samples = samples.len();
+    let waveform = Tensor::<f32>::from_array(([1, n_samples], samples.to_vec().into_boxed_slice()))
+        .map_err(|e| AudioError::Transcription(format!("Failed to create waveform tensor: {e}")))?;
+
     #[allow(clippy::cast_possible_truncation)]
-    let shape: [usize; 3] = [1, N_MELS, n_frames];
-    let input_tensor = Tensor::<f32>::from_array((shape, features.to_vec().into_boxed_slice()))
-        .map_err(|e| AudioError::Transcription(format!("Failed to create input tensor: {e}")))?;
+    let lengths = Tensor::<i64>::from_array(([1], vec![n_samples as i64].into_boxed_slice()))
+        .map_err(|e| AudioError::Transcription(format!("Failed to create lengths tensor: {e}")))?;
 
     let outputs = session
-        .run(ort::inputs![input_tensor])
-        .map_err(|e| AudioError::Transcription(format!("ONNX inference failed: {e}")))?;
+        .run(ort::inputs![waveform, lengths])
+        .map_err(|e| AudioError::Transcription(format!("Preprocessor inference failed: {e}")))?;
 
-    extract_token_ids(&outputs)
+    // Output 0: features [1, 128, T], Output 1: feature_lengths [1]
+    let features_val = outputs
+        .get("features")
+        .or_else(|| if outputs.len() > 0 { Some(&outputs[0]) } else { None })
+        .ok_or_else(|| AudioError::Transcription("Preprocessor produced no outputs".to_string()))?;
+
+    let (shape, data) = features_val
+        .try_extract_tensor::<f32>()
+        .map_err(|e| AudioError::Transcription(format!("Failed to extract features: {e}")))?;
+
+    let feature_len = if shape.len() >= 3 { shape[2] as usize } else { data.len() / 128 };
+
+    Ok((data.to_vec(), feature_len))
 }
 
-/// Extract the first integer output from ONNX session results.
+// ---------------------------------------------------------------------------
+// ONNX Runtime — Encoder (encoder-model.onnx)
+// ---------------------------------------------------------------------------
+
+/// Run the Conformer encoder on preprocessed features.
 ///
-/// Tries common output names used by Parakeet/NeMo ONNX exports in order,
-/// then falls back to index 0.
-fn extract_token_ids(outputs: &ort::session::SessionOutputs<'_>) -> Result<Vec<i64>, AudioError> {
-    // Resolve output by well-known name, or fall back to the first output by index.
-    let output = ["output", "logits", "predictions"]
-        .iter()
-        .find_map(|name| outputs.get(*name))
-        .or_else(|| {
-            if outputs.len() > 0 {
-                Some(&outputs[0])
-            } else {
-                None
+/// Takes features of shape `[1, 128, T_features]` and returns encoder
+/// outputs of shape `[1, 1024, T_enc]` (T_enc = T_features / 8 due to
+/// subsampling) as a flat `Vec<f32>` plus the number of encoder frames.
+fn run_encoder(
+    features: &[f32],
+    feature_len: usize,
+    onnx_path: &Path,
+) -> Result<(Vec<f32>, usize), AudioError> {
+    use ort::session::Session;
+    use ort::value::Tensor;
+
+    let mut session = Session::builder()
+        .map_err(|e| AudioError::Transcription(format!("Encoder session builder failed: {e}")))?
+        .commit_from_file(onnx_path)
+        .map_err(|e| {
+            AudioError::Transcription(format!("Failed to load encoder from {onnx_path:?}: {e}"))
+        })?;
+
+    let shape: [usize; 3] = [1, 128, feature_len];
+    let input_tensor = Tensor::<f32>::from_array((shape, features.to_vec().into_boxed_slice()))
+        .map_err(|e| AudioError::Transcription(format!("Failed to create encoder input: {e}")))?;
+
+    #[allow(clippy::cast_possible_truncation)]
+    let lengths = Tensor::<i64>::from_array(([1], vec![feature_len as i64].into_boxed_slice()))
+        .map_err(|e| {
+            AudioError::Transcription(format!("Failed to create encoder lengths tensor: {e}"))
+        })?;
+
+    let outputs = session
+        .run(ort::inputs![input_tensor, lengths])
+        .map_err(|e| AudioError::Transcription(format!("Encoder inference failed: {e}")))?;
+
+    // Output 0: encoded [1, 1024, T_enc], Output 1: encoded_lengths [1]
+    let enc_val = outputs
+        .get("outputs")
+        .or_else(|| if outputs.len() > 0 { Some(&outputs[0]) } else { None })
+        .ok_or_else(|| AudioError::Transcription("Encoder produced no outputs".to_string()))?;
+
+    let (shape, data) = enc_val
+        .try_extract_tensor::<f32>()
+        .map_err(|e| {
+            AudioError::Transcription(format!("Failed to extract encoder outputs: {e}"))
+        })?;
+
+    // Extract encoded_lengths from second output
+    let enc_len = if let Some(len_val) = outputs.get("encoded_lengths").or_else(|| {
+        if outputs.len() > 1 {
+            Some(&outputs[1])
+        } else {
+            None
+        }
+    }) {
+        let (_, len_data) = len_val
+            .try_extract_tensor::<i64>()
+            .map_err(|e| {
+                AudioError::Transcription(format!("Failed to extract encoded_lengths: {e}"))
+            })?;
+        len_data[0] as usize
+    } else {
+        // Fall back to shape-based calculation
+        if shape.len() >= 3 { shape[2] as usize } else { data.len() / ENCODER_DIM }
+    };
+
+    Ok((data.to_vec(), enc_len))
+}
+
+// ---------------------------------------------------------------------------
+// ONNX Runtime — TDT Greedy Decode (decoder_joint-model.onnx)
+// ---------------------------------------------------------------------------
+
+/// Run TDT greedy decoding over encoder outputs.
+///
+/// The decoder_joint model outputs logits of shape `[1, 1, 1, 8198]` where:
+/// - Indices 0..8192 are vocabulary token logits (8192 = blank)
+/// - Indices 8193..8197 are duration logits (durations 0..4)
+///
+/// At each step the decoder selects:
+/// 1. The highest-scoring token from the vocabulary logits
+/// 2. The highest-scoring duration from the duration logits
+///
+/// If the token is blank, the encoder advances by `max(1, duration)` frames.
+/// If the token is non-blank, it is emitted and the decoder state updates.
+/// If the duration is > 0, the encoder also advances.
+fn run_tdt_greedy_decode(
+    enc_out: &[f32],
+    enc_len: usize,
+    onnx_path: &Path,
+) -> Result<Vec<i32>, AudioError> {
+    use ort::session::Session;
+    use ort::value::Tensor;
+
+    let mut session = Session::builder()
+        .map_err(|e| AudioError::Transcription(format!("Decoder session builder failed: {e}")))?
+        .commit_from_file(onnx_path)
+        .map_err(|e| {
+            AudioError::Transcription(format!("Failed to load decoder from {onnx_path:?}: {e}"))
+        })?;
+
+    let mut tokens: Vec<i32> = Vec::new();
+    let mut last_token = BLANK_TOKEN;
+    let mut state1 = vec![0.0f32; 2 * PRED_HIDDEN_DIM]; // [2, 1, 640] flattened
+    let mut state2 = vec![0.0f32; 2 * PRED_HIDDEN_DIM];
+    let mut t_idx: usize = 0;
+
+    while t_idx < enc_len {
+        let mut symbols_this_step = 0;
+
+        loop {
+            if symbols_this_step >= MAX_SYMBOLS_PER_STEP {
+                t_idx += 1;
+                break;
             }
-        })
-        .ok_or_else(|| AudioError::Transcription("ONNX model produced no outputs".to_string()))?;
 
-    let (_shape, data) = output
-        .try_extract_tensor::<i64>()
-        .map_err(|e| AudioError::Transcription(format!("Failed to extract token IDs: {e}")))?;
+            // Extract single encoder frame: [1, 1024, 1]
+            let frame_start = t_idx * ENCODER_DIM;
+            let frame_end = frame_start + ENCODER_DIM;
+            if frame_end > enc_out.len() {
+                t_idx = enc_len; // safety
+                break;
+            }
+            let frame_data: Vec<f32> = enc_out[frame_start..frame_end].to_vec();
 
-    Ok(data.to_vec())
+            let enc_frame =
+                Tensor::<f32>::from_array(([1usize, ENCODER_DIM, 1], frame_data.into_boxed_slice()))
+                    .map_err(|e| {
+                        AudioError::Transcription(format!("Failed to create encoder frame: {e}"))
+                    })?;
+
+            let targets =
+                Tensor::<i32>::from_array(([1usize, 1], vec![last_token].into_boxed_slice()))
+                    .map_err(|e| {
+                        AudioError::Transcription(format!("Failed to create targets tensor: {e}"))
+                    })?;
+
+            let target_length =
+                Tensor::<i32>::from_array(([1usize], vec![1i32].into_boxed_slice())).map_err(
+                    |e| {
+                        AudioError::Transcription(format!(
+                            "Failed to create target_length tensor: {e}"
+                        ))
+                    },
+                )?;
+
+            let state1_tensor =
+                Tensor::<f32>::from_array(([2usize, 1, PRED_HIDDEN_DIM], state1.clone().into_boxed_slice()))
+                    .map_err(|e| {
+                        AudioError::Transcription(format!("Failed to create state1 tensor: {e}"))
+                    })?;
+
+            let state2_tensor =
+                Tensor::<f32>::from_array(([2usize, 1, PRED_HIDDEN_DIM], state2.clone().into_boxed_slice()))
+                    .map_err(|e| {
+                        AudioError::Transcription(format!("Failed to create state2 tensor: {e}"))
+                    })?;
+
+            let outputs = session
+                .run(ort::inputs![
+                    enc_frame,
+                    targets,
+                    target_length,
+                    state1_tensor,
+                    state2_tensor
+                ])
+                .map_err(|e| {
+                    AudioError::Transcription(format!("Decoder inference failed: {e}"))
+                })?;
+
+            // Output 0: logits [1, 1, 1, 8198]
+            let logits_val = &outputs[0];
+            let (_shape, logits) = logits_val.try_extract_tensor::<f32>().map_err(|e| {
+                AudioError::Transcription(format!("Failed to extract decoder logits: {e}"))
+            })?;
+
+            // Split logits into token scores and duration scores
+            let token_logits = &logits[..VOCAB_SIZE];
+            let dur_logits = &logits[VOCAB_SIZE..VOCAB_SIZE + NUM_DURATIONS];
+
+            let token_id = argmax_f32(token_logits) as i32;
+            let dur_id = argmax_f32(dur_logits);
+
+            if token_id == BLANK_TOKEN {
+                // Blank: advance encoder by at least 1 frame
+                let advance = dur_id.max(1);
+                t_idx += advance;
+                break;
+            }
+
+            // Non-blank: emit token and update decoder state
+            tokens.push(token_id);
+            last_token = token_id;
+            symbols_this_step += 1;
+
+            // Update LSTM states from decoder output
+            if let Some(s1_val) = outputs.get("output_states_1").or_else(|| {
+                if outputs.len() > 2 {
+                    Some(&outputs[2])
+                } else {
+                    None
+                }
+            }) {
+                if let Ok((_, s1_data)) = s1_val.try_extract_tensor::<f32>() {
+                    state1 = s1_data.to_vec();
+                }
+            }
+            if let Some(s2_val) = outputs.get("output_states_2").or_else(|| {
+                if outputs.len() > 3 {
+                    Some(&outputs[3])
+                } else {
+                    None
+                }
+            }) {
+                if let Ok((_, s2_data)) = s2_val.try_extract_tensor::<f32>() {
+                    state2 = s2_data.to_vec();
+                }
+            }
+
+            if dur_id > 0 {
+                // Duration > 0: also advance encoder position
+                t_idx += dur_id;
+                break;
+            }
+            // Duration == 0: stay on same frame, try to emit more tokens
+        }
+    }
+
+    Ok(tokens)
+}
+
+/// Return the index of the maximum value in `data`.
+fn argmax_f32(data: &[f32]) -> usize {
+    data.iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(i, _)| i)
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
-// Tokenizer decode
+// Vocabulary decode
 // ---------------------------------------------------------------------------
 
-/// Decode token IDs to a UTF-8 string using `tokenizer.json`.
+/// Decode token IDs to a UTF-8 string using `vocab.txt`.
 ///
-/// Uses a minimal BPE-compatible decode via the `tokenizers` crate that
-/// ships as part of `ort`'s ecosystem.  For Parakeet's SentencePiece-based
-/// vocabulary, this resolves `▁` (U+2581) word-boundary markers to spaces
-/// and strips special tokens (`<blank>`, `<unk>`, etc.).
+/// The vocabulary file uses the NeMo format: one line per token, each line
+/// containing `<token> <index>`.  Special tokens (`<blank>`, `<unk>`, etc.)
+/// are filtered out during decoding.
+///
+/// SentencePiece word-boundary markers (`\u{2581}`) are normalised to ASCII
+/// spaces.
 ///
 /// # Errors
 ///
 /// Returns [`AudioError::Transcription`] when the vocabulary file cannot be
 /// parsed or a token ID is out of range.
-fn decode_token_ids(token_ids: &[i64], tok_path: &Path) -> Result<String, AudioError> {
-    let vocab = load_vocab(tok_path)?;
+fn decode_token_ids(token_ids: &[i32], vocab_path: &Path) -> Result<String, AudioError> {
+    let vocab = load_vocab(vocab_path)?;
     let text = token_ids
         .iter()
-        .filter_map(|&id| vocab.get(id as usize))
+        .filter_map(|&id| {
+            let idx = id as usize;
+            vocab.get(idx).filter(|tok| !is_special_token(tok))
+        })
         .fold(String::new(), |mut acc, piece| {
             acc.push_str(piece);
             acc
         });
 
-    // Normalise SentencePiece word-boundary marker (▁ = U+2581) to ASCII space.
+    // Normalise SentencePiece word-boundary marker to ASCII space.
     let normalised = text.replace('\u{2581}', " ").trim().to_string();
     Ok(normalised)
 }
 
-/// Load vocabulary from `tokenizer.json` into an index-addressed `Vec<String>`.
+/// Check whether a token is a special/control token that should be filtered
+/// from the output text.
+fn is_special_token(token: &str) -> bool {
+    token.starts_with('<') && token.ends_with('>')
+}
+
+/// Load vocabulary from `vocab.txt` into an index-addressed `Vec<String>`.
 ///
-/// Supports both the HuggingFace tokenizers format (`model.vocab` map keyed by
-/// token string, valued by integer index) and a flat array format.
+/// Supports the NeMo format (`<token> <index>` per line) and also the
+/// HuggingFace `tokenizer.json` format for backward compatibility.
 ///
 /// # Errors
 ///
-/// Returns [`AudioError::Transcription`] on I/O or JSON parse failure.
-fn load_vocab(tok_path: &Path) -> Result<Vec<String>, AudioError> {
-    let json_text = std::fs::read_to_string(tok_path)
-        .map_err(|e| AudioError::Transcription(format!("Cannot read tokenizer.json: {e}")))?;
+/// Returns [`AudioError::Transcription`] on I/O or parse failure.
+fn load_vocab(vocab_path: &Path) -> Result<Vec<String>, AudioError> {
+    let content = std::fs::read_to_string(vocab_path)
+        .map_err(|e| AudioError::Transcription(format!("Cannot read vocab file: {e}")))?;
 
-    let root: serde_json::Value = serde_json::from_str(&json_text)
-        .map_err(|e| AudioError::Transcription(format!("tokenizer.json parse error: {e}")))?;
+    // NeMo vocab.txt format: "<token> <index>" per line
+    if vocab_path.extension().map_or(false, |ext| ext == "txt") {
+        return load_vocab_nemo_txt(&content);
+    }
+
+    // Try JSON formats (tokenizer.json backward compatibility)
+    load_vocab_json(&content)
+}
+
+/// Parse NeMo `vocab.txt` format: each line is `<token> <index>`.
+fn load_vocab_nemo_txt(content: &str) -> Result<Vec<String>, AudioError> {
+    let mut entries: Vec<(usize, String)> = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // Split on last space to get token and index
+        if let Some(last_space) = line.rfind(' ') {
+            let token = &line[..last_space];
+            let idx_str = &line[last_space + 1..];
+            if let Ok(idx) = idx_str.parse::<usize>() {
+                entries.push((idx, token.to_string()));
+            }
+        }
+    }
+
+    if entries.is_empty() {
+        return Err(AudioError::Transcription(
+            "vocab.txt is empty or has unrecognised format".to_string(),
+        ));
+    }
+
+    let max_id = entries.iter().map(|(id, _)| *id).max().unwrap_or(0);
+    let mut vocab = vec![String::new(); max_id + 1];
+    for (id, token) in entries {
+        vocab[id] = token;
+    }
+    Ok(vocab)
+}
+
+/// Parse vocabulary from JSON formats (backward compatibility with tokenizer.json).
+fn load_vocab_json(content: &str) -> Result<Vec<String>, AudioError> {
+    let root: serde_json::Value = serde_json::from_str(content)
+        .map_err(|e| AudioError::Transcription(format!("vocab file parse error: {e}")))?;
 
     // HuggingFace fast-tokenizer format: {"model": {"vocab": {"token": id, ...}}}
     if let Some(vocab_map) = root.pointer("/model/vocab").and_then(|v| v.as_object()) {
         return build_vocab_from_map(vocab_map);
     }
 
-    // Parakeet/NeMo flat vocab list: [token0, token1, ...]
+    // Flat array: [token0, token1, ...]
     if let Some(arr) = root.as_array() {
         return Ok(arr
             .iter()
@@ -342,8 +678,7 @@ fn load_vocab(tok_path: &Path) -> Result<Vec<String>, AudioError> {
     }
 
     Err(AudioError::Transcription(
-        "tokenizer.json has an unrecognised format (expected model.vocab map or flat array)"
-            .to_string(),
+        "vocab file has an unrecognised format".to_string(),
     ))
 }
 
@@ -369,24 +704,16 @@ fn build_vocab_from_map(
 }
 
 // ---------------------------------------------------------------------------
-// Log-mel spectrogram
+// Backward-compatible public API for mel spectrogram (used by tests)
 // ---------------------------------------------------------------------------
 
 /// Compute the log-mel spectrogram for `samples` at 16 kHz.
 ///
 /// Returns a flat `Vec<f32>` in row-major order with logical shape
-/// `[N_MELS, n_frames]`, normalised with the NeMo global mean/std so the
-/// values are compatible with the pre-trained Parakeet checkpoint.
+/// `[N_MELS, n_frames]`, normalised with the NeMo global mean/std.
 ///
-/// The implementation uses a pure-Rust FFT via Cooley-Tukey DIT for
-/// portability (no C dependencies beyond what `ort` already pulls in).
-///
-/// # Performance
-///
-/// For a 5-second clip at 16 kHz (80 000 samples):
-/// - Frame count: ~499 frames
-/// - FFT calls: ~499 × O(N log N) with N=512
-/// - Total: < 20 ms on a modern core
+/// Note: The TDT pipeline uses `nemo128.onnx` for preprocessing instead of
+/// this function.  This is retained for testing and backward compatibility.
 ///
 /// # Examples
 ///
@@ -401,47 +728,60 @@ fn build_vocab_from_map(
 /// # }
 /// ```
 pub fn compute_log_mel_spectrogram(samples: &[f32]) -> Vec<f32> {
+    const N_MELS: usize = 80;
+    const FFT_SIZE: usize = 512;
+    const HOP_LENGTH: usize = 160;
+    const WIN_LENGTH: usize = 400;
+    const MEL_FMAX: f64 = 8_000.0;
+    const LOG_FLOOR: f32 = 1e-5;
+    const GLOBAL_MEAN: f32 = -5.017;
+    const GLOBAL_STD: f32 = 2.698;
+
     let hann = hann_window(WIN_LENGTH);
     let mel_fb = mel_filterbank(FFT_SIZE, N_MELS, 16_000.0, 0.0, MEL_FMAX);
-    let frames = frame_and_window(samples, &hann);
+    let frames = frame_and_window(samples, &hann, WIN_LENGTH, HOP_LENGTH, FFT_SIZE);
     let n_frames = frames.len();
 
     let mut out = vec![0.0f32; N_MELS * n_frames];
 
     for (frame_idx, frame) in frames.iter().enumerate() {
         let power = compute_power_spectrum(frame);
-        apply_mel_filterbank_frame(&power, &mel_fb, &mut out, frame_idx);
+        apply_mel_filterbank_frame(&power, &mel_fb, &mut out, frame_idx, N_MELS);
     }
 
-    apply_log_and_normalise(&mut out);
+    for v in out.iter_mut() {
+        *v = v.max(LOG_FLOOR).ln();
+        *v = (*v - GLOBAL_MEAN) / GLOBAL_STD;
+    }
     out
 }
 
 // ---------------------------------------------------------------------------
-// Frame extraction
+// DSP helpers (retained for backward compatibility and tests)
 // ---------------------------------------------------------------------------
 
 /// Split `samples` into overlapping windowed frames.
-///
-/// Each frame is `WIN_LENGTH` samples wide, advanced by `HOP_LENGTH` samples.
-/// The returned vector has shape `[n_frames][FFT_SIZE]` — zero-padded to
-/// `FFT_SIZE` when `WIN_LENGTH < FFT_SIZE`.
-fn frame_and_window(samples: &[f32], window: &[f32]) -> Vec<Vec<f32>> {
+fn frame_and_window(
+    samples: &[f32],
+    window: &[f32],
+    win_length: usize,
+    hop_length: usize,
+    fft_size: usize,
+) -> Vec<Vec<f32>> {
     let n_samples = samples.len();
-    // Centre padding: half a window on each side (matches librosa default).
-    let pad = WIN_LENGTH / 2;
+    let pad = win_length / 2;
     let padded_len = n_samples + 2 * pad;
 
     let mut padded = vec![0.0f32; padded_len];
     padded[pad..pad + n_samples].copy_from_slice(samples);
 
-    let n_frames = (padded_len.saturating_sub(WIN_LENGTH)) / HOP_LENGTH + 1;
+    let n_frames = (padded_len.saturating_sub(win_length)) / hop_length + 1;
     let mut frames = Vec::with_capacity(n_frames);
 
     for i in 0..n_frames {
-        let start = i * HOP_LENGTH;
-        let end = (start + WIN_LENGTH).min(padded_len);
-        let mut frame = vec![0.0f32; FFT_SIZE];
+        let start = i * hop_length;
+        let end = (start + win_length).min(padded_len);
+        let mut frame = vec![0.0f32; fft_size];
         for (j, &s) in padded[start..end].iter().enumerate() {
             frame[j] = s * window[j];
         }
@@ -449,10 +789,6 @@ fn frame_and_window(samples: &[f32], window: &[f32]) -> Vec<Vec<f32>> {
     }
     frames
 }
-
-// ---------------------------------------------------------------------------
-// Hann window
-// ---------------------------------------------------------------------------
 
 /// Build a Hann analysis window of `size` samples.
 fn hann_window(size: usize) -> Vec<f32> {
@@ -466,21 +802,14 @@ fn hann_window(size: usize) -> Vec<f32> {
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// FFT (Cooley-Tukey DIT, radix-2, in-place)
-// ---------------------------------------------------------------------------
-
-/// Compute the power spectrum `|FFT(frame)|²` of one windowed frame.
-///
-/// The frame must be exactly `FFT_SIZE` elements (512 here, a power of two).
+/// Compute the power spectrum `|FFT(frame)|^2` of one windowed frame.
 fn compute_power_spectrum(frame: &[f32]) -> Vec<f32> {
-    let n = frame.len(); // == FFT_SIZE == 512
+    let n = frame.len();
     let mut re: Vec<f64> = frame.iter().map(|&s| f64::from(s)).collect();
     let mut im: Vec<f64> = vec![0.0; n];
 
     fft_inplace(&mut re, &mut im, n);
 
-    // Power spectrum: keep only positive frequencies (DC .. n/2 inclusive).
     (0..=n / 2)
         .map(|k| {
             #[allow(clippy::cast_possible_truncation)]
@@ -492,10 +821,7 @@ fn compute_power_spectrum(frame: &[f32]) -> Vec<f32> {
 }
 
 /// Cooley-Tukey in-place DIT FFT for power-of-two `n`.
-///
-/// Computes the DFT of (`re`, `im`) in-place.  `n` must be a power of two.
 fn fft_inplace(re: &mut [f64], im: &mut [f64], n: usize) {
-    // Bit-reversal permutation.
     let mut j = 0usize;
     for i in 1..n {
         let mut bit = n >> 1;
@@ -510,7 +836,6 @@ fn fft_inplace(re: &mut [f64], im: &mut [f64], n: usize) {
         }
     }
 
-    // Butterfly passes.
     let mut len = 2usize;
     while len <= n {
         fft_butterfly_pass(re, im, n, len);
@@ -546,20 +871,12 @@ fn fft_butterfly_pass(re: &mut [f64], im: &mut [f64], n: usize, len: usize) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Mel filter bank
-// ---------------------------------------------------------------------------
-
 /// Build a mel filter bank matrix of shape `[n_mels, n_fft/2+1]`.
-///
-/// Follows the HTK/librosa convention: triangular filters linearly spaced
-/// on the mel scale between `fmin` and `fmax` Hz.
 fn mel_filterbank(n_fft: usize, n_mels: usize, sr: f64, fmin: f64, fmax: f64) -> Vec<Vec<f32>> {
     let n_freqs = n_fft / 2 + 1;
     let mel_min = hz_to_mel(fmin);
     let mel_max = hz_to_mel(fmax);
 
-    // Centre frequencies of each mel bin (n_mels + 2 points including edges).
     let mel_points: Vec<f64> = (0..=n_mels + 1)
         .map(|i| {
             #[allow(clippy::cast_precision_loss)]
@@ -570,7 +887,6 @@ fn mel_filterbank(n_fft: usize, n_mels: usize, sr: f64, fmin: f64, fmax: f64) ->
         .collect();
     let hz_points: Vec<f64> = mel_points.iter().map(|&m| mel_to_hz(m)).collect();
 
-    // Map hz_points to FFT bin indices.
     let fft_freqs: Vec<f64> = (0..n_freqs)
         .map(|k| {
             #[allow(clippy::cast_precision_loss)]
@@ -590,7 +906,6 @@ fn mel_filterbank(n_fft: usize, n_mels: usize, sr: f64, fmin: f64, fmax: f64) ->
         })
         .collect();
 
-    // Build triangular filter responses.
     let mut fb = vec![vec![0.0f32; n_freqs]; n_mels];
     for m in 0..n_mels {
         let (f_lo, f_mid, f_hi) = (hz_points[m], hz_points[m + 1], hz_points[m + 2]);
@@ -617,26 +932,19 @@ fn triangular_filter_weight(f: f64, lo: f64, mid: f64, hi: f64) -> f32 {
 }
 
 /// Apply mel filter bank to one power spectrum frame.
-fn apply_mel_filterbank_frame(power: &[f32], fb: &[Vec<f32>], out: &mut [f32], frame_idx: usize) {
-    let n_frames = out.len() / N_MELS;
+fn apply_mel_filterbank_frame(
+    power: &[f32],
+    fb: &[Vec<f32>],
+    out: &mut [f32],
+    frame_idx: usize,
+    n_mels: usize,
+) {
+    let n_frames = out.len() / n_mels;
     for (m, filter) in fb.iter().enumerate() {
         let energy: f32 = filter.iter().zip(power).map(|(&w, &p)| w * p).sum();
-        // Store in column-major (n_mels, n_frames) layout expected by Parakeet.
         out[m * n_frames + frame_idx] = energy;
     }
 }
-
-/// Apply `log(max(x, LOG_FLOOR))` and normalise with NeMo global mean/std.
-fn apply_log_and_normalise(features: &mut [f32]) {
-    for v in features.iter_mut() {
-        *v = v.max(LOG_FLOOR).ln();
-        *v = (*v - GLOBAL_MEAN) / GLOBAL_STD;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Mel ↔ Hz conversions (HTK formula)
-// ---------------------------------------------------------------------------
 
 #[inline]
 fn hz_to_mel(hz: f64) -> f64 {
@@ -662,11 +970,8 @@ mod tests {
 
     #[test]
     fn hz_mel_round_trip_within_tolerance() {
-        // GIVEN: representative frequencies
         for &hz in &[100.0_f64, 500.0, 1000.0, 4000.0, 8000.0] {
-            // WHEN: convert to mel and back
             let recovered = mel_to_hz(hz_to_mel(hz));
-            // THEN: within 0.01 Hz of original
             assert!(
                 (recovered - hz).abs() < 0.01,
                 "round-trip failed for {hz} Hz: got {recovered}"
@@ -718,7 +1023,6 @@ mod tests {
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(i, _)| i)
             .unwrap();
-        // Peak should be near the centre of the window (within 5%).
         assert!(
             max_idx > 175 && max_idx < 225,
             "Hann window peak at {max_idx}, expected ~200"
@@ -731,13 +1035,10 @@ mod tests {
 
     #[test]
     fn fft_dc_input_produces_dc_spike() {
-        // GIVEN: constant input (DC signal = 1.0)
         let n = 512;
         let mut re: Vec<f64> = vec![1.0; n];
         let mut im: Vec<f64> = vec![0.0; n];
-        // WHEN: FFT computed
         fft_inplace(&mut re, &mut im, n);
-        // THEN: bin 0 (DC) should have magnitude N, all others near zero
         assert!(
             (re[0] - n as f64).abs() < 1e-6,
             "DC bin should be {n}, got {}",
@@ -751,14 +1052,11 @@ mod tests {
 
     #[test]
     fn fft_impulse_at_zero_is_flat_spectrum() {
-        // GIVEN: unit impulse at index 0
         let n = 512;
         let mut re: Vec<f64> = vec![0.0; n];
         let mut im: Vec<f64> = vec![0.0; n];
         re[0] = 1.0;
-        // WHEN: FFT computed
         fft_inplace(&mut re, &mut im, n);
-        // THEN: all bins should have magnitude 1.0
         for k in 0..n {
             let mag = (re[k] * re[k] + im[k] * im[k]).sqrt();
             assert!(
@@ -774,16 +1072,16 @@ mod tests {
 
     #[test]
     fn mel_filterbank_has_correct_shape() {
-        let fb = mel_filterbank(FFT_SIZE, N_MELS, 16_000.0, 0.0, MEL_FMAX);
-        assert_eq!(fb.len(), N_MELS, "expected {N_MELS} rows");
+        let fb = mel_filterbank(512, 80, 16_000.0, 0.0, 8_000.0);
+        assert_eq!(fb.len(), 80, "expected 80 rows");
         for row in &fb {
-            assert_eq!(row.len(), FFT_SIZE / 2 + 1, "each row should have 257 bins");
+            assert_eq!(row.len(), 257, "each row should have 257 bins");
         }
     }
 
     #[test]
     fn mel_filterbank_rows_are_non_negative() {
-        let fb = mel_filterbank(FFT_SIZE, N_MELS, 16_000.0, 0.0, MEL_FMAX);
+        let fb = mel_filterbank(512, 80, 16_000.0, 0.0, 8_000.0);
         for (m, row) in fb.iter().enumerate() {
             for (k, &v) in row.iter().enumerate() {
                 assert!(v >= 0.0, "filter bank [{m}][{k}] = {v} is negative");
@@ -793,11 +1091,10 @@ mod tests {
 
     #[test]
     fn mel_filterbank_each_filter_has_positive_area() {
-        // Every filter should contribute at least some energy.
-        let fb = mel_filterbank(FFT_SIZE, N_MELS, 16_000.0, 0.0, MEL_FMAX);
+        let fb = mel_filterbank(512, 80, 16_000.0, 0.0, 8_000.0);
         for (m, row) in fb.iter().enumerate() {
             let area: f32 = row.iter().sum();
-            assert!(area > 0.0, "filter {m} has zero area — misaligned?");
+            assert!(area > 0.0, "filter {m} has zero area");
         }
     }
 
@@ -807,26 +1104,19 @@ mod tests {
 
     #[test]
     fn log_mel_spectrogram_silence_has_expected_frame_count() {
-        // GIVEN: 1 second of silence at 16 kHz
         let silence = vec![0.0f32; 16_000];
-        // WHEN: spectrogram computed
         let mel = compute_log_mel_spectrogram(&silence);
-        // THEN: length must be a multiple of N_MELS
-        assert_eq!(
-            mel.len() % N_MELS,
-            0,
-            "mel length {} is not a multiple of {N_MELS}",
-            mel.len()
-        );
+        assert_eq!(mel.len() % 80, 0, "mel length {} is not a multiple of 80", mel.len());
     }
 
     #[test]
     fn log_mel_spectrogram_silence_values_are_normalised() {
-        // GIVEN: silence → power = 0 → log(LOG_FLOOR) = log(1e-5) ≈ -11.51
-        // After normalisation: (log(1e-5) - GLOBAL_MEAN) / GLOBAL_STD
+        let log_floor: f32 = 1e-5;
+        let global_mean: f32 = -5.017;
+        let global_std: f32 = 2.698;
         let silence = vec![0.0f32; 16_000];
         let mel = compute_log_mel_spectrogram(&silence);
-        let expected = (LOG_FLOOR.ln() - GLOBAL_MEAN) / GLOBAL_STD;
+        let expected = (log_floor.ln() - global_mean) / global_std;
         for &v in &mel {
             assert!(
                 (v - expected).abs() < 0.01,
@@ -837,7 +1127,6 @@ mod tests {
 
     #[test]
     fn log_mel_spectrogram_empty_input_produces_at_least_one_frame() {
-        // Edge case: zero-length input should still produce output (padded).
         let mel = compute_log_mel_spectrogram(&[]);
         assert!(!mel.is_empty(), "empty input should still produce frames");
     }
@@ -848,26 +1137,19 @@ mod tests {
 
     #[test]
     fn frame_and_window_one_second_produces_correct_count() {
-        let window = hann_window(WIN_LENGTH);
+        let window = hann_window(400);
         let samples = vec![0.0f32; 16_000];
-        let frames = frame_and_window(&samples, &window);
-        // Expected: (16_000 + WIN_LENGTH - HOP_LENGTH) / HOP_LENGTH ≈ 100 frames
-        // (depends on centre-padding)
+        let frames = frame_and_window(&samples, &window, 400, 160, 512);
         assert!(!frames.is_empty(), "should produce frames for 1s audio");
     }
 
     #[test]
     fn frame_and_window_each_frame_has_fft_size() {
-        let window = hann_window(WIN_LENGTH);
+        let window = hann_window(400);
         let samples = vec![0.5f32; 800];
-        let frames = frame_and_window(&samples, &window);
+        let frames = frame_and_window(&samples, &window, 400, 160, 512);
         for (i, frame) in frames.iter().enumerate() {
-            assert_eq!(
-                frame.len(),
-                FFT_SIZE,
-                "frame {i} length {} != {FFT_SIZE}",
-                frame.len()
-            );
+            assert_eq!(frame.len(), 512, "frame {i} length {} != 512", frame.len());
         }
     }
 
@@ -910,22 +1192,32 @@ mod tests {
 
     #[test]
     fn model_files_present_returns_false_in_clean_env() {
-        // Model files are not present in CI / developer machines without the
-        // explicit download step.  This test verifies the function returns a
-        // bool and does not panic — actual true/false depends on environment.
         let result = std::panic::catch_unwind(model_files_present);
         assert!(result.is_ok(), "model_files_present should never panic");
     }
 
     // -----------------------------------------------------------------------
-    // load_vocab (unit tests with synthetic JSON)
+    // load_vocab (unit tests with synthetic data)
     // -----------------------------------------------------------------------
 
     #[test]
-    fn load_vocab_parses_huggingface_format() {
+    fn load_vocab_parses_nemo_txt_format() {
+        use std::io::Write as _;
+        let content = "<unk> 0\n<blk> 1\nhello 2\nworld 3\n";
+        let mut tmp = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
+        tmp.write_all(content.as_bytes()).unwrap();
+        let vocab = load_vocab(tmp.path()).unwrap();
+        assert_eq!(vocab.len(), 4);
+        assert_eq!(vocab[0], "<unk>");
+        assert_eq!(vocab[2], "hello");
+        assert_eq!(vocab[3], "world");
+    }
+
+    #[test]
+    fn load_vocab_parses_huggingface_json_format() {
         use std::io::Write as _;
         let json = r#"{"model":{"vocab":{"<blank>":0,"a":1,"b":2}}}"#;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut tmp = tempfile::Builder::new().suffix(".json").tempfile().unwrap();
         tmp.write_all(json.as_bytes()).unwrap();
         let vocab = load_vocab(tmp.path()).unwrap();
         assert_eq!(vocab.len(), 3);
@@ -934,10 +1226,10 @@ mod tests {
     }
 
     #[test]
-    fn load_vocab_parses_flat_array_format() {
+    fn load_vocab_parses_flat_array_json_format() {
         use std::io::Write as _;
         let json = r#"["<blank>","hello","world"]"#;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut tmp = tempfile::Builder::new().suffix(".json").tempfile().unwrap();
         tmp.write_all(json.as_bytes()).unwrap();
         let vocab = load_vocab(tmp.path()).unwrap();
         assert_eq!(vocab.len(), 3);
@@ -946,18 +1238,8 @@ mod tests {
     }
 
     #[test]
-    fn load_vocab_returns_error_on_invalid_json() {
-        use std::io::Write as _;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        tmp.write_all(b"not json at all").unwrap();
-        let result = load_vocab(tmp.path());
-        assert!(result.is_err(), "invalid JSON must return error");
-        assert_eq!(result.unwrap_err().code(), "transcription_error");
-    }
-
-    #[test]
     fn load_vocab_returns_error_on_missing_file() {
-        let result = load_vocab(Path::new("/nonexistent/path/tokenizer.json"));
+        let result = load_vocab(Path::new("/nonexistent/path/vocab.txt"));
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code(), "transcription_error");
     }
@@ -985,22 +1267,50 @@ mod tests {
     #[test]
     fn decode_token_ids_joins_pieces_and_strips_whitespace() {
         use std::io::Write as _;
-        // Vocab: 0="▁hello", 1="▁world"
-        let json = r#"{"model":{"vocab":{"▁hello":0,"▁world":1}}}"#;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        tmp.write_all(json.as_bytes()).unwrap();
+        let content = "\u{2581}hello 0\n\u{2581}world 1\n";
+        let mut tmp = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
+        tmp.write_all(content.as_bytes()).unwrap();
         let result = decode_token_ids(&[0, 1], tmp.path()).unwrap();
-        // ▁ → space, then trim leading space
         assert_eq!(result, "hello world");
     }
 
     #[test]
     fn decode_token_ids_empty_input_returns_empty_string() {
         use std::io::Write as _;
-        let json = r#"{"model":{"vocab":{"a":0}}}"#;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        tmp.write_all(json.as_bytes()).unwrap();
+        let content = "a 0\n";
+        let mut tmp = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
+        tmp.write_all(content.as_bytes()).unwrap();
         let result = decode_token_ids(&[], tmp.path()).unwrap();
         assert_eq!(result, "");
+    }
+
+    // -----------------------------------------------------------------------
+    // argmax_f32
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn argmax_f32_finds_correct_index() {
+        assert_eq!(argmax_f32(&[1.0, 3.0, 2.0]), 1);
+        assert_eq!(argmax_f32(&[5.0, 1.0, 2.0]), 0);
+        assert_eq!(argmax_f32(&[1.0, 2.0, 7.0]), 2);
+    }
+
+    #[test]
+    fn argmax_f32_empty_returns_zero() {
+        assert_eq!(argmax_f32(&[]), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // is_special_token
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_special_token_detects_angle_brackets() {
+        assert!(is_special_token("<blank>"));
+        assert!(is_special_token("<unk>"));
+        assert!(is_special_token("<blk>"));
+        assert!(!is_special_token("hello"));
+        assert!(!is_special_token("<partial"));
+        assert!(!is_special_token("partial>"));
     }
 }

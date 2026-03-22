@@ -366,25 +366,23 @@ pub(super) fn read_capture_screen(uri: &str) -> Result<ResourceReadResult, Resou
         None => (None, false),
     };
 
-    match frame {
-        Some(f) => Ok(ResourceReadResult {
+    if let Some(f) = frame {
+        return Ok(ResourceReadResult {
             contents: vec![ResourceContents::blob(uri, "image/png", f.png_base64)],
-        }),
-        None => {
-            // No frame yet — describe why in JSON so the agent can react.
-            let payload = json!({
-                "running":         is_running,
-                "frame_available": false,
-            });
-            Ok(ResourceReadResult {
-                contents: vec![ResourceContents::text(
-                    uri,
-                    "application/json",
-                    payload.to_string(),
-                )],
-            })
-        }
+        });
     }
+    // No frame yet — describe why in JSON so the agent can react.
+    let payload = json!({
+        "running":         is_running,
+        "frame_available": false,
+    });
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
 }
 
 /// Read `axterminator://capture/status`.
