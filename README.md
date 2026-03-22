@@ -14,7 +14,7 @@
 
 **MCP server that gives AI agents the ability to see and control macOS applications.**
 
-[Deploy](#deploy) · [MCP Tools](#mcp-tools) · [CLI](#cli) · [Wiki](https://github.com/MikkoParkkola/axterminator/wiki) · [Known Limitations](#known-limitations)
+[Deploy](#deploy) · [MCP Tools](#mcp-tools) · [CLI](#cli) · [Query Syntax](#query-syntax) · [Troubleshooting](#troubleshooting) · [Wiki](https://github.com/MikkoParkkola/axterminator/wiki) · [Known Limitations](#known-limitations)
 
 </div>
 
@@ -46,6 +46,16 @@ Add to MCP config (Claude Code, OpenCode, Cursor):
   }
 }
 ```
+
+For Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.axterminator]
+command = "/path/to/axterminator"
+args = ["mcp", "serve"]
+```
+
+Replace `/path/to/axterminator` with the actual binary path (run `which axterminator` or use the full build output path).
 
 Done. Your agent has 19 core tools (up to 30 with all feature flags) to control any macOS app.
 
@@ -87,6 +97,28 @@ axterminator tree --app Finder           # Element hierarchy
 axterminator mcp serve --http 8080 --token secret  # HTTP transport
 ```
 
+## Query Syntax
+
+```bash
+# Simple text — matches ANY of: title, description, value, label, identifier
+axterminator find "Save" --app Safari
+
+# By role
+axterminator find "role:AXButton" --app Safari
+
+# Combined role + attribute (AND)
+axterminator find "role:AXButton title:Save" --app Safari
+
+# By description (useful for apps like Calculator)
+axterminator find "description:equals" --app Calculator
+
+# By value
+axterminator find "value:42" --app Calculator
+
+# XPath-like
+axterminator find "//AXButton[@AXTitle='Save']" --app Safari
+```
+
 ## How It Works
 
 AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIElementPerformAction()` works on unfocused windows. Your agent clicks buttons in one app while you work in another. Neither notices.
@@ -104,6 +136,17 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 | Drag, system dialogs | No | Require cursor control / always grab focus |
 | Gesture recognition | Yes | Verified: thumbs_up at 88.8% confidence |
 | Speech transcription | Yes | Verified: on-device, requires Dictation enabled |
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `dyld: Library not loaded: .../Python.framework/...` | Prebuilt binary can't find Python | Build from source instead |
+| `Accessibility: DISABLED` | No permission granted | System Settings > Privacy & Security > Accessibility |
+| `Element not found` for short labels | App uses `AXDescription` not `AXTitle` | Try `description:label` or inspect with `axterminator tree` |
+| `Application not found` | Wrong name or app not running | Use bundle ID: `--bundle-id com.apple.calculator` |
+
+**AI agents**: Fetch [llms.txt](https://raw.githubusercontent.com/MikkoParkkola/axterminator/main/llms.txt) for machine-readable installation instructions.
 
 ## Feature Flags
 
@@ -149,6 +192,12 @@ See [API Reference](https://github.com/MikkoParkkola/axterminator/wiki/API-Refer
 ## Acknowledgements
 
 Inspired by [Terminator](https://github.com/mediar-ai/terminator) by [mediar-ai](https://github.com/mediar-ai), which pioneered accessible desktop GUI automation on Windows.
+
+## For AI Agents
+
+Machine-readable installation guide: [`llms.txt`](https://raw.githubusercontent.com/MikkoParkkola/axterminator/main/llms.txt)
+
+Your agent can fetch this URL to get step-by-step installation, MCP config for every host, and troubleshooting.
 
 ## License
 

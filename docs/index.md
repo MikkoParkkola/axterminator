@@ -55,6 +55,16 @@ Add to MCP config (Claude Code, OpenCode, Cursor):
 }
 ```
 
+For Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.axterminator]
+command = "/path/to/axterminator"
+args = ["mcp", "serve"]
+```
+
+Replace `/path/to/axterminator` with the actual binary path.
+
 Done. Your agent has 19 core tools (up to 30 with all feature flags) to control any macOS app.
 
 ### Python Package (Secondary)
@@ -62,6 +72,8 @@ Done. Your agent has 19 core tools (up to 30 with all feature flags) to control 
 ```bash
 pip install axterminator
 ```
+
+> **Note:** The PyPI package provides the Python library but does NOT include the `mcp serve` CLI command. Use the Rust binary for MCP server functionality.
 
 ## MCP Tools
 
@@ -175,6 +187,10 @@ Measured on Apple M1 MacBook Pro, macOS 14.2:
 | PyPI | [`axterminator`](https://pypi.org/project/axterminator/) |
 | Homebrew | `brew install MikkoParkkola/tap/axterminator` |
 | GitHub Releases | [Binary assets](https://github.com/MikkoParkkola/axterminator/releases) |
+
+## For AI Agents
+
+Machine-readable installation guide: [`llms.txt`](https://raw.githubusercontent.com/MikkoParkkola/axterminator/main/llms.txt)
 
 ## License
 

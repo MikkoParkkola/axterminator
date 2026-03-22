@@ -22,6 +22,16 @@ AXTerminator uses the macOS Accessibility API to interact with applications. Thi
 
 ## Checking Permission Status
 
+### CLI
+
+```bash
+axterminator check
+# Expected: "Accessibility: OK" and version number
+# If DISABLED: follow the steps above
+```
+
+### Python
+
 ```python
 import axterminator as ax
 

@@ -12,7 +12,7 @@ cargo install axterminator --features cli
 
 ### 2. Configure Your Agent
 
-Add to your MCP config (Claude Code, OpenCode, Cursor):
+**Claude Code** (`~/.claude/settings.json` or project `.mcp.json`):
 
 ```json
 {
@@ -24,6 +24,29 @@ Add to your MCP config (Claude Code, OpenCode, Cursor):
   }
 }
 ```
+
+**Codex** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.axterminator]
+command = "axterminator"
+args = ["mcp", "serve"]
+```
+
+**Cursor / Windsurf** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "axterminator",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+> **Tip:** If `axterminator` is not in your PATH, use the full path to the binary (e.g., `~/.cargo/bin/axterminator` or `/usr/local/bin/axterminator`).
 
 ### 3. Grant Permissions
 
@@ -94,7 +117,7 @@ app = ax.app(pid=12345)
 ## Finding Elements
 
 ```python
-# By text/title
+# Simple text — matches ANY of: title, description, value, label, identifier
 button = app.find("Save")
 
 # With timeout
@@ -103,8 +126,14 @@ button = app.find("Save", timeout_ms=5000)
 # By role
 text_field = app.find("role:AXTextField")
 
-# Combined
+# Combined (AND semantics)
 save_btn = app.find("role:AXButton title:Save")
+
+# By description (useful for Calculator-style apps)
+equals = app.find("description:equals")
+
+# By value
+display = app.find("value:42")
 ```
 
 ## Actions

@@ -25,6 +25,23 @@ brew install MikkoParkkola/tap/axterminator
 
 Download the latest binary from [GitHub Releases](https://github.com/MikkoParkkola/axterminator/releases).
 
+### Prebuilt Binary (Direct Download)
+
+```bash
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+  arm64) TARGET="aarch64-apple-darwin" ;;
+  x86_64) TARGET="x86_64-apple-darwin" ;;
+esac
+
+curl -L --fail -o /usr/local/bin/axterminator \
+  "https://github.com/MikkoParkkola/axterminator/releases/latest/download/axterminator-${TARGET}"
+chmod +x /usr/local/bin/axterminator
+```
+
+**Note:** The prebuilt binary requires Python 3.9+ installed on the system. If you see `dyld: Library not loaded` errors mentioning `Python.framework`, build from source instead.
+
 ### Build from Source
 
 ```bash
@@ -43,6 +60,8 @@ For pytest integration and Python scripting, install via PyPI:
 ```bash
 pip install axterminator
 ```
+
+> **Important:** The PyPI package provides the Python library for scripting and pytest, but does NOT include the `mcp serve` CLI command. For MCP server usage, install the Rust binary via one of the methods above.
 
 **Requirements:** Python 3.9+
 
@@ -97,3 +116,12 @@ if ax.is_accessibility_enabled():
 else:
     print("Grant accessibility permissions in System Settings")
 ```
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `dyld: Library not loaded: .../Python.framework/...` | Prebuilt binary can't find system Python | Build from source: `cargo build --release --features cli` |
+| `command not found: axterminator` | Binary not in PATH | Use full path or `cargo install axterminator --features cli` |
+| `error: no matching package` on crates.io | Rust toolchain too old | Update: `rustup update stable` |
+| Python `import axterminator` fails | Missing Rust extension | Rebuild: `pip install maturin && maturin develop` |

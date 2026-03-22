@@ -9,7 +9,7 @@ import axterminator as ax
 
 app = ax.app(name="Calculator")
 
-# Find by title/label
+# Find by text — searches title, description, value, label, and identifier
 button = app.find("5")
 
 # Find with timeout (milliseconds)
@@ -21,18 +21,32 @@ button = app.find("Save", timeout_ms=5000)
 Use prefixes to specify search type:
 
 ```python
+# Simple text — matches ANY of: title, description, value, label, identifier
+button = app.find("Save")
+
 # By identifier
 app.find("identifier:_NS:9")
 
 # By role
 app.find("role:AXButton")
 
-# By title (default)
+# By title
 app.find("title:Save")
 
-# Combined
+# By description (useful for apps like Calculator where buttons use AXDescription)
+app.find("description:equals")
+
+# By value
+app.find("value:42")
+
+# By label
+app.find("label:Save button")
+
+# Combined (AND semantics — all specified fields must match)
 app.find("role:AXButton title:OK")
 ```
+
+> **Note:** Simple text queries (without a prefix) search across ALL text-bearing attributes using OR semantics. Prefixed queries use AND semantics — every specified field must match.
 
 ## Finding Multiple Elements
 
