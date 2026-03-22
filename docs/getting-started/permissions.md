@@ -30,19 +30,6 @@ axterminator check
 # If DISABLED: follow the steps above
 ```
 
-### Python
-
-```python
-import axterminator as ax
-
-if ax.is_accessibility_enabled():
-    print("Accessibility enabled!")
-else:
-    print("Please grant accessibility permissions")
-    # Optionally prompt the user
-    ax.request_accessibility()
-```
-
 ## Common Issues
 
 ### "Operation not permitted"

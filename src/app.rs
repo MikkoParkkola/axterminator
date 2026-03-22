@@ -2,8 +2,6 @@
 
 #![allow(clippy::useless_conversion)]
 
-#[cfg(feature = "python-ext")]
-use pyo3::prelude::*;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,7 +14,6 @@ use crate::error::{AXError, AXResult};
 use crate::sync::SyncEngine;
 
 /// Application wrapper providing the main entry point for GUI automation
-#[cfg_attr(feature = "python-ext", pyclass)]
 pub struct AXApp {
     /// Process ID of the application
     pub(crate) pid: i32,
@@ -47,131 +44,6 @@ impl std::fmt::Debug for AXApp {
 unsafe impl Send for AXApp {}
 unsafe impl Sync for AXApp {}
 
-#[cfg(feature = "python-ext")]
-#[pymethods]
-impl AXApp {
-    /// Get the process ID
-    #[getter]
-    fn pid(&self) -> i32 {
-        self.pid
-    }
-
-    /// Get the bundle identifier
-    #[getter]
-    fn bundle_id(&self) -> Option<String> {
-        self.bundle_id.clone()
-    }
-
-    /// Check if the application is running
-    fn is_running(&self) -> bool {
-        // Check if process exists
-        std::fs::metadata(format!("/proc/{}", self.pid)).is_ok()
-            || Command::new("kill")
-                .args(["-0", &self.pid.to_string()])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-    }
-
-    /// Find an element by query
-    ///
-    /// # Arguments
-    /// * `query` - Element query (title, role, identifier, or xpath)
-    /// * `timeout_ms` - Optional timeout in milliseconds
-    ///
-    /// # Example
-    /// ```python
-    /// button = app.find("Save")
-    /// button = app.find("role:AXButton title:Save")
-    /// button = app.find(role="AXButton", title="Save")
-    /// ```
-    #[pyo3(signature = (query, timeout_ms=None))]
-    pub fn find(&self, query: &str, timeout_ms: Option<u64>) -> PyResult<AXElement> {
-        self.find_native(query, timeout_ms)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-
-    /// Find an element by role and optional attributes
-    ///
-    /// # Arguments
-    /// * `role` - Accessibility role (e.g., "`AXButton`")
-    /// * `title` - Optional title attribute
-    /// * `identifier` - Optional identifier attribute
-    /// * `label` - Optional label attribute
-    #[pyo3(signature = (role, title=None, identifier=None, label=None))]
-    fn find_by_role(
-        &self,
-        role: &str,
-        title: Option<&str>,
-        identifier: Option<&str>,
-        label: Option<&str>,
-    ) -> PyResult<AXElement> {
-        self.find_element_by_role(role, title, identifier, label)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-
-    /// Wait for an element to appear
-    ///
-    /// # Arguments
-    /// * `query` - Element query
-    /// * `timeout_ms` - Timeout in milliseconds (default: 5000)
-    #[pyo3(signature = (query, timeout_ms=5000))]
-    fn wait_for_element(&self, query: &str, timeout_ms: u64) -> PyResult<AXElement> {
-        self.find_element(query, Some(Duration::from_millis(timeout_ms)))
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-
-    /// Wait for the application to become idle
-    ///
-    /// Uses `EspressoMac` SDK if available, otherwise falls back to heuristic detection.
-    ///
-    /// # Arguments
-    /// * `timeout_ms` - Timeout in milliseconds (default: 5000)
-    #[pyo3(signature = (timeout_ms=5000))]
-    pub fn wait_for_idle(&self, timeout_ms: u64) -> bool {
-        self.wait_idle_native(timeout_ms)
-    }
-
-    /// Check if the application is currently idle (non-blocking)
-    ///
-    /// # Returns
-    /// * `true` if app is idle
-    /// * `false` if app is busy
-    fn is_idle(&self) -> bool {
-        self.sync_engine.is_idle()
-    }
-
-    /// Take a screenshot of the application window
-    ///
-    /// # Returns
-    /// PNG image data as bytes
-    pub fn screenshot(&self) -> PyResult<Vec<u8>> {
-        self.screenshot_native()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-
-    /// Get all windows of the application
-    pub fn windows(&self) -> PyResult<Vec<AXElement>> {
-        self.windows_native()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-
-    /// Get the main window
-    fn main_window(&self) -> PyResult<AXElement> {
-        self.get_main_window()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-
-    /// Terminate the application
-    fn terminate(&self) -> PyResult<()> {
-        Command::new("kill")
-            .arg(self.pid.to_string())
-            .output()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        Ok(())
-    }
-}
-
 impl AXApp {
     /// Connect to an application — Rust-native version returning `AXResult`.
     pub fn connect_native(
@@ -182,7 +54,7 @@ impl AXApp {
         Self::connect_impl(name, bundle_id, pid)
     }
 
-    /// Find element — returns `AXResult` for Rust-native callers (no pyo3 dependency).
+    /// Find element — returns `AXResult` for Rust-native callers.
     pub fn find_native(&self, query: &str, timeout_ms: Option<u64>) -> AXResult<AXElement> {
         let timeout = timeout_ms.map(Duration::from_millis);
         self.find_element(query, timeout)
@@ -232,17 +104,6 @@ impl AXApp {
             element,
             sync_engine,
         })
-    }
-
-    /// Connect to an application — `PyResult` shim for `#[pymethods]`.
-    #[cfg(feature = "python-ext")]
-    pub fn connect(
-        name: Option<&str>,
-        bundle_id: Option<&str>,
-        pid: Option<u32>,
-    ) -> PyResult<Self> {
-        Self::connect_impl(name, bundle_id, pid)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Get PID from bundle identifier using `NSRunningApplication`

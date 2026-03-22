@@ -14,8 +14,6 @@
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, TCFType};
 use core_foundation::string::CFString;
-#[cfg(feature = "python-ext")]
-use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -44,7 +42,6 @@ pub enum HealStrategy {
 }
 
 /// Healing configuration
-#[cfg_attr(feature = "python-ext", pyclass(from_py_object))]
 #[derive(Debug, Clone)]
 pub struct HealingConfig {
     /// Ordered list of strategies to try
@@ -55,36 +52,10 @@ pub struct HealingConfig {
     pub cache_healed: bool,
 }
 
-#[cfg(feature = "python-ext")]
-#[pymethods]
-impl HealingConfig {
-    #[new]
-    #[pyo3(signature = (strategies=None, max_heal_time_ms=100, cache_healed=true))]
-    fn py_new(strategies: Option<Vec<String>>, max_heal_time_ms: u64, cache_healed: bool) -> Self {
-        Self::new(strategies, max_heal_time_ms, cache_healed)
-    }
-
-    #[getter]
-    fn strategies(&self) -> Vec<String> { self.strategies.clone() }
-    #[setter]
-    fn set_strategies(&mut self, v: Vec<String>) { self.strategies = v; }
-
-    #[getter]
-    fn max_heal_time_ms(&self) -> u64 { self.max_heal_time_ms }
-    #[setter]
-    fn set_max_heal_time_ms(&mut self, v: u64) { self.max_heal_time_ms = v; }
-
-    #[getter]
-    fn cache_healed(&self) -> bool { self.cache_healed }
-    #[setter]
-    fn set_cache_healed(&mut self, v: bool) { self.cache_healed = v; }
-}
-
 impl HealingConfig {
     /// Construct a `HealingConfig` with optional strategy list.
     ///
-    /// Used by tests and Rust-native callers. The `#[pymethods]` block provides
-    /// the same constructor to Python via pyo3 when the `python-ext` feature is active.
+    /// Used by tests and Rust-native callers.
     pub fn new(
         strategies: Option<Vec<String>>,
         max_heal_time_ms: u64,
@@ -623,65 +594,7 @@ fn try_by_position(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEleme
     }
 }
 
-// VLM-based visual detection requires an active Python interpreter and is only
-// available when the python-ext feature is enabled.
-#[cfg(feature = "python-ext")]
-fn try_by_visual(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement> {
-    // VLM-based visual matching using Python MLX/Claude/GPT-4o
-    //
-    // Strategy:
-    // 1. Take screenshot of the window
-    // 2. Call Python VLM to identify element from description
-    // 3. Find element at returned coordinates
-
-    // Get description to search for
-    let description = query.description.as_ref().or(query.text_hint.as_ref())?;
-
-    // Take screenshot - try to get window bounds first
-    let screenshot_data = capture_window_screenshot(root)?;
-
-    // Get window dimensions for coordinate conversion
-    let (width, height) = get_window_dimensions(root)?;
-
-    // Call Python VLM detector.
-    // `try_attach` returns None if the interpreter is finalizing, avoiding a
-    // panic that `attach` would raise on interpreter shutdown.
-    let result = Python::try_attach(|py| -> Option<(f64, f64)> {
-        // Import the VLM module
-        let vlm_module = py.import("axterminator.vlm").ok()?;
-        let detect_fn = vlm_module.getattr("detect_element_visual").ok()?;
-
-        // Create PyBytes from screenshot data — zero-copy view into our Vec<u8>
-        let py_bytes = pyo3::types::PyBytes::new(py, &screenshot_data);
-
-        // Call: detect_element_visual(image_data, description, width, height)
-        let result = detect_fn
-            .call1((py_bytes, description, width as i32, height as i32))
-            .ok()?;
-
-        // Parse result - returns Optional[(x, y)]
-        if result.is_none() {
-            return None;
-        }
-
-        let coords: (f64, f64) = result.extract().ok()?;
-        Some(coords)
-    })
-    // `try_attach` returns `Option<Option<(f64,f64)>>`: outer None means the
-    // interpreter is finalizing.  Flatten to treat both absent cases as no match.
-    .flatten();
-
-    // If we got coordinates, find element at that position
-    if let Some((x, y)) = result {
-        // Search for element at or near the coordinates
-        return find_element_at_position(root, x, y);
-    }
-
-    None
-}
-
-// CLI / no-python build: VLM visual strategy is unavailable; always return None.
-#[cfg(not(feature = "python-ext"))]
+// VLM visual strategy is unavailable without Python; always return None.
 fn try_by_visual(_query: &ElementQuery, _root: AXUIElementRef) -> Option<AXElement> {
     None
 }

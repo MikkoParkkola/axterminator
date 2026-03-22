@@ -5,7 +5,6 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/MikkoParkkola/axterminator/ci.yml?style=for-the-badge&label=tests)](https://github.com/MikkoParkkola/axterminator/actions)
 [![Crates.io](https://img.shields.io/crates/v/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
 [![Downloads](https://img.shields.io/crates/d/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
-[![PyPI](https://img.shields.io/pypi/v/axterminator?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/axterminator/)
 [![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
 [![Rust](https://img.shields.io/badge/rust-stable-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/axterminator?style=for-the-badge)](LICENSE-MIT)
@@ -162,25 +161,6 @@ cargo build --release --features "cli,audio,camera,spaces"
 | `camera` | Camera capture, gesture detection |
 | `spaces` | Virtual desktop management |
 | `http-transport` | HTTP MCP transport with auth |
-
-## Python API
-
-Also available as a Python package for test scripts and pytest:
-
-```bash
-pip install axterminator
-```
-
-```python
-import axterminator as ax
-app = ax.app(name="Calculator")
-app.find("7").click()
-app.find("+").click()
-app.find("3").click()
-app.find("=").click()
-```
-
-See [API Reference](https://github.com/MikkoParkkola/axterminator/wiki/API-Reference) for full Python docs.
 
 ## Community
 

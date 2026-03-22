@@ -6,7 +6,6 @@
 
 [![Crates.io](https://img.shields.io/crates/v/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
 [![Downloads](https://img.shields.io/crates/d/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
-[![PyPI](https://img.shields.io/pypi/v/axterminator?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/axterminator/)
 [![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=for-the-badge)](https://github.com/MikkoParkkola/axterminator)
 
@@ -14,7 +13,7 @@
 
 Up to 30 MCP tools (19 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
-**Current version: 0.6.1** --- Rust binary is the primary interface; Python bindings available via PyPI.
+**Current version: 0.6.1** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
 
 ## Deploy
 
@@ -66,14 +65,6 @@ args = ["mcp", "serve"]
 Replace `/path/to/axterminator` with the actual binary path.
 
 Done. Your agent has 19 core tools (up to 30 with all feature flags) to control any macOS app.
-
-### Python Package (Secondary)
-
-```bash
-pip install axterminator
-```
-
-> **Note:** The PyPI package provides the Python library but does NOT include the `mcp serve` CLI command. Use the Rust binary for MCP server functionality.
 
 ## MCP Tools
 
@@ -130,26 +121,6 @@ axterminator tree --app Finder           # Element hierarchy
 axterminator mcp serve --http 8080 --token secret  # HTTP transport
 ```
 
-## Python API
-
-```python
-import axterminator as ax
-
-# Check accessibility permissions
-if not ax.is_accessibility_enabled():
-    print("Enable accessibility in System Settings > Privacy & Security > Accessibility")
-    exit(1)
-
-# Connect to app and interact (background mode by default)
-app = ax.app(name="Calculator")
-app.find("5").click()
-app.find("+").click()
-app.find("3").click()
-app.find("=").click()
-```
-
-See [API Reference](api/core.md) for full Python docs.
-
 ## How It Works
 
 AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIElementPerformAction()` works on unfocused windows. Your agent clicks buttons in one app while you work in another. Neither notices.
@@ -167,7 +138,6 @@ Measured on Apple M1 MacBook Pro, macOS 14.2:
 | Single attribute read | ~54 us |
 | Element access | ~379 us |
 | Perform action | ~20 us |
-| Find element (Python) | ~0.5-1 ms |
 
 ## Known Limitations
 
@@ -184,7 +154,6 @@ Measured on Apple M1 MacBook Pro, macOS 14.2:
 | Channel | Package |
 |---------|---------|
 | crates.io | [`axterminator`](https://crates.io/crates/axterminator) |
-| PyPI | [`axterminator`](https://pypi.org/project/axterminator/) |
 | Homebrew | `brew install MikkoParkkola/tap/axterminator` |
 | GitHub Releases | [Binary assets](https://github.com/MikkoParkkola/axterminator/releases) |
 

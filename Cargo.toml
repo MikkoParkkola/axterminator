@@ -1,6 +1,6 @@
 [package]
 name = "axterminator"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2021"
 authors = ["Mikko Parkkola <mikko.parkkola@iki.fi>"]
 description = "macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators"
@@ -11,11 +11,11 @@ documentation = "https://github.com/MikkoParkkola/axterminator#readme"
 readme = "README.md"
 keywords = ["macos", "gui", "testing", "accessibility", "automation"]
 categories = ["development-tools::testing", "gui", "os::macos-apis"]
-exclude = [".claude/", ".github/", "docs/", "python/", "tests/", "benches/", "examples/"]
+exclude = [".claude/", ".github/", "docs/", "tests/", "benches/", "examples/"]
 
 [lib]
 name = "axterminator"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "axterminator"
@@ -23,20 +23,11 @@ path = "src/bin/axterminator.rs"
 required-features = ["cli"]
 
 [features]
-# NOTE: `python-ext` is intentionally NOT in `default`.
-# - The cdylib (Python extension) is built by maturin/pip, which passes
-#   --features python-ext explicitly (see .cargo/config.toml or pyproject.toml).
-# - The standalone CLI binary is built with `cargo build --bin axterminator`
-#   (default features = cli only), which links Python explicitly via build.rs.
 default = ["cli"]
 cli = ["dep:clap", "dep:clap_complete"]
 # spaces: virtual desktop management via CGSSpace private SPI.
 # Off by default — private API, macOS 14+ tested, incompatible with App Store.
 spaces = []
-# python-ext: enables the `extension-module` linker flag that defers Python symbol
-# resolution to the embedding interpreter at runtime.  Must be DISABLED when
-# building the standalone CLI binary (which has zero Python dependency).
-python-ext = ["dep:pyo3", "pyo3/extension-module"]
 # http-transport: Streamable HTTP + SSE transport (axum, tokio-stream).
 # Feature-gated to keep the default CLI binary lean.
 http-transport = ["dep:axum", "dep:tokio-stream", "dep:rand"]
@@ -55,11 +46,6 @@ camera = []
 watch = ["audio", "camera", "dep:tokio-util"]
 
 [dependencies]
-# Python bindings (abi3-py39 for forward compatibility with Python 3.14+)
-# Optional: only compiled when the python-ext feature is enabled (maturin build).
-# The CLI binary has zero Python dependency.
-pyo3 = { version = "0.28", features = ["abi3-py39"], optional = true }
-
 # CLI (feature-gated so it's only compiled for the binary target)
 clap = { version = "4.5", features = ["derive", "wrap_help", "env"], optional = true }
 clap_complete = { version = "4.5", optional = true }
@@ -124,7 +110,6 @@ criterion = "0.8"
 tempfile = "3.15"
 
 [build-dependencies]
-pyo3-build-config = { version = "0.28", features = ["resolve-config"] }
 # cc is used by build.rs to compile camera_objc.m when the `camera` feature is enabled.
 cc = "1.2"
 

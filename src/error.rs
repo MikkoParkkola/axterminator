@@ -36,12 +36,5 @@ pub enum AXError {
     SystemError(String),
 }
 
-#[cfg(feature = "python-ext")]
-impl From<AXError> for pyo3::PyErr {
-    fn from(err: AXError) -> pyo3::PyErr {
-        pyo3::exceptions::PyRuntimeError::new_err(err.to_string())
-    }
-}
-
 /// Result type for `AXTerminator` operations
 pub type AXResult<T> = Result<T, AXError>;

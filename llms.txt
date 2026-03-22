@@ -69,15 +69,7 @@ chmod +x ~/.local/bin/axterminator
 ~/.local/bin/axterminator check
 ```
 
-The prebuilt binary is fully self-contained — no Python or other runtime dependencies required.
-
-### Option D: PyPI (Python library only, NOT the MCP server)
-
-```bash
-pip install axterminator
-```
-
-**WARNING**: The PyPI package provides the Python library (`import axterminator`) but does NOT provide the `mcp serve` CLI subcommand. Do NOT use this option for MCP server installation. Use Option A, B, or C instead.
+The prebuilt binary is fully self-contained -- no runtime dependencies required.
 
 ## PERMISSIONS
 
@@ -227,4 +219,4 @@ cargo build --release --features cli,audio,camera,watch,spaces,http-transport
 
 ## Version
 
-0.6.1
+0.7.0

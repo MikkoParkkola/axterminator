@@ -30,25 +30,6 @@ fn main() {
         // Speech.framework provides SFSpeechRecognizer.
         println!("cargo:rustc-link-lib=framework=Speech");
     }
-
-    // The `python-ext` feature gates `extension-module` in pyo3, which emits
-    // `-undefined dynamic_lookup` so the cdylib resolves Python symbols at
-    // runtime via the embedding interpreter.
-    //
-    // When `python-ext` is *disabled* (i.e. building the standalone CLI binary),
-    // pyo3 is not a dependency at all — no Python linking is needed or performed.
-    //
-    // Cargo exposes enabled features as `CARGO_FEATURE_<UPPER>` env vars inside
-    // build scripts, so this detection is reliable across all targets in the crate.
-    let python_ext = std::env::var("CARGO_FEATURE_PYTHON_EXT").is_ok();
-
-    if python_ext {
-        // Python extension (.so / .dylib): delegate symbol resolution to the
-        // embedding interpreter via -undefined dynamic_lookup.
-        pyo3_build_config::add_extension_module_link_args();
-    }
-    // When python-ext is disabled, don't link Python at all.
-    // The CLI binary has zero Python dependency.
 }
 
 /// Compile `src/camera_objc.m` into a static library that Cargo links.
