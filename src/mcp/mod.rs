@@ -40,6 +40,8 @@ pub mod prompts;
 pub mod protocol;
 pub mod resources;
 pub(crate) mod resources_read;
+pub mod sampling;
+pub mod security;
 pub mod server;
 pub(super) mod server_handlers;
 pub mod tools;

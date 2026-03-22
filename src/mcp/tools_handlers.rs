@@ -377,6 +377,39 @@ pub(crate) fn handle_click_at(args: &Value) -> ToolCallResult {
 }
 
 pub(crate) fn handle_find_visual(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
+    handle_find_visual_with_sampling(
+        args,
+        registry,
+        crate::mcp::sampling::SamplingContext::unavailable(),
+    )
+}
+
+/// `ax_find_visual` handler with explicit sampling capability context.
+///
+/// When the connected client advertises `sampling` support, the response
+/// includes a base64-encoded PNG screenshot and a `sampling_available: true`
+/// flag. This lets the client perform the VLM inference itself by:
+///
+/// 1. Receiving the screenshot in the tool result.
+/// 2. Sending a `sampling/createMessage` to its own LLM with the image.
+/// 3. Parsing the LLM's coordinate response.
+/// 4. Calling `ax_click_at` with the identified coordinates.
+///
+/// When the client does not support sampling, the response is a clear error
+/// message guiding the caller toward the manual screenshot + external VLM path.
+///
+/// # Synchronous stdio constraint
+///
+/// True mid-call sampling (write request, read response, continue) requires
+/// the handler to hold references to stdin/stdout, which the synchronous
+/// dispatch loop does not thread through to tool handlers. The pragmatic
+/// resolution is to surface the screenshot and capability flag in the tool
+/// result so the client drives the sampling loop itself.
+pub(crate) fn handle_find_visual_with_sampling(
+    args: &Value,
+    registry: &Arc<AppRegistry>,
+    sampling_ctx: crate::mcp::sampling::SamplingContext,
+) -> ToolCallResult {
     let Some(app_name) = args["app"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: app");
     };
@@ -384,17 +417,62 @@ pub(crate) fn handle_find_visual(args: &Value, registry: &Arc<AppRegistry>) -> T
         return ToolCallResult::error("Missing required field: description");
     };
 
-    // VLM detection is a future capability. We take a screenshot and explain
-    // the situation clearly so the MCP client can decide what to do next.
     registry
-        .with_app(&app_name, |_app| {
-            ToolCallResult::error(format!(
-                "VLM visual detection for '{description}' is not yet available in the Rust server. \
-                 Configure ANTHROPIC_API_KEY or OPENAI_API_KEY and use ax_screenshot to \
-                 capture the app, then call your VLM to locate the element."
-            ))
+        .with_app(&app_name, |app| {
+            build_find_visual_response(app, &description, sampling_ctx)
         })
         .unwrap_or_else(ToolCallResult::error)
+}
+
+/// Build the `ax_find_visual` response body based on sampling availability.
+fn build_find_visual_response(
+    app: &crate::app::AXApp,
+    description: &str,
+    sampling_ctx: crate::mcp::sampling::SamplingContext,
+) -> ToolCallResult {
+    if !sampling_ctx.is_available() {
+        return ToolCallResult::error(format!(
+            "Visual element detection for '{description}' requires a client that supports \
+             MCP sampling (sampling/createMessage). The connected client does not advertise \
+             this capability. Alternative: call ax_screenshot to capture the app, then use \
+             an external VLM with the screenshot to locate the element."
+        ));
+    }
+
+    // Client supports sampling — take a screenshot and include it so the
+    // client can send it to its LLM via sampling/createMessage.
+    match app.screenshot_native() {
+        Ok(png_bytes) => {
+            use base64::Engine as _;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+            let (messages, system_prompt) =
+                crate::mcp::sampling::locate_element_messages(description, &png_bytes);
+
+            ToolCallResult::ok(
+                serde_json::json!({
+                    "sampling_available": true,
+                    "description": description,
+                    "screenshot_b64": b64,
+                    "screenshot_mime": "image/png",
+                    "sampling_request": {
+                        "method": "sampling/createMessage",
+                        "params": {
+                            "messages": messages,
+                            "maxTokens": 512,
+                            "systemPrompt": system_prompt
+                        }
+                    },
+                    "hint": "Send sampling_request to the LLM via sampling/createMessage, \
+                             then parse the JSON response for {found, x, y} coordinates."
+                })
+                .to_string(),
+            )
+        }
+        Err(e) => ToolCallResult::error(format!(
+            "ax_find_visual: screenshot failed for visual sampling: {e}. \
+             Use ax_screenshot separately and call an external VLM."
+        )),
+    }
 }
 
 pub(crate) fn handle_wait_idle(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {

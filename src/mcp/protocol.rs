@@ -1,10 +1,11 @@
 //! MCP 2025-11-05 protocol types.
 //!
-//! Covers the wire types for Phase 1 and Phase 2:
-//! - `initialize` handshake with resources + prompts capabilities
+//! Covers the wire types for Phase 1, Phase 2, and Phase 5 (Tasks API):
+//! - `initialize` handshake with resources + prompts + tasks capabilities
 //! - `tools/list` and `tools/call`
 //! - `resources/list`, `resources/templates/list`, and `resources/read`
 //! - `prompts/list` and `prompts/get`
+//! - `tasks/list`, `tasks/result`, `tasks/cancel`
 //!
 //! All types derive `serde::{Serialize, Deserialize}` so they round-trip
 //! cleanly through `serde_json`.
@@ -188,6 +189,15 @@ pub struct InitializeResult {
 /// Phase 4 adds `elicitation` — the server can ask the user questions
 /// mid-operation via `elicitation/create`.
 ///
+/// Phase 5 adds `tasks` — long-running operations return immediately and
+/// results are polled via `tasks/result`.
+///
+/// Phase 6 (§14) adds `sampling` — the server can delegate LLM inference back
+/// to the connected client via `sampling/createMessage`.  Presence of this
+/// capability signals that the server *may* send sampling requests; whether it
+/// actually does depends on whether the client also advertises `sampling` in
+/// its own capabilities.
+///
 /// The `experimental` field carries non-standard capabilities such as
 /// `claude/channel` for push notifications to Claude Code sessions.
 #[derive(Debug, Serialize)]
@@ -197,11 +207,25 @@ pub struct ServerCapabilities {
     pub resources: ResourcesCapability,
     pub prompts: PromptsCapability,
     pub elicitation: ElicitationCapability,
+    pub tasks: TasksCapability,
+    /// §14 Sampling — server can send `sampling/createMessage` to the client.
+    pub sampling: SamplingCapability,
     /// Experimental capabilities map.  Present only when the `watch` feature
     /// is enabled; omitted entirely otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub experimental: Option<Value>,
 }
+
+/// Sampling capability advertised in `initialize` (§14).
+///
+/// Presence signals that the server may send `sampling/createMessage` requests
+/// to the client mid-tool-call.  The client is free to reject or ignore these
+/// requests; the server must handle the case gracefully.
+///
+/// The value is an empty object per the MCP 2025-11-05 spec — capability
+/// presence alone is the signal.
+#[derive(Debug, Serialize)]
+pub struct SamplingCapability {}
 
 /// Elicitation capability advertised in `initialize`.
 ///
@@ -209,6 +233,16 @@ pub struct ServerCapabilities {
 /// The value is an empty object per the MCP 2025-11-05 spec.
 #[derive(Debug, Serialize)]
 pub struct ElicitationCapability {}
+
+/// Tasks capability advertised in `initialize`.
+///
+/// Presence signals that the server supports the Tasks API (§5):
+/// - `tools/call` with `_meta.task: true` returns immediately with a task ID
+/// - Clients poll `tasks/result` for the final result
+/// - `tasks/list` enumerates all in-flight and completed tasks
+/// - `tasks/cancel` requests cancellation of a pending task
+#[derive(Debug, Serialize)]
+pub struct TasksCapability {}
 
 /// Tool list capability.
 #[derive(Debug, Serialize)]
@@ -302,7 +336,7 @@ pub struct ToolCallParams {
 }
 
 /// A single content item returned by `tools/call`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ContentItem {
     #[serde(rename = "type")]
     pub kind: &'static str,
@@ -320,7 +354,7 @@ impl ContentItem {
 }
 
 /// `tools/call` result.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ToolCallResult {
     pub content: Vec<ContentItem>,
     #[serde(rename = "isError")]
@@ -550,6 +584,94 @@ pub struct PromptGetResult {
     pub description: String,
     pub messages: Vec<PromptMessage>,
 }
+
+// ---------------------------------------------------------------------------
+// MCP Tasks API — Phase 5
+// ---------------------------------------------------------------------------
+
+/// Task status values used in `TaskInfo.status`.
+///
+/// These are the four states defined by the MCP Tasks spec:
+/// - `"working"` — the task is still executing
+/// - `"done"` — the task completed successfully; call `tasks/result` to fetch
+/// - `"failed"` — the task failed; `tasks/result` will return an error result
+/// - `"cancelled"` — the task was cancelled via `tasks/cancel`
+pub mod task_status {
+    pub const WORKING: &str = "working";
+    pub const DONE: &str = "done";
+    pub const FAILED: &str = "failed";
+    pub const CANCELLED: &str = "cancelled";
+}
+
+/// Status snapshot of a single task, returned by `tasks/list` and embedded
+/// in the immediate `tools/call` response when `_meta.task: true`.
+///
+/// # Wire format
+///
+/// ```json
+/// {
+///   "taskId": "task-0000000000000001",
+///   "status": "working",
+///   "statusMessage": "Running ax_screenshot…"
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskInfo {
+    /// Stable identifier for this task. Unique within the server session.
+    #[serde(rename = "taskId")]
+    pub task_id: String,
+    /// One of the constants in [`task_status`].
+    pub status: &'static str,
+    /// Optional human-readable message describing the current status.
+    #[serde(rename = "statusMessage", skip_serializing_if = "Option::is_none")]
+    pub status_message: Option<String>,
+}
+
+/// `tasks/result` request params.
+///
+/// The client sends the `taskId` received from the initial `tools/call`
+/// response and receives either the completed `ToolCallResult` or the current
+/// `TaskInfo` if still in progress.
+#[derive(Debug, Deserialize)]
+pub struct TaskResultParams {
+    #[serde(rename = "taskId")]
+    pub task_id: String,
+}
+
+/// `tasks/cancel` request params.
+///
+/// Requesting cancellation sets the task status to `"cancelled"`.
+/// For the synchronous stdio transport, tasks complete before the next
+/// request is processed, so cancellation applies only to tasks that are
+/// already in a terminal state or tasks whose result has not yet been fetched.
+#[derive(Debug, Deserialize)]
+pub struct TaskCancelParams {
+    #[serde(rename = "taskId")]
+    pub task_id: String,
+}
+
+/// `tasks/list` result — envelope for the task status list.
+#[derive(Debug, Serialize)]
+pub struct TasksListResult {
+    pub tasks: Vec<TaskInfo>,
+}
+
+/// `tasks/result` response — either the completed result or the current status.
+///
+/// When the task is still working the client receives `{"task": {...}}`.
+/// When the task is done the client receives `{"content": [...], "isError": ...}`.
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum TaskResultResponse {
+    /// Task is complete — return the full tool result.
+    Complete(ToolCallResult),
+    /// Task is still in progress (or was cancelled) — return status envelope.
+    Pending { task: TaskInfo },
+}
+
+/// `tasks/cancel` result — empty object per spec.
+#[derive(Debug, Serialize)]
+pub struct TaskCancelResult {}
 
 #[cfg(test)]
 mod tests {

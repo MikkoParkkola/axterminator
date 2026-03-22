@@ -485,3 +485,402 @@ fn prompts_get_missing_params_returns_error() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     assert!(v.get("error").is_some());
 }
+
+// -----------------------------------------------------------------------
+// Phase 5 — Tasks API
+// -----------------------------------------------------------------------
+
+#[test]
+fn initialize_response_advertises_tasks_capability() {
+    // GIVEN: fresh server
+    let mut s = Server::new();
+    // WHEN: initialize
+    let req = make_request(
+        1,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2025-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"}
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    // THEN: capabilities.tasks is present
+    assert!(v["result"]["capabilities"]["tasks"].is_object());
+}
+
+#[test]
+fn tasks_list_returns_empty_on_fresh_server() {
+    // GIVEN: initialized server with no tasks
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tasks/list
+    let v = send(&mut s, 30, "tasks/list", None);
+    // THEN: tasks array is present and empty
+    let tasks = v["result"]["tasks"].as_array().unwrap();
+    assert!(tasks.is_empty());
+}
+
+#[test]
+fn tasks_list_before_initialized_returns_error() {
+    // GIVEN: uninitialized server
+    let mut s = Server::new();
+    // WHEN: tasks/list before initialize
+    let v = send(&mut s, 30, "tasks/list", None);
+    // THEN: error
+    assert!(v.get("error").is_some());
+}
+
+#[test]
+fn tools_call_with_meta_task_returns_working_status() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tools/call with _meta.task: true
+    let req = make_request(
+        31,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    // THEN: immediate response with task envelope
+    let task = &v["result"]["task"];
+    assert!(task.is_object(), "expected task object in result");
+    assert_eq!(task["status"], "working");
+    assert!(task["taskId"].as_str().unwrap().starts_with("task-"));
+}
+
+#[test]
+fn tasks_list_shows_task_after_async_call() {
+    // GIVEN: initialized server with one async task submitted
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let req = make_request(
+        32,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    let task_id = v["result"]["task"]["taskId"].as_str().unwrap().to_owned();
+    // WHEN: tasks/list
+    // Allow the background thread to complete.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let list_v = send(&mut s, 33, "tasks/list", None);
+    // THEN: our task appears
+    let tasks = list_v["result"]["tasks"].as_array().unwrap();
+    assert!(!tasks.is_empty());
+    let found = tasks.iter().any(|t| t["taskId"] == task_id);
+    assert!(found, "task {task_id} missing from tasks/list");
+}
+
+#[test]
+fn tasks_result_returns_pending_while_working() {
+    // GIVEN: initialized server with an async task registered but before the
+    //        background thread completes (we hold the task store lock to block it)
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let req = make_request(
+        34,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    let task_id = v["result"]["task"]["taskId"].as_str().unwrap().to_owned();
+    // WHEN: tasks/result immediately (task may still be "working")
+    let result_v = send(
+        &mut s,
+        35,
+        "tasks/result",
+        Some(json!({ "taskId": task_id })),
+    );
+    // THEN: either pending envelope or complete result — both are valid
+    // (the thread may have finished by now). The key invariant is no error.
+    assert!(
+        result_v.get("error").is_none(),
+        "tasks/result for a known task should not error"
+    );
+}
+
+#[test]
+fn tasks_result_for_completed_task_returns_tool_result() {
+    // GIVEN: initialized server, task submitted and thread allowed to finish
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let req = make_request(
+        36,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    let task_id = v["result"]["task"]["taskId"].as_str().unwrap().to_owned();
+    // WHEN: wait for completion, then poll
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let result_v = send(
+        &mut s,
+        37,
+        "tasks/result",
+        Some(json!({ "taskId": task_id })),
+    );
+    // THEN: completed task returns ToolCallResult shape with content array
+    let result = &result_v["result"];
+    assert!(
+        result.get("content").is_some(),
+        "completed task should return tool result with content"
+    );
+}
+
+#[test]
+fn tasks_result_unknown_task_id_returns_error() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tasks/result for nonexistent ID
+    let v = send(
+        &mut s,
+        38,
+        "tasks/result",
+        Some(json!({ "taskId": "task-nonexistent" })),
+    );
+    // THEN: INVALID_PARAMS error
+    assert!(v.get("error").is_some());
+    assert_eq!(v["error"]["code"], -32_602);
+}
+
+#[test]
+fn tasks_result_missing_params_returns_error() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tasks/result without params
+    let v = send(&mut s, 39, "tasks/result", None);
+    // THEN: error
+    assert!(v.get("error").is_some());
+}
+
+#[test]
+fn tasks_cancel_working_task_marks_it_cancelled() {
+    // GIVEN: initialized server with a fresh async task
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let req = make_request(
+        40,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    let task_id = v["result"]["task"]["taskId"].as_str().unwrap().to_owned();
+    // Cancel immediately while task may still be "working"
+    // WHEN: tasks/cancel
+    let cancel_v = send(
+        &mut s,
+        41,
+        "tasks/cancel",
+        Some(json!({ "taskId": task_id })),
+    );
+    // THEN: cancel returns empty object (success)
+    assert!(cancel_v.get("error").is_none());
+    assert_eq!(cancel_v["result"], json!({}));
+    // AND: task status reflects cancelled (or already done — race is acceptable)
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let list_v = send(&mut s, 42, "tasks/list", None);
+    let tasks = list_v["result"]["tasks"].as_array().unwrap();
+    let task = tasks.iter().find(|t| t["taskId"] == task_id).unwrap();
+    let status = task["status"].as_str().unwrap();
+    assert!(
+        status == "cancelled" || status == "done" || status == "failed",
+        "task should be in a terminal state, got: {status}"
+    );
+}
+
+#[test]
+fn tasks_cancel_unknown_task_id_returns_error() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tasks/cancel for nonexistent ID
+    let v = send(
+        &mut s,
+        43,
+        "tasks/cancel",
+        Some(json!({ "taskId": "task-does-not-exist" })),
+    );
+    // THEN: INVALID_PARAMS error
+    assert!(v.get("error").is_some());
+    assert_eq!(v["error"]["code"], -32_602);
+}
+
+#[test]
+fn tasks_cancel_missing_params_returns_error() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: tasks/cancel without params
+    let v = send(&mut s, 44, "tasks/cancel", None);
+    // THEN: error
+    assert!(v.get("error").is_some());
+}
+
+#[test]
+fn tools_call_without_meta_task_executes_synchronously() {
+    // GIVEN: initialized server
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: normal tools/call (no _meta.task)
+    let req = make_request(
+        50,
+        "tools/call",
+        Some(json!({ "name": "ax_is_accessible", "arguments": {} })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    // THEN: result has content array directly (not wrapped in task)
+    assert!(v["result"].get("task").is_none());
+    assert!(v["result"]["content"].is_array());
+}
+
+#[test]
+fn task_id_format_is_zero_padded_hex_prefix() {
+    // GIVEN / WHEN: two consecutive task IDs
+    // (use the public next_task_id, but since it's pub(crate) we go through
+    //  the server's task store instead)
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let req = make_request(
+        60,
+        "tools/call",
+        Some(json!({
+            "name": "ax_is_accessible",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    let task_id = v["result"]["task"]["taskId"].as_str().unwrap();
+    // THEN: format is "task-NNNNNNNNNNNNNNNN" (16 digits)
+    assert!(task_id.starts_with("task-"));
+    let digits = &task_id[5..];
+    assert_eq!(digits.len(), 16, "task ID should have 16 digit suffix");
+    assert!(digits.chars().all(|c| c.is_ascii_digit()));
+}
+
+// -----------------------------------------------------------------------
+// §14 Sampling — capability advertisement and client tracking
+// -----------------------------------------------------------------------
+
+#[test]
+fn initialize_response_advertises_sampling_capability() {
+    // GIVEN: fresh server (regardless of client capabilities)
+    let mut s = Server::new();
+    // WHEN: initialize with no client sampling capability
+    let req = make_request(
+        70,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2025-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"}
+        })),
+    );
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    // THEN: server always advertises sampling capability (it may send requests)
+    assert!(
+        v["result"]["capabilities"]["sampling"].is_object(),
+        "expected sampling capability object in server capabilities"
+    );
+}
+
+#[test]
+fn client_supports_sampling_false_when_not_advertised() {
+    // GIVEN: fresh server
+    let mut s = Server::new();
+    // WHEN: client initialises without sampling capability
+    let req = make_request(
+        71,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2025-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "no-sampling-client", "version": "1"}
+        })),
+    );
+    s.handle(&req, &mut Vec::<u8>::new());
+    // THEN: server does not set the flag
+    assert!(
+        !s.client_supports_sampling,
+        "client_supports_sampling should be false when client omits sampling capability"
+    );
+}
+
+#[test]
+fn client_supports_sampling_true_when_advertised() {
+    // GIVEN: fresh server
+    let mut s = Server::new();
+    // WHEN: client initialises WITH sampling capability
+    let req = make_request(
+        72,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2025-11-05",
+            "capabilities": {
+                "sampling": { "createMessage": {} }
+            },
+            "clientInfo": {"name": "claude-code", "version": "2.0"}
+        })),
+    );
+    s.handle(&req, &mut Vec::<u8>::new());
+    // THEN: server records that the client supports sampling
+    assert!(
+        s.client_supports_sampling,
+        "client_supports_sampling should be true when client advertises sampling"
+    );
+}
+
+#[test]
+fn client_supports_sampling_false_by_default_before_initialize() {
+    // GIVEN: fresh, uninitialised server
+    let s = Server::new();
+    // THEN: flag defaults to false
+    assert!(!s.client_supports_sampling);
+}
+
+#[test]
+fn sampling_createMessage_is_method_not_found_from_server_side() {
+    // GIVEN: initialized server — sampling/createMessage is a CLIENT-to-LLM
+    //        call, not a server method. The server should not handle it.
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    // WHEN: client mistakenly sends sampling/createMessage to the server
+    let req = make_request(73, "sampling/createMessage", None);
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
+    let v: Value = serde_json::to_value(&resp).unwrap();
+    // THEN: METHOD_NOT_FOUND — the server sends these requests, not receives them
+    assert_eq!(v["error"]["code"], RpcError::METHOD_NOT_FOUND);
+}

@@ -27,6 +27,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
@@ -35,9 +36,27 @@ use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
 use crate::mcp::protocol::{
-    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestId, RpcError,
+    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestId, RpcError, TaskInfo,
+    ToolCallResult,
 };
+use crate::mcp::security::SecurityGuard;
 use crate::mcp::tools::AppRegistry;
+
+// ---------------------------------------------------------------------------
+// Task ID generator
+// ---------------------------------------------------------------------------
+
+/// Session-scoped monotonic counter for task IDs.
+///
+/// IDs are formatted as `"task-{n:016}"` to be URL-safe, sortable, and
+/// trivially unique within a single server session without requiring `uuid`.
+static TASK_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Allocate the next task ID.
+pub(crate) fn next_task_id() -> String {
+    let n = TASK_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("task-{n:016}")
+}
 
 // ---------------------------------------------------------------------------
 // Server state
@@ -66,6 +85,18 @@ pub(crate) struct WorkflowState {
     pub completed: bool,
 }
 
+/// One entry in the task store.
+///
+/// Created when a `tools/call` request carries `_meta.task: true`.
+/// The `result` field is `None` while the task is executing and `Some` once
+/// it has completed (successfully or with an error).
+pub(crate) struct TaskEntry {
+    /// Current status snapshot.  Mutated in place as the task progresses.
+    pub info: TaskInfo,
+    /// Final tool result; `None` while `info.status == "working"`.
+    pub result: Option<ToolCallResult>,
+}
+
 /// MCP stdio server state.
 pub(super) struct Server {
     pub(super) registry: Arc<AppRegistry>,
@@ -78,6 +109,21 @@ pub(super) struct Server {
     /// whether any affected URI is in this set and emits a
     /// `notifications/resources/updated` notification if so.
     pub(crate) subscriptions: Arc<Mutex<HashSet<String>>>,
+    /// Task store for the Tasks API (§5).
+    ///
+    /// Keyed by task ID.  Entries are never evicted within a session so that
+    /// clients can always retrieve results even after a long delay. The store
+    /// is shared with `server_handlers` via `Arc` so that background threads
+    /// can write results back without holding a reference to `Server`.
+    pub(crate) tasks: Arc<Mutex<HashMap<String, TaskEntry>>>,
+    /// §13 security model — mode, app policy, rate limiter, audit log.
+    pub(super) security: SecurityGuard,
+    /// Whether the connected client advertised `sampling` in its `initialize` capabilities.
+    ///
+    /// Set to `true` during `handle_initialize` when the client capabilities object
+    /// contains the `sampling` key. Used by tool handlers to decide whether they can
+    /// delegate visual inference to the client via `sampling/createMessage`.
+    pub(crate) client_supports_sampling: bool,
     #[cfg(feature = "watch")]
     pub(super) watch_state: Arc<crate::mcp::tools_watch::WatchState>,
 }
@@ -89,6 +135,9 @@ impl Server {
             phase: Phase::Uninitialized,
             workflows: Arc::new(Mutex::new(HashMap::new())),
             subscriptions: Arc::new(Mutex::new(HashSet::new())),
+            tasks: Arc::new(Mutex::new(HashMap::new())),
+            security: SecurityGuard::new(),
+            client_supports_sampling: false,
             #[cfg(feature = "watch")]
             watch_state: Arc::new(crate::mcp::tools_watch::WatchState::new()),
         }
@@ -132,7 +181,7 @@ impl Server {
             "initialize" => Some(self.handle_initialize(id, msg.params.as_ref())),
             "ping" => Some(Self::handle_ping(id)),
             // Phase 1 + Phase 3 — tools
-            "tools/list" if self.phase == Phase::Running => Some(Self::handle_tools_list(id)),
+            "tools/list" if self.phase == Phase::Running => Some(self.handle_tools_list(id)),
             "tools/call" if self.phase == Phase::Running => {
                 Some(self.handle_tools_call(id, msg.params.as_ref(), out))
             }
@@ -157,6 +206,14 @@ impl Server {
             "prompts/list" if self.phase == Phase::Running => Some(Self::handle_prompts_list(id)),
             "prompts/get" if self.phase == Phase::Running => {
                 Some(Self::handle_prompts_get(id, msg.params.as_ref()))
+            }
+            // Phase 5 — tasks
+            "tasks/list" if self.phase == Phase::Running => Some(self.handle_tasks_list(id)),
+            "tasks/result" if self.phase == Phase::Running => {
+                Some(self.handle_tasks_result(id, msg.params.as_ref()))
+            }
+            "tasks/cancel" if self.phase == Phase::Running => {
+                Some(self.handle_tasks_cancel(id, msg.params.as_ref()))
             }
             method if self.phase != Phase::Running => {
                 warn!(method, "request before initialized");

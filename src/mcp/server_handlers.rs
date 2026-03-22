@@ -7,20 +7,24 @@
 //! [`server`]: crate::mcp::server
 
 use std::io::Write;
+use std::sync::Arc;
 
 use serde_json::Value;
 use tracing::{debug, info};
 
 use crate::mcp::protocol::{
-    ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse, LoggingCapability,
-    PingResult, PromptGetParams, PromptsCapability, RequestId, ResourceReadParams,
-    ResourceSubscribeParams, ResourceSubscribeResult, ResourceUnsubscribeParams,
-    ResourcesCapability, RpcError, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
+    task_status, ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse,
+    LoggingCapability, PingResult, PromptGetParams, PromptsCapability, RequestId,
+    ResourceReadParams, ResourceSubscribeParams, ResourceSubscribeResult,
+    ResourceUnsubscribeParams, ResourcesCapability, RpcError, SamplingCapability,
+    ServerCapabilities, ServerInfo, TaskCancelParams, TaskCancelResult, TaskInfo, TaskResultParams,
+    TaskResultResponse, TasksCapability, TasksListResult, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
+use crate::mcp::security::SecurityMode;
 use crate::mcp::tools::call_tool;
 
-use super::server::{Phase, Server};
+use super::server::{next_task_id, Phase, Server, TaskEntry};
 
 impl Server {
     // -----------------------------------------------------------------------
@@ -41,13 +45,16 @@ impl Server {
 
         match serde_json::from_value::<InitializeParams>(params_val.clone()) {
             Ok(p) => {
+                let supports_sampling = p.capabilities.supports_sampling();
                 info!(
                     client = %p.client_info.name,
                     version = %p.client_info.version,
                     protocol = %p.protocol_version,
+                    sampling = supports_sampling,
                     "client connected"
                 );
                 self.phase = Phase::Initializing;
+                self.client_supports_sampling = supports_sampling;
                 let result = build_initialize_result();
                 JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
             }
@@ -69,10 +76,16 @@ impl Server {
     // Tools
     // -----------------------------------------------------------------------
 
-    pub(super) fn handle_tools_list(id: RequestId) -> JsonRpcResponse {
-        let result = ToolListResult {
-            tools: crate::mcp::tools::all_tools(),
+    pub(super) fn handle_tools_list(&self, id: RequestId) -> JsonRpcResponse {
+        let all = crate::mcp::tools::all_tools();
+        let tools = if self.security.mode() == SecurityMode::Sandboxed {
+            all.into_iter()
+                .filter(|t| self.security.mode().is_tool_allowed(t.name))
+                .collect()
+        } else {
+            all
         };
+        let result = ToolListResult { tools };
         JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
     }
 
@@ -94,8 +107,12 @@ impl Server {
                 let args = p
                     .arguments
                     .unwrap_or(Value::Object(serde_json::Map::default()));
-                let tool_result = self.dispatch_tool(&p.name, &args, out);
-                JsonRpcResponse::ok(id, serde_json::to_value(tool_result).unwrap())
+                if is_task_request(params_val) {
+                    self.dispatch_as_task(id, &p.name, args)
+                } else {
+                    let tool_result = self.dispatch_tool(&p.name, &args, out);
+                    JsonRpcResponse::ok(id, serde_json::to_value(tool_result).unwrap())
+                }
             }
             Err(e) => JsonRpcResponse::err(
                 id,
@@ -105,6 +122,82 @@ impl Server {
                 ),
             ),
         }
+    }
+
+    /// Execute a tool as an async task.
+    ///
+    /// For the synchronous stdio transport, the tool runs on a background
+    /// thread while this method returns immediately with a `"working"` status.
+    /// The thread stores the result in the shared task store; the client then
+    /// polls via `tasks/result` to retrieve it.
+    ///
+    /// The response body wraps the initial [`TaskInfo`] in a `task` field,
+    /// matching the MCP Tasks §5 wire format:
+    ///
+    /// ```json
+    /// {"jsonrpc":"2.0","id":1,"result":{"task":{"taskId":"task-0000000000000001","status":"working"}}}
+    /// ```
+    fn dispatch_as_task(&self, id: RequestId, tool_name: &str, args: Value) -> JsonRpcResponse {
+        let task_id = next_task_id();
+        let info = TaskInfo {
+            task_id: task_id.clone(),
+            status: task_status::WORKING,
+            status_message: Some(format!("Running {tool_name}…")),
+        };
+
+        // Register the task before spawning so the entry always exists when
+        // the client polls (even if the thread completes before the poll).
+        let tasks = Arc::clone(&self.tasks);
+        {
+            let mut store = tasks.lock().unwrap_or_else(|e| e.into_inner());
+            store.insert(
+                task_id.clone(),
+                TaskEntry {
+                    info: info.clone(),
+                    result: None,
+                },
+            );
+        }
+
+        // Capture everything the background thread needs.
+        let registry = Arc::clone(&self.registry);
+        let workflows = Arc::clone(&self.workflows);
+        let subscriptions = Arc::clone(&self.subscriptions);
+        let name = tool_name.to_owned();
+
+        std::thread::spawn(move || {
+            // Background tool execution — no stdout access; notifications are
+            // suppressed (dev/null sink) because the stdio loop is single-
+            // threaded. Progress notifications require Phase 6 (SSE transport).
+            let mut sink = std::io::sink();
+            let tool_result = execute_tool_background(
+                &name,
+                &args,
+                &registry,
+                &workflows,
+                &subscriptions,
+                &mut sink,
+            );
+
+            let (final_status, message) = if tool_result.is_error {
+                (task_status::FAILED, "Tool returned an error".to_owned())
+            } else {
+                (task_status::DONE, format!("{name} completed"))
+            };
+
+            let mut store = tasks.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(entry) = store.get_mut(&task_id) {
+                // Only advance if the task was not cancelled before we finished.
+                if entry.info.status == task_status::WORKING {
+                    entry.info.status = final_status;
+                    entry.info.status_message = Some(message);
+                    entry.result = Some(tool_result);
+                }
+            }
+        });
+
+        let response_value = serde_json::json!({ "task": info });
+        JsonRpcResponse::ok(id, response_value)
     }
 
     // -----------------------------------------------------------------------
@@ -274,12 +367,143 @@ impl Server {
     }
 
     // -----------------------------------------------------------------------
+    // Phase 5 — Tasks API
+    // -----------------------------------------------------------------------
+
+    /// `tasks/list` — return the status of every known task in the session.
+    ///
+    /// Results are returned in task-ID order (which is insertion order for
+    /// the monotonic counter). Terminal tasks (`done`, `failed`, `cancelled`)
+    /// are included so clients can audit completed work.
+    pub(super) fn handle_tasks_list(&self, id: RequestId) -> JsonRpcResponse {
+        let store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        let mut tasks: Vec<TaskInfo> = store.values().map(|e| e.info.clone()).collect();
+        // Sort by task_id so the list is deterministic (IDs are zero-padded).
+        tasks.sort_by(|a, b| a.task_id.cmp(&b.task_id));
+        let result = TasksListResult { tasks };
+        JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+    }
+
+    /// `tasks/result` — retrieve the result of a completed task, or its
+    /// current status if still in progress.
+    ///
+    /// Returns an `INVALID_PARAMS` error when the `taskId` is not found.
+    pub(super) fn handle_tasks_result(
+        &self,
+        id: RequestId,
+        params: Option<&Value>,
+    ) -> JsonRpcResponse {
+        let Some(params_val) = params else {
+            return JsonRpcResponse::err(
+                id,
+                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
+            );
+        };
+
+        let parsed = serde_json::from_value::<TaskResultParams>(params_val.clone());
+        let task_id = match parsed {
+            Ok(p) => p.task_id,
+            Err(e) => {
+                return JsonRpcResponse::err(
+                    id,
+                    RpcError::new(
+                        RpcError::INVALID_PARAMS,
+                        format!("Invalid tasks/result params: {e}"),
+                    ),
+                )
+            }
+        };
+
+        let store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        match store.get(&task_id) {
+            None => JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    format!("Unknown taskId: {task_id}"),
+                ),
+            ),
+            Some(entry) => {
+                let response = match &entry.result {
+                    Some(result) => TaskResultResponse::Complete(result.clone()),
+                    None => TaskResultResponse::Pending {
+                        task: entry.info.clone(),
+                    },
+                };
+                JsonRpcResponse::ok(id, serde_json::to_value(response).unwrap())
+            }
+        }
+    }
+
+    /// `tasks/cancel` — request cancellation of an in-progress task.
+    ///
+    /// For the synchronous stdio transport, tasks run to completion on a
+    /// background thread before the next poll arrives, so cancellation is
+    /// a best-effort hint: if the task is still `"working"` when this method
+    /// runs, its status is set to `"cancelled"` and any eventual result is
+    /// discarded by the background thread. If the task has already reached a
+    /// terminal state, the cancel is a no-op and returns success.
+    ///
+    /// Returns `INVALID_PARAMS` when the `taskId` is not found.
+    pub(super) fn handle_tasks_cancel(
+        &self,
+        id: RequestId,
+        params: Option<&Value>,
+    ) -> JsonRpcResponse {
+        let Some(params_val) = params else {
+            return JsonRpcResponse::err(
+                id,
+                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
+            );
+        };
+
+        let parsed = serde_json::from_value::<TaskCancelParams>(params_val.clone());
+        let task_id = match parsed {
+            Ok(p) => p.task_id,
+            Err(e) => {
+                return JsonRpcResponse::err(
+                    id,
+                    RpcError::new(
+                        RpcError::INVALID_PARAMS,
+                        format!("Invalid tasks/cancel params: {e}"),
+                    ),
+                )
+            }
+        };
+
+        let mut store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        match store.get_mut(&task_id) {
+            None => JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    format!("Unknown taskId: {task_id}"),
+                ),
+            ),
+            Some(entry) => {
+                if entry.info.status == task_status::WORKING {
+                    entry.info.status = task_status::CANCELLED;
+                    entry.info.status_message = Some("Cancelled by client".to_owned());
+                }
+                debug!(task_id, "task cancelled");
+                JsonRpcResponse::ok(id, serde_json::to_value(TaskCancelResult {}).unwrap())
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Tool dispatch helper
     // -----------------------------------------------------------------------
 
-    /// Dispatch a tool call, routing watch tools to the watch state first.
+    /// Dispatch a tool call with §13 security gates applied.
     ///
-    /// After any state-changing tool succeeds, the server checks its
+    /// Gate order:
+    /// 1. Rate limit — returns error code –32000 when exceeded.
+    /// 2. Security mode — blocks tools not permitted in the active mode.
+    /// 3. Execute the tool.
+    /// 4. Audit log — appends a record for every mutating tool call.
+    ///
+    /// After any state-changing tool succeeds, the server also checks its
     /// subscription set and emits `notifications/resources/updated` for every
     /// subscribed URI that the tool may have affected.
     fn dispatch_tool<W: Write>(
@@ -288,23 +512,72 @@ impl Server {
         args: &Value,
         out: &mut W,
     ) -> crate::mcp::protocol::ToolCallResult {
+        // Gate 1 — rate limit.
+        if let Err(msg) = self.security.check_rate_limit() {
+            return crate::mcp::protocol::ToolCallResult::error(msg);
+        }
+
+        // Gate 2 — security mode.
+        if let Err(msg) = self.security.check_tool_allowed(name) {
+            return crate::mcp::protocol::ToolCallResult::error(msg);
+        }
+
+        // Gate 3 — app policy (applies to ax_connect only; the app_id is
+        // checked before we even attempt the AX connection).
+        if name == "ax_connect" {
+            if let Some(app_id) = args.get("app").and_then(Value::as_str) {
+                if let Err(msg) = self.security.check_app_allowed(app_id) {
+                    return crate::mcp::protocol::ToolCallResult::error(msg);
+                }
+            }
+        }
+
+        // Execute.
         #[cfg(feature = "watch")]
         {
             let result = self.call_watch_tool(name, args);
             if let Some(r) = result {
+                let outcome = if r.is_error { "error" } else { "ok" };
+                self.security.audit_tool_call(name, args, outcome);
                 return r;
             }
         }
-        if let Some(result) =
-            crate::mcp::tools_innovation::call_workflow_tool(name, args, &self.workflows, out)
-        {
-            self.notify_subscribed(name, args, out);
+
+        // §14 Sampling — ax_find_visual gets a sampling context so it can
+        // include screenshot data and sampling availability in its response,
+        // enabling clients to perform VLM inference on the caller's behalf.
+        if name == "ax_find_visual" {
+            let sampling_ctx =
+                crate::mcp::sampling::SamplingContext::from(self.client_supports_sampling);
+            let result = crate::mcp::tools_handlers::handle_find_visual_with_sampling(
+                args,
+                &self.registry,
+                sampling_ctx,
+            );
+            let outcome = if result.is_error { "error" } else { "ok" };
+            self.security.audit_tool_call(name, args, outcome);
             return result;
         }
-        let result = call_tool(name, args, &self.registry, out);
-        if !result.is_error {
-            self.notify_subscribed(name, args, out);
-        }
+
+        let result = if let Some(r) =
+            crate::mcp::tools_innovation::call_workflow_tool(name, args, &self.workflows, out)
+        {
+            if !r.is_error {
+                self.notify_subscribed(name, args, out);
+            }
+            r
+        } else {
+            let r = call_tool(name, args, &self.registry, out);
+            if !r.is_error {
+                self.notify_subscribed(name, args, out);
+            }
+            r
+        };
+
+        // Gate 4 — audit log.
+        let outcome = if result.is_error { "error" } else { "ok" };
+        self.security.audit_tool_call(name, args, outcome);
+
         result
     }
 
@@ -371,6 +644,74 @@ fn affected_uris(tool_name: &str, _args: &Value) -> &'static [&'static str] {
     }
 }
 
+/// Return `true` when the `tools/call` params request asynchronous execution.
+///
+/// The client signals this by including `"_meta": {"task": true}` anywhere in
+/// the top-level params object, following the MCP Tasks §5 convention.
+fn is_task_request(params: &Value) -> bool {
+    params
+        .get("_meta")
+        .and_then(|m| m.get("task"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// Execute a tool without holding a reference to `Server`.
+///
+/// This is the function called from background threads spawned by
+/// [`Server::dispatch_as_task`]. It mirrors the logic in
+/// [`Server::dispatch_tool`] but accepts the individual shared state pieces
+/// rather than `&self`, avoiding a lifetime dependency on the server.
+///
+/// Watch tools are intentionally excluded: they manage `WatchState` which is
+/// not part of the task-dispatch path (they return immediately and are never
+/// long-running).
+fn execute_tool_background<W: Write>(
+    name: &str,
+    args: &Value,
+    registry: &std::sync::Arc<crate::mcp::tools::AppRegistry>,
+    workflows: &std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, super::server::WorkflowState>>,
+    >,
+    subscriptions: &std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    out: &mut W,
+) -> crate::mcp::protocol::ToolCallResult {
+    if let Some(result) =
+        crate::mcp::tools_innovation::call_workflow_tool(name, args, workflows, out)
+    {
+        notify_subscribed_bg(name, args, subscriptions, out);
+        return result;
+    }
+    let result = call_tool(name, args, registry, out);
+    if !result.is_error {
+        notify_subscribed_bg(name, args, subscriptions, out);
+    }
+    result
+}
+
+/// Background-thread variant of `Server::notify_subscribed`.
+///
+/// Identical logic but takes the subscription set directly rather than
+/// borrowing from `Server`, which is not `Send`.
+fn notify_subscribed_bg<W: Write>(
+    tool_name: &str,
+    args: &Value,
+    subscriptions: &std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    out: &mut W,
+) {
+    let Ok(subs) = subscriptions.lock() else {
+        return;
+    };
+    if subs.is_empty() {
+        return;
+    }
+    for uri in affected_uris(tool_name, args) {
+        if subs.contains(*uri) {
+            crate::mcp::server::notify_resource_changed(out, uri);
+        }
+    }
+}
+
 fn build_initialize_result() -> InitializeResult {
     #[cfg(feature = "watch")]
     let experimental = Some(serde_json::json!({ "claude/channel": {} }));
@@ -392,6 +733,8 @@ fn build_initialize_result() -> InitializeResult {
                 list_changed: false,
             },
             elicitation: ElicitationCapability {},
+            tasks: TasksCapability {},
+            sampling: SamplingCapability {},
             experimental,
         },
         server_info: ServerInfo {
