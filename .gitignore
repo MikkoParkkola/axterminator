@@ -1,19 +1,5 @@
 # Rust
 /target/
-Cargo.lock
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg-info/
-dist/
-build/
-.eggs/
-*.egg
-.venv/
-venv/
 
 # IDE
 .idea/
@@ -27,17 +13,6 @@ venv/
 .AppleDouble
 .LSOverride
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# Maturin
-*.pyd
-*.whl
-
 # Swift build artifacts
 EspressoMacSDK/.build/
 EspressoMacSDK/Package.resolved
@@ -46,11 +21,6 @@ EspressoMacSDK/Package.resolved
 *.tmp
 *.bak
 *.log
-
-# Build caches
-.mypy_cache/
-.ruff_cache/
-site/
 
 # Accidental home directory
 ~/
