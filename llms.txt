@@ -1,0 +1,232 @@
+# AXTerminator — AI Agent Installation Guide
+
+> This file is for AI agents installing AXTerminator as an MCP server.
+> Fetch this URL: https://raw.githubusercontent.com/MikkoParkkola/axterminator/main/llms.txt
+
+## What This Is
+
+AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. 19-30 tools depending on features.
+
+## Requirements
+
+- macOS 12+ (Apple Silicon or Intel)
+- Rust toolchain (for building from source — RECOMMENDED)
+- Accessibility permission granted to the host app
+
+## Installation (Preferred → Fallback)
+
+### Option A: Build from source (RECOMMENDED)
+
+```bash
+# 1. Clone
+git clone https://github.com/MikkoParkkola/axterminator /tmp/axterminator-src
+cd /tmp/axterminator-src
+
+# 2. Build
+cargo build --release --features cli
+
+# 3. Install binary
+cp target/release/axterminator ~/.local/bin/axterminator
+chmod +x ~/.local/bin/axterminator
+
+# 4. Verify
+~/.local/bin/axterminator check
+# Expected output: "Accessibility: OK" and a version string
+# If output says "Accessibility: DISABLED", the host app needs permission — see PERMISSIONS below
+
+# 5. Verify MCP handshake
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | ~/.local/bin/axterminator mcp serve 2>/dev/null | head -1
+# Expected: JSON response containing "serverInfo" and "capabilities"
+```
+
+### Option B: Homebrew
+
+```bash
+brew tap MikkoParkkola/tap
+brew install axterminator
+
+# Verify
+axterminator check
+```
+
+### Option C: Download prebuilt binary
+
+```bash
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+  arm64) TARGET="aarch64-apple-darwin" ;;
+  x86_64) TARGET="x86_64-apple-darwin" ;;
+  *) echo "Unsupported: $ARCH"; exit 1 ;;
+esac
+
+# Download latest release
+curl -L --fail -o ~/.local/bin/axterminator \
+  "https://github.com/MikkoParkkola/axterminator/releases/latest/download/axterminator-${TARGET}"
+chmod +x ~/.local/bin/axterminator
+
+# Verify
+~/.local/bin/axterminator check
+```
+
+**NOTE**: The prebuilt binary requires Python 3.9+ installed on the system. If you see a `dyld: Library not loaded` error mentioning `Python.framework`, fall back to Option A (build from source).
+
+### Option D: PyPI (Python library only, NOT the MCP server)
+
+```bash
+pip install axterminator
+```
+
+**WARNING**: The PyPI package provides the Python library (`import axterminator`) but does NOT provide the `mcp serve` CLI subcommand. Do NOT use this option for MCP server installation. Use Option A, B, or C instead.
+
+## PERMISSIONS
+
+The host application (Terminal, iTerm2, Ghostty, Claude Desktop, etc.) must have Accessibility permission:
+
+1. Open: System Settings → Privacy & Security → Accessibility
+2. Click the + button
+3. Add the terminal application or AI host app
+4. Ensure the toggle is ON
+5. Restart the terminal / host app
+
+Verification:
+```bash
+axterminator check
+# Must print: "Accessibility: OK"
+```
+
+## MCP Configuration
+
+### Claude Code / Claude Desktop
+
+File: `~/.claude/settings.json` (or project `.mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "BINARY_PATH",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Replace `BINARY_PATH` with the actual path (e.g., `~/.local/bin/axterminator` or the full path from `which axterminator`).
+
+### Codex
+
+File: `~/.codex/config.toml`
+
+```toml
+[mcp_servers.axterminator]
+command = "BINARY_PATH"
+args = ["mcp", "serve"]
+```
+
+### Cursor / Windsurf / Continue.dev
+
+File: `.cursor/mcp.json` (or equivalent)
+
+```json
+{
+  "mcpServers": {
+    "axterminator": {
+      "command": "BINARY_PATH",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### Generic MCP client (stdio transport)
+
+```bash
+BINARY_PATH mcp serve
+# Reads JSON-RPC from stdin, writes to stdout, logs to stderr
+```
+
+### HTTP transport (optional)
+
+```bash
+BINARY_PATH mcp serve --http 8741 --localhost-only
+# Or with auth:
+BINARY_PATH mcp serve --http 8741 --token YOUR_SECRET_TOKEN
+```
+
+## Available Tools (19 core)
+
+After connecting, call `tools/list` to get the full schema. Core tools:
+
+- `ax_is_accessible` — check permissions
+- `ax_connect` — connect to an app by name, bundle ID, or PID
+- `ax_find` — find UI element by text, role, or XPath query
+- `ax_click` — click an element (background or focus mode)
+- `ax_click_at` — click at screen coordinates
+- `ax_type` — type text into an element
+- `ax_set_value` / `ax_get_value` — get/set element values
+- `ax_screenshot` — capture app or element screenshot (base64 PNG)
+- `ax_get_tree` — dump accessibility tree
+- `ax_get_attributes` — get all attributes of an element
+- `ax_list_windows` — list app windows with bounds
+- `ax_list_apps` — list running applications
+- `ax_wait_idle` — wait for app to become idle
+- `ax_scroll` — scroll an element
+- `ax_drag` — drag between coordinates
+- `ax_key_press` — send keyboard shortcuts
+- `ax_assert` — assert element state
+- `ax_find_visual` — visual element detection (requires VLM)
+
+Optional feature tools: `ax_listen`, `ax_speak`, `ax_audio_devices` (audio), `ax_camera_capture`, `ax_gesture_detect` (camera), `ax_list_spaces`, `ax_create_space` (spaces).
+
+## Query Syntax
+
+```
+# Simple text — matches ANY of: title, description, value, label, identifier
+ax_find query="Save"
+
+# Role filter
+ax_find query="role:AXButton"
+
+# Combined (AND)
+ax_find query="role:AXButton title:Save"
+
+# XPath-like
+ax_find query="//AXButton[@AXTitle='Save']"
+
+# By description (useful for Calculator-style apps)
+ax_find query="description:equals"
+```
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `dyld: Library not loaded: .../Python.framework/...` | Prebuilt binary needs Python | Build from source (Option A) |
+| `Accessibility: DISABLED` | No permission | See PERMISSIONS section |
+| `Element not found` for short labels like "1" | App uses AXDescription not AXTitle | Use `description:1` or check tree with `ax_get_tree` |
+| `Application not found` | App not running or wrong name | Use bundle ID: `ax_connect app="com.apple.calculator"` |
+| Binary works in source tree but not when copied | macOS library path issue | Use full path to source build, or build with `cargo install` |
+
+## Feature Flags (build-time)
+
+```bash
+# Core only (default — 19 tools)
+cargo build --release --features cli
+
+# With audio capture + TTS (22 tools)
+cargo build --release --features cli,audio
+
+# With camera + gesture detection (22 tools)
+cargo build --release --features cli,camera
+
+# With virtual desktop isolation (24 tools)
+cargo build --release --features cli,spaces
+
+# Everything (30 tools)
+cargo build --release --features cli,audio,camera,watch,spaces,http-transport
+```
+
+## Version
+
+0.6.1
