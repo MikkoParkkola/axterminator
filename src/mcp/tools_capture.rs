@@ -262,46 +262,81 @@ fn tool_ax_capture_status() -> Tool {
 // ---------------------------------------------------------------------------
 
 /// Handle `ax_start_capture` — start (or restart) the background capture session.
+///
+/// The previous session (if any) is extracted from the mutex and the lock is
+/// released *before* dropping it.  `CaptureSession::drop` joins the background
+/// capture thread, which may block for up to one audio-window period (~5 s).
+/// Holding the global mutex during that join would deadlock any concurrent MCP
+/// call that tries to read session state.
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_start_capture(args: &Value) -> ToolCallResult {
     let cfg = parse_capture_config(args);
     let session = CaptureSession::start(cfg);
     let session_id = session.session_id.clone();
 
-    match global_session().lock() {
+    // Extract the previous session while holding the lock, then immediately
+    // release the lock before the potentially-blocking drop/join.
+    let prev_session = match global_session().lock() {
         Ok(mut guard) => {
-            // Stop previous session if any.
-            if let Some(prev) = guard.take() {
-                drop(prev); // triggers CaptureSession::drop → stop()
-            }
+            let prev = guard.take();
             *guard = Some(session);
+            prev
         }
         Err(e) => {
             return ToolCallResult::error(format!("session store lock poisoned: {e}"));
         }
-    }
+    };
+
+    // Drop (and join) the old session AFTER releasing the mutex.
+    drop(prev_session);
 
     ToolCallResult::ok(json!({ "started": true, "session_id": session_id }).to_string())
 }
 
 /// Handle `ax_stop_capture` — stop the active capture session.
+///
+/// When `session_id` is provided it must match the active session's ID.
+/// A mismatch returns an error rather than silently stopping an unrelated
+/// session — this is the honest API contract the schema advertises.
+///
+/// As with [`handle_ax_start_capture`], the session is extracted from the
+/// mutex and the lock is released *before* the blocking drop/join.
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_stop_capture(args: &Value) -> ToolCallResult {
-    let _requested_id = args["session_id"].as_str();
+    let requested_id = args["session_id"].as_str();
 
-    match global_session().lock() {
-        Ok(mut guard) => match guard.take() {
-            Some(session) => {
-                let duration_ms = session.duration_ms();
-                drop(session);
-                ToolCallResult::ok(
-                    json!({ "stopped": true, "duration_ms": duration_ms }).to_string(),
-                )
+    // Extract (and optionally validate) the session while holding the lock,
+    // then release before the potentially-blocking drop/join.
+    let session_to_drop = match global_session().lock() {
+        Ok(mut guard) => {
+            match guard.as_ref() {
+                None => return ToolCallResult::ok(json!({ "stopped": false }).to_string()),
+                Some(active) => {
+                    if let Some(rid) = requested_id {
+                        if rid != active.session_id {
+                            return ToolCallResult::error(format!(
+                                "session_id mismatch: requested \"{rid}\" but active session \
+                                 is \"{}\". Pass the correct session_id or omit it to stop \
+                                 whatever is running.",
+                                active.session_id
+                            ));
+                        }
+                    }
+                }
             }
-            None => ToolCallResult::ok(json!({ "stopped": false }).to_string()),
-        },
-        Err(e) => ToolCallResult::error(format!("session store lock poisoned: {e}")),
-    }
+            guard.take()
+        }
+        Err(e) => return ToolCallResult::error(format!("session store lock poisoned: {e}")),
+    };
+
+    // Drop (and join) the session AFTER releasing the mutex.
+    let duration_ms = session_to_drop
+        .as_ref()
+        .map(|s| s.duration_ms())
+        .unwrap_or(0);
+    drop(session_to_drop);
+
+    ToolCallResult::ok(json!({ "stopped": true, "duration_ms": duration_ms }).to_string())
 }
 
 /// Handle `ax_get_transcription` — snapshot transcript segments from the buffer.
@@ -639,6 +674,52 @@ mod tests {
         assert!(!result.is_error);
         let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["stopped"], false);
+    }
+
+    #[test]
+    fn handle_ax_stop_capture_wrong_session_id_returns_error() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        // GIVEN: an active session
+        let _ = handle_ax_stop_capture(&json!({}));
+        let start = handle_ax_start_capture(&json!({
+            "audio": false, "transcribe": false, "screen": false
+        }));
+        assert!(!start.is_error);
+
+        // WHEN: stop is called with a wrong session_id
+        let result = handle_ax_stop_capture(&json!({ "session_id": "deadbeef00000000" }));
+
+        // THEN: error returned, session still running
+        assert!(result.is_error, "expected error for mismatched session_id");
+        assert!(
+            result.content[0].text.contains("session_id mismatch"),
+            "unexpected error text: {}",
+            result.content[0].text
+        );
+
+        // Cleanup
+        let _ = handle_ax_stop_capture(&json!({}));
+    }
+
+    #[test]
+    fn handle_ax_stop_capture_correct_session_id_stops_session() {
+        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        // GIVEN: an active session
+        let _ = handle_ax_stop_capture(&json!({}));
+        let start = handle_ax_start_capture(&json!({
+            "audio": false, "transcribe": false, "screen": false
+        }));
+        assert!(!start.is_error);
+        let sv: Value = serde_json::from_str(&start.content[0].text).unwrap();
+        let sid = sv["session_id"].as_str().unwrap().to_string();
+
+        // WHEN: stop is called with the correct session_id
+        let result = handle_ax_stop_capture(&json!({ "session_id": sid }));
+
+        // THEN: success
+        assert!(!result.is_error, "unexpected error: {}", result.content[0].text);
+        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["stopped"], true);
     }
 
     // -----------------------------------------------------------------------

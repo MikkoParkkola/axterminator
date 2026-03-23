@@ -111,7 +111,10 @@ impl AudioEngine {
 /// Transcribe audio on-device using `SFSpeechRecognizer`.
 ///
 /// All recognition runs locally (`requiresOnDeviceRecognition = true`).
-/// No audio data is sent over the network.
+/// No audio data is sent over the network.  If the on-device model is not
+/// yet downloaded, this returns [`AudioError::Transcription`] with a message
+/// directing the user to enable Dictation in System Settings rather than
+/// silently falling back to Apple cloud servers.
 ///
 /// `language` selects the `SFSpeechRecognizer` locale (BCP-47 tag, e.g.
 /// `"en-US"`, `"fi-FI"`, `"ja-JP"`).  Pass `None` for the default `"en-US"`.
@@ -394,10 +397,16 @@ fn run_sf_speech_recognizer(wav_path: &str, locale: &str) -> Result<String, Audi
         AudioError::Transcription("Failed to create recognition request".to_string())
     })?;
 
-    // Prefer on-device but fall back to server-based if on-device model
-    // is not downloaded. requiresOnDeviceRecognition=true causes silent
-    // timeout when the model isn't available.
-    set_requires_on_device_recognition(request, false);
+    // Enforce on-device recognition.  The tool descriptions for ax_listen
+    // and ax_start_capture promise "on-device only — no cloud, no network".
+    // Setting this to false would silently forward audio to Apple servers
+    // when the local model is unavailable, violating that contract.
+    //
+    // If the on-device model is not yet downloaded, isAvailable returns NO
+    // above and we return an explicit error before reaching this point.
+    // The caller must ensure the dictation model is present in
+    // System Settings > Keyboard > Dictation before invoking transcription.
+    set_requires_on_device_recognition(request, true);
 
     let result_holder: Arc<Mutex<Option<Result<String, AudioError>>>> = Arc::new(Mutex::new(None));
     let cvar = Arc::new(Condvar::new());
