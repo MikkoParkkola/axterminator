@@ -209,7 +209,12 @@ fn find_chunk(buf: &[u8], target: [u8; 4]) -> Option<PngChunk<'_>> {
 /// * `height` — image height in pixels
 /// * `channels` — bytes per pixel (3 = RGB, 4 = RGBA)
 #[must_use]
-pub fn pixels_to_grid(pixels: &[u8], width: usize, height: usize, channels: usize) -> [f32; GRID_CELLS] {
+pub fn pixels_to_grid(
+    pixels: &[u8],
+    width: usize,
+    height: usize,
+    channels: usize,
+) -> [f32; GRID_CELLS] {
     let mut grid = [0.0_f32; GRID_CELLS];
     let mut counts = [0_u32; GRID_CELLS];
 
@@ -246,7 +251,8 @@ pub fn pixels_to_grid(pixels: &[u8], width: usize, height: usize, channels: usiz
     }
 
     // Normalise to [0, 1].
-    #[allow(clippy::cast_precision_loss)] // counts[i] ≤ (width/16)*(height/16) ≤ ~4M, well within f32 exact range
+    #[allow(clippy::cast_precision_loss)]
+    // counts[i] ≤ (width/16)*(height/16) ≤ ~4M, well within f32 exact range
     for i in 0..GRID_CELLS {
         if counts[i] > 0 {
             grid[i] /= (counts[i] as f32) * 255.0;
@@ -620,11 +626,7 @@ mod tests {
         let grid = pixels_to_grid(&pixels, 16, 16, 3);
         // THEN: all cells should be ~1.0 (max luminance)
         for cell in &grid {
-            assert!(
-                (*cell - 1.0).abs() < 0.01,
-                "expected ~1.0, got {}",
-                cell
-            );
+            assert!((*cell - 1.0).abs() < 0.01, "expected ~1.0, got {}", cell);
         }
     }
 
@@ -652,11 +654,7 @@ mod tests {
         let pixels: Vec<u8> = (0..=255u8).cycle().take(32 * 32 * 3).collect();
         let grid = pixels_to_grid(&pixels, 32, 32, 3);
         for cell in &grid {
-            assert!(
-                (0.0..=1.0).contains(cell),
-                "cell out of range: {}",
-                cell
-            );
+            assert!((0.0..=1.0).contains(cell), "cell out of range: {}", cell);
         }
     }
 

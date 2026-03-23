@@ -635,12 +635,7 @@ fn capture_screen_snapshot(
         Some(prev) => {
             let diff = screen_diff::ScreenDiff::compare(prev, &fingerprint);
             let significant = diff.is_significant(threshold);
-            debug!(
-                score = diff.score,
-                threshold,
-                significant,
-                "screen diff"
-            );
+            debug!(score = diff.score, threshold, significant, "screen diff");
             significant
         }
     };

@@ -593,7 +593,9 @@ mod tests {
 
     #[test]
     fn test_create_system_wide_element_requires_permissions() {
-        let _guard = ax_element_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ax_element_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: System may or may not have accessibility enabled
         // WHEN: Creating system-wide element
         let result = create_system_wide_element();
@@ -613,7 +615,9 @@ mod tests {
 
     #[test]
     fn test_create_application_element_requires_valid_pid() {
-        let _guard = ax_element_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ax_element_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility permissions (or test will skip)
         if !check_accessibility_enabled() {
             return;
@@ -874,7 +878,9 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_system_wide_element_integration() {
-        let _guard = ax_element_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ax_element_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility enabled (skip if not)
         if !check_accessibility_enabled() {
             eprintln!("Skipping integration test: accessibility not enabled");
@@ -902,7 +908,9 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_get_children_integration() {
-        let _guard = ax_element_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ax_element_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility enabled (skip if not)
         if !check_accessibility_enabled() {
             eprintln!("Skipping integration test: accessibility not enabled");
@@ -942,7 +950,9 @@ mod tests {
 
     #[test]
     fn test_memory_safety_double_release() {
-        let _guard = ax_element_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ax_element_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility enabled (skip if not)
         if !check_accessibility_enabled() {
             return;

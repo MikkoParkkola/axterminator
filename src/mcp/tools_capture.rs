@@ -611,7 +611,9 @@ mod tests {
 
     #[test]
     fn handle_ax_capture_status_returns_diff_counters_when_session_active() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: active session (no audio, no screen — counters start at 0)
         let _ = handle_ax_stop_capture(&json!({}));
         let start = handle_ax_start_capture(&json!({
@@ -639,7 +641,9 @@ mod tests {
 
     #[test]
     fn handle_ax_capture_status_no_session_returns_running_false() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running (stop any lingering global state).
         let _ = handle_ax_stop_capture(&json!({}));
 
@@ -655,7 +659,9 @@ mod tests {
 
     #[test]
     fn handle_ax_get_transcription_no_session_returns_error() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running.
         let _ = handle_ax_stop_capture(&json!({}));
 
@@ -666,7 +672,9 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_no_session_returns_stopped_false() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running.
         let _ = handle_ax_stop_capture(&json!({}));
 
@@ -678,7 +686,9 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_wrong_session_id_returns_error() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: an active session
         let _ = handle_ax_stop_capture(&json!({}));
         let start = handle_ax_start_capture(&json!({
@@ -703,7 +713,9 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_correct_session_id_stops_session() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: an active session
         let _ = handle_ax_stop_capture(&json!({}));
         let start = handle_ax_start_capture(&json!({
@@ -717,7 +729,11 @@ mod tests {
         let result = handle_ax_stop_capture(&json!({ "session_id": sid }));
 
         // THEN: success
-        assert!(!result.is_error, "unexpected error: {}", result.content[0].text);
+        assert!(
+            !result.is_error,
+            "unexpected error: {}",
+            result.content[0].text
+        );
         let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["stopped"], true);
     }
@@ -728,7 +744,9 @@ mod tests {
 
     #[test]
     fn start_stop_lifecycle_produces_valid_json() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: start a session with no audio (avoids hardware dependency)
         let start_result = handle_ax_start_capture(&json!({
             "audio": false,
@@ -765,7 +783,9 @@ mod tests {
 
     #[test]
     fn start_capture_twice_replaces_old_session() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: start first session
         let r1 = handle_ax_start_capture(&json!({
             "audio": false, "transcribe": false, "screen": false
@@ -815,7 +835,9 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_capture_status_dispatches() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         use crate::mcp::tools::AppRegistry;
         use std::sync::Arc;
 
@@ -836,7 +858,9 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_get_transcription_no_session_returns_error() {
-        let _guard = super::session_test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::session_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         use crate::mcp::tools::AppRegistry;
         use std::sync::Arc;
 

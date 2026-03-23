@@ -132,13 +132,9 @@ pub(crate) fn vocab_path() -> Result<PathBuf, AudioError> {
 /// ```
 #[must_use]
 pub fn model_files_present() -> bool {
-    preprocessor_path()
-        .map(|p| p.exists())
-        .unwrap_or(false)
+    preprocessor_path().map(|p| p.exists()).unwrap_or(false)
         && encoder_path().map(|p| p.exists()).unwrap_or(false)
-        && decoder_joint_path()
-            .map(|p| p.exists())
-            .unwrap_or(false)
+        && decoder_joint_path().map(|p| p.exists()).unwrap_or(false)
         && vocab_path().map(|p| p.exists()).unwrap_or(false)
 }
 
@@ -265,15 +261,14 @@ fn validate_model_files(
 ///
 /// Takes f32 samples at 16 kHz and returns 128-dim features with shape
 /// `[1, 128, T]` as a flat `Vec<f32>` plus the number of time frames `T`.
-fn run_preprocessor(
-    samples: &[f32],
-    onnx_path: &Path,
-) -> Result<(Vec<f32>, usize), AudioError> {
+fn run_preprocessor(samples: &[f32], onnx_path: &Path) -> Result<(Vec<f32>, usize), AudioError> {
     use ort::session::Session;
     use ort::value::Tensor;
 
     let mut session = Session::builder()
-        .map_err(|e| AudioError::Transcription(format!("Preprocessor session builder failed: {e}")))?
+        .map_err(|e| {
+            AudioError::Transcription(format!("Preprocessor session builder failed: {e}"))
+        })?
         .commit_from_file(onnx_path)
         .map_err(|e| {
             AudioError::Transcription(format!(
@@ -296,14 +291,24 @@ fn run_preprocessor(
     // Output 0: features [1, 128, T], Output 1: feature_lengths [1]
     let features_val = outputs
         .get("features")
-        .or_else(|| if outputs.len() > 0 { Some(&outputs[0]) } else { None })
+        .or_else(|| {
+            if outputs.len() > 0 {
+                Some(&outputs[0])
+            } else {
+                None
+            }
+        })
         .ok_or_else(|| AudioError::Transcription("Preprocessor produced no outputs".to_string()))?;
 
     let (shape, data) = features_val
         .try_extract_tensor::<f32>()
         .map_err(|e| AudioError::Transcription(format!("Failed to extract features: {e}")))?;
 
-    let feature_len = if shape.len() >= 3 { shape[2] as usize } else { data.len() / 128 };
+    let feature_len = if shape.len() >= 3 {
+        shape[2] as usize
+    } else {
+        data.len() / 128
+    };
 
     Ok((data.to_vec(), feature_len))
 }
@@ -349,14 +354,18 @@ fn run_encoder(
     // Output 0: encoded [1, 1024, T_enc], Output 1: encoded_lengths [1]
     let enc_val = outputs
         .get("outputs")
-        .or_else(|| if outputs.len() > 0 { Some(&outputs[0]) } else { None })
+        .or_else(|| {
+            if outputs.len() > 0 {
+                Some(&outputs[0])
+            } else {
+                None
+            }
+        })
         .ok_or_else(|| AudioError::Transcription("Encoder produced no outputs".to_string()))?;
 
-    let (shape, data) = enc_val
-        .try_extract_tensor::<f32>()
-        .map_err(|e| {
-            AudioError::Transcription(format!("Failed to extract encoder outputs: {e}"))
-        })?;
+    let (shape, data) = enc_val.try_extract_tensor::<f32>().map_err(|e| {
+        AudioError::Transcription(format!("Failed to extract encoder outputs: {e}"))
+    })?;
 
     // Extract encoded_lengths from second output
     let enc_len = if let Some(len_val) = outputs.get("encoded_lengths").or_else(|| {
@@ -366,15 +375,17 @@ fn run_encoder(
             None
         }
     }) {
-        let (_, len_data) = len_val
-            .try_extract_tensor::<i64>()
-            .map_err(|e| {
-                AudioError::Transcription(format!("Failed to extract encoded_lengths: {e}"))
-            })?;
+        let (_, len_data) = len_val.try_extract_tensor::<i64>().map_err(|e| {
+            AudioError::Transcription(format!("Failed to extract encoded_lengths: {e}"))
+        })?;
         len_data[0] as usize
     } else {
         // Fall back to shape-based calculation
-        if shape.len() >= 3 { shape[2] as usize } else { data.len() / ENCODER_DIM }
+        if shape.len() >= 3 {
+            shape[2] as usize
+        } else {
+            data.len() / ENCODER_DIM
+        }
     };
 
     Ok((data.to_vec(), enc_len))
@@ -436,11 +447,13 @@ fn run_tdt_greedy_decode(
             }
             let frame_data: Vec<f32> = enc_out[frame_start..frame_end].to_vec();
 
-            let enc_frame =
-                Tensor::<f32>::from_array(([1usize, ENCODER_DIM, 1], frame_data.into_boxed_slice()))
-                    .map_err(|e| {
-                        AudioError::Transcription(format!("Failed to create encoder frame: {e}"))
-                    })?;
+            let enc_frame = Tensor::<f32>::from_array((
+                [1usize, ENCODER_DIM, 1],
+                frame_data.into_boxed_slice(),
+            ))
+            .map_err(|e| {
+                AudioError::Transcription(format!("Failed to create encoder frame: {e}"))
+            })?;
 
             let targets =
                 Tensor::<i32>::from_array(([1usize, 1], vec![last_token].into_boxed_slice()))
@@ -448,26 +461,29 @@ fn run_tdt_greedy_decode(
                         AudioError::Transcription(format!("Failed to create targets tensor: {e}"))
                     })?;
 
-            let target_length =
-                Tensor::<i32>::from_array(([1usize], vec![1i32].into_boxed_slice())).map_err(
-                    |e| {
-                        AudioError::Transcription(format!(
-                            "Failed to create target_length tensor: {e}"
-                        ))
-                    },
-                )?;
+            let target_length = Tensor::<i32>::from_array((
+                [1usize],
+                vec![1i32].into_boxed_slice(),
+            ))
+            .map_err(|e| {
+                AudioError::Transcription(format!("Failed to create target_length tensor: {e}"))
+            })?;
 
-            let state1_tensor =
-                Tensor::<f32>::from_array(([2usize, 1, PRED_HIDDEN_DIM], state1.clone().into_boxed_slice()))
-                    .map_err(|e| {
-                        AudioError::Transcription(format!("Failed to create state1 tensor: {e}"))
-                    })?;
+            let state1_tensor = Tensor::<f32>::from_array((
+                [2usize, 1, PRED_HIDDEN_DIM],
+                state1.clone().into_boxed_slice(),
+            ))
+            .map_err(|e| {
+                AudioError::Transcription(format!("Failed to create state1 tensor: {e}"))
+            })?;
 
-            let state2_tensor =
-                Tensor::<f32>::from_array(([2usize, 1, PRED_HIDDEN_DIM], state2.clone().into_boxed_slice()))
-                    .map_err(|e| {
-                        AudioError::Transcription(format!("Failed to create state2 tensor: {e}"))
-                    })?;
+            let state2_tensor = Tensor::<f32>::from_array((
+                [2usize, 1, PRED_HIDDEN_DIM],
+                state2.clone().into_boxed_slice(),
+            ))
+            .map_err(|e| {
+                AudioError::Transcription(format!("Failed to create state2 tensor: {e}"))
+            })?;
 
             let outputs = session
                 .run(ort::inputs![
@@ -477,9 +493,7 @@ fn run_tdt_greedy_decode(
                     state1_tensor,
                     state2_tensor
                 ])
-                .map_err(|e| {
-                    AudioError::Transcription(format!("Decoder inference failed: {e}"))
-                })?;
+                .map_err(|e| AudioError::Transcription(format!("Decoder inference failed: {e}")))?;
 
             // Output 0: logits [1, 1, 1, 8198]
             let logits_val = &outputs[0];
@@ -605,7 +619,7 @@ fn load_vocab(vocab_path: &Path) -> Result<Vec<String>, AudioError> {
         .map_err(|e| AudioError::Transcription(format!("Cannot read vocab file: {e}")))?;
 
     // NeMo vocab.txt format: "<token> <index>" per line
-    if vocab_path.extension().map_or(false, |ext| ext == "txt") {
+    if vocab_path.extension().is_some_and(|ext| ext == "txt") {
         return load_vocab_nemo_txt(&content);
     }
 
@@ -1106,7 +1120,12 @@ mod tests {
     fn log_mel_spectrogram_silence_has_expected_frame_count() {
         let silence = vec![0.0f32; 16_000];
         let mel = compute_log_mel_spectrogram(&silence);
-        assert_eq!(mel.len() % 80, 0, "mel length {} is not a multiple of 80", mel.len());
+        assert_eq!(
+            mel.len() % 80,
+            0,
+            "mel length {} is not a multiple of 80",
+            mel.len()
+        );
     }
 
     #[test]

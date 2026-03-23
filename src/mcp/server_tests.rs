@@ -1554,7 +1554,11 @@ fn resources_subscribe_returns_empty_object() {
     );
     // THEN: success with empty result {}
     assert!(v.get("error").is_none(), "subscribe must not error");
-    assert_eq!(v["result"], json!({}), "subscribe result must be empty object");
+    assert_eq!(
+        v["result"],
+        json!({}),
+        "subscribe result must be empty object"
+    );
 }
 
 #[test]
@@ -1589,7 +1593,11 @@ fn resources_unsubscribe_removes_uri_from_subscriptions_set() {
         "resources/subscribe",
         Some(json!({ "uri": "axterminator://apps" })),
     );
-    assert!(s.subscriptions.lock().unwrap().contains("axterminator://apps"));
+    assert!(s
+        .subscriptions
+        .lock()
+        .unwrap()
+        .contains("axterminator://apps"));
     // WHEN: unsubscribe
     let v = send(
         &mut s,
@@ -1601,7 +1609,10 @@ fn resources_unsubscribe_removes_uri_from_subscriptions_set() {
     assert!(v.get("error").is_none(), "unsubscribe must not error");
     assert_eq!(v["result"], json!({}));
     assert!(
-        !s.subscriptions.lock().unwrap().contains("axterminator://apps"),
+        !s.subscriptions
+            .lock()
+            .unwrap()
+            .contains("axterminator://apps"),
         "URI must be removed after unsubscribe"
     );
 }
@@ -1649,8 +1660,16 @@ fn resources_subscribe_multiple_uris_all_tracked() {
         (211, "axterminator://apps"),
         (212, "axterminator://clipboard"),
     ] {
-        let v = send(&mut s, id, "resources/subscribe", Some(json!({ "uri": uri })));
-        assert!(v.get("error").is_none(), "subscribe to {uri} must not error");
+        let v = send(
+            &mut s,
+            id,
+            "resources/subscribe",
+            Some(json!({ "uri": uri })),
+        );
+        assert!(
+            v.get("error").is_none(),
+            "subscribe to {uri} must not error"
+        );
     }
     // THEN: all three are tracked
     let subs = s.subscriptions.lock().unwrap();
@@ -1680,7 +1699,11 @@ fn resources_subscribe_same_uri_twice_is_idempotent() {
     );
     // THEN: only one entry (HashSet semantics)
     let subs = s.subscriptions.lock().unwrap();
-    assert_eq!(subs.len(), 1, "duplicate subscribe must not create duplicate entries");
+    assert_eq!(
+        subs.len(),
+        1,
+        "duplicate subscribe must not create duplicate entries"
+    );
 }
 
 #[test]
@@ -1706,7 +1729,11 @@ fn ax_connect_tool_emits_notification_for_subscribed_apps_uri() {
     );
     s.handle(&req, &mut out);
     // THEN: subscriptions set is unchanged (non-connected tool, no notification)
-    assert!(s.subscriptions.lock().unwrap().contains("axterminator://apps"));
+    assert!(s
+        .subscriptions
+        .lock()
+        .unwrap()
+        .contains("axterminator://apps"));
 }
 
 #[test]
@@ -1809,7 +1836,12 @@ fn ax_start_capture_subscribed_emits_capture_status_notification() {
         (234, "axterminator://capture/transcription"),
         (235, "axterminator://capture/screen"),
     ] {
-        let _ = send(&mut s, id, "resources/subscribe", Some(json!({ "uri": uri })));
+        let _ = send(
+            &mut s,
+            id,
+            "resources/subscribe",
+            Some(json!({ "uri": uri })),
+        );
     }
     // WHEN: ax_start_capture (no audio/screen to avoid hardware)
     let mut out = Vec::<u8>::new();

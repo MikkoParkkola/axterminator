@@ -744,7 +744,10 @@ mod tests {
         match result {
             Ok(text) => {
                 // Model files present — transcription succeeded (silence → empty or short text)
-                assert!(text.len() < 200, "unexpected long transcription for silence");
+                assert!(
+                    text.len() < 200,
+                    "unexpected long transcription for silence"
+                );
             }
             Err(e) => {
                 // Model files absent or feature not compiled — transcription_error
