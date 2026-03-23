@@ -134,7 +134,7 @@ fn capture_and_analyse(window_secs: f32, vad_threshold_db: f32) -> Option<WatchE
 
         let timestamp = current_timestamp();
 
-        let text = match transcribe(&audio) {
+        let text = match transcribe(&audio, None) {
             Ok(t) => t,
             Err(e) => {
                 warn!(error = %e, "transcription failed");
