@@ -283,6 +283,141 @@ pub(super) fn read_camera_devices(uri: &str) -> Result<ResourceReadResult, Resou
 }
 
 // ---------------------------------------------------------------------------
+// Capture resources (feature = "audio")
+// ---------------------------------------------------------------------------
+
+/// Read `axterminator://capture/transcription`.
+///
+/// Returns all transcription segments accumulated by the active capture session
+/// together with a joined `text` field.  When no session is running the resource
+/// returns an empty payload (no error) so subscribers can distinguish "session not
+/// started" from a true failure.
+#[cfg(feature = "audio")]
+pub(super) fn read_capture_transcription(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    use crate::mcp::tools_capture::global_session;
+
+    let guard = global_session()
+        .lock()
+        .map_err(|e| ResourceError::operation_failed(format!("session lock poisoned: {e}")))?;
+
+    let payload = match guard.as_ref() {
+        None => json!({ "running": false, "segments": [], "text": "" }),
+        Some(session) => build_transcription_payload(session),
+    };
+
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
+}
+
+/// Build the transcription payload JSON from a live session.
+#[cfg(feature = "audio")]
+fn build_transcription_payload(session: &crate::capture::CaptureSession) -> Value {
+    // u64::MAX / 1000 is effectively "all segments" — larger than any realistic
+    // session duration in seconds.
+    let segments = session.read_transcription(u64::MAX / 1_000);
+    let text: String = segments
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let segments_json: Vec<Value> = segments
+        .iter()
+        .map(|s| {
+            json!({
+                "text":     s.text,
+                "start_ms": s.start_ms,
+                "end_ms":   s.end_ms,
+                "speaker":  s.speaker,
+            })
+        })
+        .collect();
+    json!({
+        "running":     true,
+        "session_id":  session.session_id,
+        "duration_ms": session.duration_ms(),
+        "segments":    segments_json,
+        "text":        text,
+    })
+}
+
+/// Read `axterminator://capture/screen`.
+///
+/// Returns the most recently captured screen frame as a base64-encoded PNG blob.
+/// When no frame is available (no session, screen capture disabled, or first frame
+/// not yet taken), returns a text/JSON payload describing the current status
+/// so the client is not left with an opaque error.
+#[cfg(feature = "audio")]
+pub(super) fn read_capture_screen(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    use crate::mcp::tools_capture::global_session;
+
+    let guard = global_session()
+        .lock()
+        .map_err(|e| ResourceError::operation_failed(format!("session lock poisoned: {e}")))?;
+
+    // Cloning the Option<ScreenFrame> lets us release the guard before building
+    // the response, keeping lock hold time minimal.
+    let (frame, is_running) = match guard.as_ref() {
+        Some(session) => (session.latest_frame(), session.is_running()),
+        None => (None, false),
+    };
+
+    if let Some(f) = frame {
+        return Ok(ResourceReadResult {
+            contents: vec![ResourceContents::blob(uri, "image/png", f.png_base64)],
+        });
+    }
+    // No frame yet — describe why in JSON so the agent can react.
+    let payload = json!({
+        "running":         is_running,
+        "frame_available": false,
+    });
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
+}
+
+/// Read `axterminator://capture/status`.
+///
+/// Returns health and fill-level information for the active capture session.
+/// When no session is running, returns `{"running": false}`.
+#[cfg(feature = "audio")]
+pub(super) fn read_capture_status(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    use crate::mcp::tools_capture::global_session;
+
+    let guard = global_session()
+        .lock()
+        .map_err(|e| ResourceError::operation_failed(format!("session lock poisoned: {e}")))?;
+
+    let payload = match guard.as_ref() {
+        None => json!({ "running": false }),
+        Some(session) => json!({
+            "running":              session.is_running(),
+            "session_id":           session.session_id,
+            "duration_ms":          session.duration_ms(),
+            "audio_buffer_seconds": session.audio_buffer_seconds(),
+            "transcript_segments":  session.transcript_segment_count(),
+        }),
+    };
+
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(
+            uri,
+            "application/json",
+            payload.to_string(),
+        )],
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Dynamic resource handlers
 // ---------------------------------------------------------------------------
 

@@ -82,9 +82,12 @@ pub fn capture_microphone(duration_secs: f32) -> Result<AudioData, AudioError> {
 
 /// Capture system audio output for up to `duration_secs` seconds.
 ///
-/// Uses `AVAudioEngine` with a tap on the output node to intercept the system
-/// mix without requiring Screen Recording permission. Only audio routed through
-/// the default output device is captured.
+/// On macOS 14+, uses ScreenCaptureKit in audio-only mode (`width=0, height=0`)
+/// which does **not** require Screen Recording TCC permission — a significantly
+/// better UX than the AVAudioEngine fallback.
+///
+/// On macOS 13 and earlier (or if SCK fails), falls back to `AVAudioEngine`
+/// input-node tap, which requires microphone TCC permission.
 ///
 /// # Errors
 ///
@@ -99,8 +102,27 @@ pub fn capture_microphone(duration_secs: f32) -> Result<AudioData, AudioError> {
 /// ```
 pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError> {
     validate_duration(duration_secs)?;
+
+    // Prefer ScreenCaptureKit on macOS 14+ (no Screen Recording permission needed).
+    if super::sck_capture::sck_available() {
+        debug!(
+            duration = duration_secs,
+            "attempting SCK audio-only capture (macOS 14+)"
+        );
+        match super::sck_capture::capture_system_audio_sck(duration_secs) {
+            Ok(data) => return Ok(data),
+            Err(e) => {
+                tracing::warn!(error = %e, "SCK capture failed, falling back to AVAudioEngine");
+            }
+        }
+    }
+
+    // Fallback: AVAudioEngine (requires microphone permission).
     check_microphone_permission()?;
-    debug!(duration = duration_secs, "capturing system audio output");
+    debug!(
+        duration = duration_secs,
+        "capturing system audio via AVAudioEngine (fallback)"
+    );
     capture_via_av_audio_engine(duration_secs)
 }
 

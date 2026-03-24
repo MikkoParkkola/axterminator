@@ -1,6 +1,6 @@
 [package]
 name = "axterminator"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 authors = ["Mikko Parkkola <mikko.parkkola@iki.fi>"]
 description = "macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators"
@@ -44,15 +44,34 @@ camera = []
 # Pushes events to Claude Code sessions via MCP notifications/claude/channel.
 # Implies audio + camera + tokio/time. Off by default.
 watch = ["audio", "camera", "dep:tokio-util"]
+# context: geolocation via CoreLocation. Off by default — requires Location Services
+# TCC permission. System context (battery, volume, dark mode, etc.) and clipboard
+# are always available without this feature flag.
+context = []
 # docker: Neko browser containers as isolated test targets via Docker CLI.
 # Exposes ax_browser_launch and ax_browser_stop MCP tools.
 # Off by default — requires Docker daemon; not needed for native-app testing.
 docker = []
+# parakeet: NVIDIA Parakeet TDT 0.6B v3 ONNX Runtime ASR backend.
+# Provides high-quality multilingual (25 European languages) speech-to-text as
+# an optional engine alongside SFSpeechRecognizer.  Requires the `audio` feature.
+# Model files (~2.5 GB) must be downloaded separately:
+#   huggingface-cli download istupakov/parakeet-tdt-0.6b-v3-onnx \
+#     encoder-model.onnx encoder-model.onnx.data decoder_joint-model.onnx \
+#     nemo128.onnx vocab.txt config.json \
+#     --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3
+# The `ort` crate uses pre-built ONNX Runtime binaries (no manual SDK install).
+parakeet = ["audio", "dep:ort"]
 
 [dependencies]
 # CLI (feature-gated so it's only compiled for the binary target)
 clap = { version = "4.5", features = ["derive", "wrap_help", "env"], optional = true }
 clap_complete = { version = "4.5", optional = true }
+
+# Parakeet ASR (feature-gated): ONNX Runtime for Parakeet TDT 0.6B v3 inference.
+# `download-binaries` fetches pre-built ONNX Runtime libs at build time — no
+# manual installation required.  Zero impact on binary size when disabled.
+ort = { version = "2.0.0-rc.12", optional = true, features = ["download-binaries"] }
 
 # HTTP transport (feature-gated)
 axum = { version = "0.8", features = ["http1", "http2", "json", "tokio"], optional = true }

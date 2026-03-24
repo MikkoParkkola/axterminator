@@ -17,6 +17,9 @@
 pub mod audio;
 #[cfg(feature = "camera")]
 pub mod camera;
+#[cfg(feature = "audio")]
+pub mod capture;
+pub mod context;
 pub mod display;
 pub mod mcp;
 #[cfg(feature = "spaces")]

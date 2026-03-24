@@ -636,6 +636,18 @@ fn affected_uris(tool_name: &str, _args: &Value) -> &'static [&'static str] {
         "ax_connect" | "ax_disconnect" => &["axterminator://apps", "axterminator://system/status"],
         // Clipboard write changes the clipboard resource.
         "ax_clipboard" => &["axterminator://clipboard"],
+        // Starting a capture session affects all three capture resources.
+        "ax_start_capture" => &[
+            "axterminator://capture/status",
+            "axterminator://capture/transcription",
+            "axterminator://capture/screen",
+        ],
+        // Stopping a session changes status and clears transcription/screen.
+        "ax_stop_capture" => &[
+            "axterminator://capture/status",
+            "axterminator://capture/transcription",
+            "axterminator://capture/screen",
+        ],
         // All other tools may change per-app state/tree — the app name would
         // be needed for precise URI matching, but without it we skip per-app
         // URIs here to avoid false positives. Future phases will use the AX

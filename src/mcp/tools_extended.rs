@@ -69,12 +69,15 @@ pub fn extended_tools() -> Vec<Tool> {
     tools.extend(spaces_tools());
     #[cfg(feature = "audio")]
     tools.extend(crate::mcp::tools_audio::audio_tools());
+    #[cfg(feature = "audio")]
+    tools.extend(crate::mcp::tools_capture::capture_tools());
     #[cfg(feature = "camera")]
     tools.extend(camera_tools());
     #[cfg(feature = "watch")]
     tools.extend(watch_tools());
     #[cfg(feature = "docker")]
     tools.extend(docker_tools());
+    tools.extend(crate::mcp::tools_context::context_tools());
     tools.extend(crate::mcp::tools_innovation::innovation_tools());
     tools
 }
@@ -125,6 +128,16 @@ pub fn call_tool_extended<W: Write>(
         "ax_speak" => Some(crate::mcp::tools_audio::handle_ax_speak(args)),
         #[cfg(feature = "audio")]
         "ax_audio_devices" => Some(crate::mcp::tools_audio::handle_ax_audio_devices()),
+        #[cfg(feature = "audio")]
+        "ax_start_capture" => Some(crate::mcp::tools_capture::handle_ax_start_capture(args)),
+        #[cfg(feature = "audio")]
+        "ax_stop_capture" => Some(crate::mcp::tools_capture::handle_ax_stop_capture(args)),
+        #[cfg(feature = "audio")]
+        "ax_get_transcription" => {
+            Some(crate::mcp::tools_capture::handle_ax_get_transcription(args))
+        }
+        #[cfg(feature = "audio")]
+        "ax_capture_status" => Some(crate::mcp::tools_capture::handle_ax_capture_status()),
         #[cfg(feature = "camera")]
         "ax_camera_capture" => Some(crate::mcp::tools_camera::handle_ax_camera_capture(args)),
         #[cfg(feature = "camera")]
@@ -135,6 +148,9 @@ pub fn call_tool_extended<W: Write>(
         "ax_browser_launch" => Some(crate::mcp::tools_docker::handle_ax_browser_launch(args)),
         #[cfg(feature = "docker")]
         "ax_browser_stop" => Some(crate::mcp::tools_docker::handle_ax_browser_stop(args)),
+        "ax_system_context" => Some(crate::mcp::tools_context::handle_ax_system_context()),
+        #[cfg(feature = "context")]
+        "ax_location" => Some(crate::mcp::tools_context::handle_ax_location(args)),
         // Watch tools require a WatchState which is not available in the stateless
         // extended dispatcher.  These are dispatched by the server's handle_tools_call
         // via the Server::call_watch_tool helper instead.
@@ -170,19 +186,28 @@ mod tests {
 
     #[test]
     fn extended_tools_count_matches_feature_set() {
-        // GIVEN: Phase 3 GUI base (7) + innovation (15) = 22 + optional feature extensions
+        // GIVEN: Phase 3 GUI base (7) + context (2-3) + innovation (15) = 24-25 + optional feature extensions
         // WHEN: requesting extended tools
         let tools = super::extended_tools();
         // THEN: count is deterministic per feature set
         let base = 22usize; // Phase 3 GUI (7) + innovation (15)
+        let context_base = 1usize; // system_context (always on); clipboard is in innovation
+        let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-        let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+        // audio feature: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
+        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
         let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
         let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
         assert_eq!(
             tools.len(),
-            base + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
+            base + context_base
+                + extra_context_location
+                + extra_spaces
+                + extra_audio
+                + extra_camera
+                + extra_watch
+                + extra_docker
         );
     }
 

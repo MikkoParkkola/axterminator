@@ -596,15 +596,24 @@ mod tests {
         let tools = all_tools();
         // THEN: count is a deterministic function of active features
         let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
+        let context_base = 1usize; // system_context (always on); clipboard is in innovation
+        let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-        // `watch` implies `audio` and `camera`, so these are additive
-        let extra_audio: usize = if cfg!(feature = "audio") { 3 } else { 0 };
+        // `watch` implies `audio` and `camera`, so these are additive.
+        // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
+        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
         let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
         let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
         assert_eq!(
             tools.len(),
-            base + extra_spaces + extra_audio + extra_camera + extra_watch + extra_docker
+            base + context_base
+                + extra_context_location
+                + extra_spaces
+                + extra_audio
+                + extra_camera
+                + extra_watch
+                + extra_docker
         );
     }
 

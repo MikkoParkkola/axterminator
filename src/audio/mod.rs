@@ -4,20 +4,25 @@
 //!
 //! | Capability | API | Privacy |
 //! |-----------|-----|---------|
-//! | Microphone capture | `AudioQueue` (CoreAudio) | Requires TCC microphone permission |
+//! | Microphone capture | `AVAudioEngine` (CoreAudio) | Requires TCC microphone permission |
+//! | System audio capture | `ScreenCaptureKit` (macOS 14+) | No Screen Recording permission needed |
 //! | Speech-to-text | `SFSpeechRecognizer` | On-device only — no cloud |
 //! | Text-to-speech | `NSSpeechSynthesizer` | No network; local voice synthesis |
 //!
 //! ## Quick start
 //!
 //! ```ignore
-//! use axterminator::audio::{capture_microphone, transcribe, speak, list_audio_devices};
+//! use axterminator::audio::{capture_microphone, capture_system_audio, transcribe, speak, list_audio_devices};
 //!
 //! // Capture 5 seconds of microphone audio
 //! let audio = capture_microphone(5.0)?;
 //!
-//! // Transcribe on-device
-//! let text = transcribe(&audio)?;
+//! // Capture system audio (macOS 14+: no Screen Recording permission)
+//! let sys_audio = capture_system_audio(3.0)?;
+//!
+//! // Transcribe on-device (supports multiple languages)
+//! let text = transcribe(&audio, None)?;            // English (default)
+//! let fi = transcribe(&audio, Some("fi-FI"))?;     // Finnish
 //!
 //! // Speak a line
 //! speak("Verification complete")?;
@@ -40,8 +45,8 @@
 //!
 //! ## Security
 //!
-//! - All speech recognition uses `requiresOnDeviceRecognition = true`.
-//! - No audio data leaves the machine.
+//! - Speech recognition prefers on-device models (server fallback if model not downloaded).
+//! - No audio data leaves the machine (when on-device model is available).
 //! - Temporary WAV files (when used) are written to `/tmp` with mode `0600`
 //!   and deleted immediately after encoding.
 //! - Recording is hard-capped at [`MAX_CAPTURE_SECS`] (30 seconds).
@@ -55,6 +60,9 @@ use base64::Engine as _;
 mod capture;
 mod devices;
 mod ffi;
+#[cfg(feature = "parakeet")]
+pub mod parakeet;
+mod sck_capture;
 mod speech;
 
 // ---------------------------------------------------------------------------
@@ -63,7 +71,7 @@ mod speech;
 
 pub use capture::{capture_microphone, capture_system_audio, validate_duration};
 pub use devices::{check_microphone_permission, list_audio_devices, AudioDevice};
-pub use speech::{speak, transcribe};
+pub use speech::{speak, transcribe, transcribe_with_engine, AudioEngine};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -243,6 +251,68 @@ impl AudioData {
             (f64::from(self.duration_secs) * 1000.0) as u64
         }
     }
+
+    /// Size of the WAV payload in bytes (header + PCM data).
+    ///
+    /// Useful for estimating MCP response payload size. The base64 encoding
+    /// inflates this by ~33%, so the JSON field will be approximately
+    /// `size_bytes * 4 / 3`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axterminator::audio::AudioData;
+    /// let data = AudioData::silent(1.0);
+    /// // 16 kHz × 1 ch × 2 bytes/sample + 44 byte header = 32044
+    /// assert_eq!(data.wav_size_bytes(), 32044);
+    /// ```
+    #[must_use]
+    pub fn wav_size_bytes(&self) -> usize {
+        44 + self.samples.len() * (BITS_PER_SAMPLE as usize / 8)
+    }
+
+    /// Split audio into chunks of at most `max_secs` seconds each.
+    ///
+    /// Returns a `Vec` of `AudioData` segments. The last chunk may be shorter
+    /// than `max_secs`. If the audio is already shorter than `max_secs`,
+    /// returns a single-element vec containing a clone of `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axterminator::audio::AudioData;
+    /// let data = AudioData::silent(10.0);
+    /// let chunks = data.into_chunks(3.0);
+    /// assert_eq!(chunks.len(), 4); // 3 + 3 + 3 + 1 seconds
+    /// assert!((chunks[0].duration_secs - 3.0).abs() < 0.01);
+    /// assert!((chunks[3].duration_secs - 1.0).abs() < 0.01);
+    /// ```
+    #[must_use]
+    pub fn into_chunks(&self, max_secs: f32) -> Vec<AudioData> {
+        if max_secs <= 0.0 || self.duration_secs <= max_secs {
+            return vec![self.clone()];
+        }
+
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+        let samples_per_chunk = (f64::from(max_secs) * f64::from(self.sample_rate)) as usize;
+        if samples_per_chunk == 0 {
+            return vec![self.clone()];
+        }
+
+        self.samples
+            .chunks(samples_per_chunk)
+            .map(|chunk| {
+                #[allow(clippy::cast_precision_loss)]
+                let dur = chunk.len() as f32 / self.sample_rate as f32;
+                AudioData {
+                    samples: chunk.to_vec(),
+                    sample_rate: self.sample_rate,
+                    channels: self.channels,
+                    duration_secs: dur,
+                }
+            })
+            .collect()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +445,82 @@ mod tests {
     fn audio_data_duration_ms_rounds_down() {
         let data = AudioData::silent(1.001);
         assert!(data.duration_ms() >= 1000);
+    }
+
+    // -----------------------------------------------------------------------
+    // WAV size
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn wav_size_bytes_empty() {
+        let data = AudioData::silent(0.0);
+        // Header only, no data.
+        assert_eq!(data.wav_size_bytes(), 44);
+    }
+
+    #[test]
+    fn wav_size_bytes_one_second() {
+        let data = AudioData::silent(1.0);
+        // 16 kHz × 1 ch × 2 bytes/sample + 44 header = 32044
+        assert_eq!(data.wav_size_bytes(), 32044);
+    }
+
+    #[test]
+    fn wav_size_bytes_matches_actual_wav() {
+        let data = AudioData::silent(0.5);
+        assert_eq!(data.wav_size_bytes(), data.to_wav_bytes().len());
+    }
+
+    // -----------------------------------------------------------------------
+    // Chunking
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn into_chunks_short_audio_returns_single_chunk() {
+        let data = AudioData::silent(2.0);
+        let chunks = data.into_chunks(5.0);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].samples.len(), data.samples.len());
+    }
+
+    #[test]
+    fn into_chunks_splits_evenly() {
+        let data = AudioData::silent(10.0);
+        let chunks = data.into_chunks(5.0);
+        assert_eq!(chunks.len(), 2);
+        assert!((chunks[0].duration_secs - 5.0).abs() < 0.01);
+        assert!((chunks[1].duration_secs - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn into_chunks_last_chunk_shorter() {
+        let data = AudioData::silent(7.0);
+        let chunks = data.into_chunks(3.0);
+        // 3 + 3 + 1 = 7
+        assert_eq!(chunks.len(), 3);
+        assert!((chunks[2].duration_secs - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn into_chunks_preserves_total_samples() {
+        let data = AudioData::silent(10.0);
+        let chunks = data.into_chunks(3.0);
+        let total: usize = chunks.iter().map(|c| c.samples.len()).sum();
+        assert_eq!(total, data.samples.len());
+    }
+
+    #[test]
+    fn into_chunks_zero_max_returns_single() {
+        let data = AudioData::silent(5.0);
+        let chunks = data.into_chunks(0.0);
+        assert_eq!(chunks.len(), 1);
+    }
+
+    #[test]
+    fn into_chunks_negative_max_returns_single() {
+        let data = AudioData::silent(5.0);
+        let chunks = data.into_chunks(-1.0);
+        assert_eq!(chunks.len(), 1);
     }
 
     // -----------------------------------------------------------------------
