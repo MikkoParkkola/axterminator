@@ -12,6 +12,9 @@
 //! | `axterminator://system/displays` | Connected display geometry, scale factors |
 //! | `axterminator://apps` | Running apps with PID, bundle ID, accessibility status |
 //! | `axterminator://spaces` | Virtual desktop layout (requires `spaces` feature) |
+//! | `axterminator://guide/quickstart` | Tool catalogue and connect→find→act→verify workflow |
+//! | `axterminator://guide/patterns` | Five common automation patterns with step-by-step calls |
+//! | `axterminator://guide/audio` | Audio capture workflow and transcription segment format |
 //!
 //! ## Dynamic resource templates (RFC 6570)
 //!
@@ -213,6 +216,36 @@ pub fn static_resources() -> ResourceListResult {
     });
 
     resources.push(Resource {
+        uri: "axterminator://guide/quickstart",
+        name: "guide-quickstart",
+        title: "Quickstart Guide",
+        description: "Overview of axterminator: all 42 tools organised by category, \
+            the connect→find→act→verify workflow pattern, and key accessibility concepts \
+            (accessibility tree, roles, attributes, AXUIElement).",
+        mime_type: "text/markdown",
+    });
+
+    resources.push(Resource {
+        uri: "axterminator://guide/patterns",
+        name: "guide-patterns",
+        title: "Automation Patterns",
+        description: "Five common macOS automation patterns with step-by-step tool call \
+            sequences: click a button, fill a form, extract data, wait for UI change, \
+            and visual fallback when the accessibility tree is incomplete.",
+        mime_type: "text/markdown",
+    });
+
+    resources.push(Resource {
+        uri: "axterminator://guide/audio",
+        name: "guide-audio",
+        title: "Audio Capture Guide",
+        description: "Complete audio capture workflow: device selection, session lifecycle \
+            (ax_start_capture → ax_capture_status → ax_get_transcription → ax_stop_capture), \
+            ring buffer behaviour, and transcription segment format.",
+        mime_type: "text/markdown",
+    });
+
+    resources.push(Resource {
         uri: "axterminator://profiles",
         name: "electron-app-profiles",
         title: "Electron App Profiles",
@@ -308,6 +341,9 @@ pub fn read_resource(
         "axterminator://clipboard" => read::read_clipboard(uri),
         "axterminator://workflows" => read::read_workflows(uri),
         "axterminator://profiles" => read::read_profiles(uri),
+        "axterminator://guide/quickstart" => read::read_guide_quickstart(uri),
+        "axterminator://guide/patterns" => read::read_guide_patterns(uri),
+        "axterminator://guide/audio" => read::read_guide_audio(uri),
         #[cfg(feature = "spaces")]
         "axterminator://spaces" => read::read_spaces(uri),
         #[cfg(feature = "audio")]
@@ -995,5 +1031,95 @@ mod tests {
         assert_eq!(capture_uris.len(), 3, "expected 3 capture resources");
         let unique: std::collections::HashSet<_> = capture_uris.iter().collect();
         assert_eq!(unique.len(), 3, "all capture URIs must be unique");
+    }
+
+    // -----------------------------------------------------------------------
+    // Guide resources — descriptors
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn static_resources_contains_guide_quickstart() {
+        // GIVEN: static resource list
+        let list = static_resources();
+        // THEN: quickstart guide is advertised with correct MIME type
+        let entry = list
+            .resources
+            .iter()
+            .find(|r| r.uri == "axterminator://guide/quickstart");
+        assert!(entry.is_some(), "guide/quickstart must be in static resource list");
+        assert_eq!(entry.unwrap().mime_type, "text/markdown");
+    }
+
+    #[test]
+    fn static_resources_contains_guide_patterns() {
+        // GIVEN: static resource list
+        let list = static_resources();
+        // THEN: patterns guide is advertised with correct MIME type
+        let entry = list
+            .resources
+            .iter()
+            .find(|r| r.uri == "axterminator://guide/patterns");
+        assert!(entry.is_some(), "guide/patterns must be in static resource list");
+        assert_eq!(entry.unwrap().mime_type, "text/markdown");
+    }
+
+    #[test]
+    fn static_resources_contains_guide_audio() {
+        // GIVEN: static resource list
+        let list = static_resources();
+        // THEN: audio guide is advertised with correct MIME type
+        let entry = list
+            .resources
+            .iter()
+            .find(|r| r.uri == "axterminator://guide/audio");
+        assert!(entry.is_some(), "guide/audio must be in static resource list");
+        assert_eq!(entry.unwrap().mime_type, "text/markdown");
+    }
+
+    // -----------------------------------------------------------------------
+    // Guide resources — read content
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn read_guide_quickstart_returns_markdown_with_ax_connect() {
+        // GIVEN: a request for the quickstart guide
+        use super::super::resources_read as read;
+        // WHEN: the resource is read
+        let result = read::read_guide_quickstart("axterminator://guide/quickstart");
+        // THEN: returns Ok with text/markdown containing ax_connect
+        let result = result.expect("read_guide_quickstart must succeed");
+        assert_eq!(result.contents.len(), 1);
+        let text = &result.contents[0];
+        assert!(
+            text.text.as_deref().unwrap_or("").contains("ax_connect"),
+            "quickstart guide must mention ax_connect"
+        );
+    }
+
+    #[test]
+    fn read_guide_patterns_returns_markdown_with_five_patterns() {
+        // GIVEN: a request for the patterns guide
+        use super::super::resources_read as read;
+        // WHEN: the resource is read
+        let result = read::read_guide_patterns("axterminator://guide/patterns");
+        // THEN: returns Ok with content covering at least 5 patterns
+        let result = result.expect("read_guide_patterns must succeed");
+        let text = result.contents[0].text.as_deref().unwrap_or("");
+        assert!(text.contains("Pattern 1"), "patterns guide must contain Pattern 1");
+        assert!(text.contains("Pattern 5"), "patterns guide must contain Pattern 5");
+    }
+
+    #[test]
+    fn read_guide_audio_returns_markdown_with_capture_workflow() {
+        // GIVEN: a request for the audio guide
+        use super::super::resources_read as read;
+        // WHEN: the resource is read
+        let result = read::read_guide_audio("axterminator://guide/audio");
+        // THEN: returns Ok with content describing the capture lifecycle
+        let result = result.expect("read_guide_audio must succeed");
+        let text = result.contents[0].text.as_deref().unwrap_or("");
+        assert!(text.contains("ax_start_capture"), "audio guide must mention ax_start_capture");
+        assert!(text.contains("ax_stop_capture"), "audio guide must mention ax_stop_capture");
+        assert!(text.contains("ax_get_transcription"), "audio guide must mention ax_get_transcription");
     }
 }

@@ -739,3 +739,41 @@ fn list_running_apps() -> Vec<Value> {
         })
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// Guide resources
+// ---------------------------------------------------------------------------
+
+/// Read the `axterminator://guide/quickstart` resource.
+///
+/// Returns a Markdown document that describes the tool catalogue, the
+/// connect→find→act→verify workflow, and key accessibility concepts.
+/// Intended as ambient context for any LLM working with axterminator.
+pub(super) fn read_guide_quickstart(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let content = include_str!("guide_quickstart.md");
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "text/markdown", content)],
+    })
+}
+
+/// Read the `axterminator://guide/patterns` resource.
+///
+/// Returns a Markdown document covering five common macOS automation patterns
+/// with concrete step-by-step tool call sequences.
+pub(super) fn read_guide_patterns(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let content = include_str!("guide_patterns.md");
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "text/markdown", content)],
+    })
+}
+
+/// Read the `axterminator://guide/audio` resource.
+///
+/// Returns a Markdown document explaining the audio capture workflow,
+/// device selection, ring buffer behaviour, and transcription segment format.
+pub(super) fn read_guide_audio(uri: &str) -> Result<ResourceReadResult, ResourceError> {
+    let content = include_str!("guide_audio.md");
+    Ok(ResourceReadResult {
+        contents: vec![ResourceContents::text(uri, "text/markdown", content)],
+    })
+}
