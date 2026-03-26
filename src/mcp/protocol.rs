@@ -371,6 +371,11 @@ impl ToolCallResult {
     }
 
     #[must_use]
+    pub fn ok_json(value: Value) -> Self {
+        Self::ok(value.to_string())
+    }
+
+    #[must_use]
     pub fn error(text: impl Into<String>) -> Self {
         Self {
             content: vec![ContentItem::text(text)],
@@ -728,6 +733,13 @@ mod tests {
         let r = ToolCallResult::ok("done");
         assert!(!r.is_error);
         assert_eq!(r.content[0].text, "done");
+    }
+
+    #[test]
+    fn tool_call_result_ok_json_wraps_minified_json_text() {
+        let r = ToolCallResult::ok_json(json!({"ok": true}));
+        assert!(!r.is_error);
+        assert_eq!(r.content[0].text, r#"{"ok":true}"#);
     }
 
     #[test]

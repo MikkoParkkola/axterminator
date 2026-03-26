@@ -31,9 +31,13 @@ pub(crate) fn handle_is_accessible() -> ToolCallResult {
             "suggestion": "Open System Settings > Privacy & Security > Accessibility and enable the terminal app."
         })
     };
-    ToolCallResult {
-        content: vec![crate::mcp::protocol::ContentItem::text(result.to_string())],
-        is_error: !enabled,
+    if enabled {
+        ToolCallResult::ok_json(result)
+    } else {
+        ToolCallResult {
+            content: vec![crate::mcp::protocol::ContentItem::text(result.to_string())],
+            is_error: true,
+        }
     }
 }
 
@@ -41,7 +45,7 @@ pub(crate) fn handle_connect(args: &Value, registry: &Arc<AppRegistry>) -> ToolC
     let Some(app_id) = args["app"].as_str() else {
         return ToolCallResult::error("Missing required field: app");
     };
-    let alias = args["alias"].as_str().unwrap_or(app_id);
+    let alias = extract_string_field_or(args, "alias", app_id);
 
     let (name, bundle_id, pid) = parse_app_identifier(app_id);
     match AXApp::connect_native(name.as_deref(), bundle_id.as_deref(), pid) {
@@ -53,16 +57,13 @@ pub(crate) fn handle_connect(args: &Value, registry: &Arc<AppRegistry>) -> ToolC
                 .name()
                 .to_string();
             registry.insert(alias.to_string(), app);
-            ToolCallResult::ok(
-                json!({
-                    "connected": true,
-                    "alias": alias,
-                    "pid": connected_pid,
-                    "bundle_id": bundle,
-                    "app_type": app_type
-                })
-                .to_string(),
-            )
+            ToolCallResult::ok_json(json!({
+                "connected": true,
+                "alias": alias,
+                "pid": connected_pid,
+                "bundle_id": bundle,
+                "app_type": app_type
+            }))
         }
         Err(e) => ToolCallResult::error(format!("Failed to connect to '{app_id}': {e}")),
     }
@@ -73,34 +74,24 @@ pub(crate) fn handle_find(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
         Ok(v) => v,
         Err(e) => return ToolCallResult::error(e),
     };
-    let timeout_ms = args["timeout_ms"].as_u64().unwrap_or(5000);
+    let timeout_ms = extract_u64_field_or(args, "timeout_ms", 5000);
 
     registry
         .with_app(&app_name, |app| {
             match app.find_native(&query, Some(timeout_ms)) {
                 Ok(el) => {
                     let bounds_tuple = el.bounds();
-                    let bounds_arr = bounds_tuple.map(|(x, y, w, h)| {
-                        serde_json::Value::Array(vec![
-                            serde_json::json!(x),
-                            serde_json::json!(y),
-                            serde_json::json!(w),
-                            serde_json::json!(h),
-                        ])
-                    });
+                    let bounds_arr = format_bounds(bounds_tuple);
                     let locator = build_locator(el.role(), el.title(), bounds_tuple);
-                    ToolCallResult::ok(
-                        json!({
-                            "found": true,
-                            "role": el.role(),
-                            "title": el.title(),
-                            "value": el.value(),
-                            "enabled": el.enabled(),
-                            "bounds": bounds_arr,
-                            "locator": locator
-                        })
-                        .to_string(),
-                    )
+                    ToolCallResult::ok_json(json!({
+                        "found": true,
+                        "role": el.role(),
+                        "title": el.title(),
+                        "value": el.value(),
+                        "enabled": el.enabled(),
+                        "bounds": bounds_arr,
+                        "locator": locator
+                    }))
                 }
                 // Semantic fallback: try fuzzy matching on the scene graph.
                 Err(_) => semantic_find_fallback(app, &query),
@@ -134,18 +125,15 @@ fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResul
 
     if let Some(top) = result.matches.first() {
         if top.score >= 0.3 {
-            return ToolCallResult::ok(
-                json!({
-                    "found": true,
-                    "semantic_match": true,
-                    "confidence": top.score,
-                    "role": top.role,
-                    "label": top.label,
-                    "bounds": top.bounds.map(|(x, y, w, h)| [x, y, w, h]),
-                    "reasoning": top.reasoning
-                })
-                .to_string(),
-            );
+            return ToolCallResult::ok_json(json!({
+                "found": true,
+                "semantic_match": true,
+                "confidence": top.score,
+                "role": top.role,
+                "label": top.label,
+                "bounds": format_bounds(top.bounds),
+                "reasoning": top.reasoning
+            }));
         }
     }
 
@@ -157,9 +145,9 @@ pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
         Ok(v) => v,
         Err(e) => return ToolCallResult::error(e),
     };
-    let mode_str = args["mode"].as_str().unwrap_or("background");
-    let click_type = args["click_type"].as_str().unwrap_or("single");
-    let confirmed = args["confirm"].as_bool().unwrap_or(false);
+    let mode_str = extract_string_field_or(args, "mode", "background");
+    let click_type = extract_string_field_or(args, "click_type", "single");
+    let confirmed = extract_bool_field_or(args, "confirm", false);
     let mode = parse_action_mode(mode_str);
 
     registry
@@ -218,12 +206,12 @@ fn perform_click(
             let mut resp = json!({
                 "clicked": true,
                 "query": query,
-                "bounds": bounds.map(|(x, y, w, h)| [x, y, w, h])
+                "bounds": format_bounds(bounds)
             });
             if destructive {
                 resp["destructive"] = json!(true);
             }
-            ToolCallResult::ok(resp.to_string())
+            ToolCallResult::ok_json(resp)
         }
         Err(e) => ToolCallResult::error(format!("Click failed: {e}")),
     }
@@ -238,16 +226,14 @@ pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
         Some(t) => t.to_string(),
         None => return ToolCallResult::error("Missing required field: text"),
     };
-    let mode_str = args["mode"].as_str().unwrap_or("focus");
+    let mode_str = extract_string_field_or(args, "mode", "focus");
     let mode = parse_action_mode(mode_str);
 
     let char_count = text.chars().count();
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => match el.type_text_native(&text, mode) {
-                Ok(()) => {
-                    ToolCallResult::ok(json!({"typed": true, "char_count": char_count}).to_string())
-                }
+                Ok(()) => ToolCallResult::ok_json(json!({"typed": true, "char_count": char_count})),
                 Err(e) => ToolCallResult::error(format!("Type failed: {e}")),
             },
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
@@ -268,7 +254,7 @@ pub(crate) fn handle_set_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => match el.set_value_native(&value) {
-                Ok(()) => ToolCallResult::ok(json!({"set": true, "value": value}).to_string()),
+                Ok(()) => ToolCallResult::ok_json(json!({"set": true, "value": value})),
                 Err(e) => ToolCallResult::error(format!("set_value failed: {e}")),
             },
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
@@ -284,7 +270,7 @@ pub(crate) fn handle_get_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
-            Ok(el) => ToolCallResult::ok(json!({"found": true, "value": el.value()}).to_string()),
+            Ok(el) => ToolCallResult::ok_json(json!({"found": true, "value": el.value()})),
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
         })
         .unwrap_or_else(ToolCallResult::error)
@@ -302,18 +288,11 @@ pub(crate) fn handle_list_windows(args: &Value, registry: &Arc<AppRegistry>) -> 
                 let items: Vec<Value> = windows
                     .iter()
                     .map(|w: &crate::AXElement| {
-                        let bounds_val = w.bounds().map(|(x, y, bw, bh)| {
-                            serde_json::Value::Array(vec![
-                                serde_json::json!(x),
-                                serde_json::json!(y),
-                                serde_json::json!(bw),
-                                serde_json::json!(bh),
-                            ])
-                        });
+                        let bounds_val = format_bounds(w.bounds());
                         json!({ "title": w.title(), "bounds": bounds_val })
                     })
                     .collect();
-                ToolCallResult::ok(json!({"windows": items}).to_string())
+                ToolCallResult::ok_json(json!({"windows": items}))
             }
             Err(e) => ToolCallResult::error(format!("Failed to list windows: {e}")),
         })
@@ -342,14 +321,11 @@ pub(crate) fn handle_screenshot(args: &Value, registry: &Arc<AppRegistry>) -> To
                     use base64::Engine as _;
                     let b64 = base64::engine::general_purpose::STANDARD.encode::<&[u8]>(&bytes);
                     let size = bytes.len();
-                    ToolCallResult::ok(
-                        json!({
-                            "captured": true,
-                            "base64_png": b64,
-                            "size_bytes": size
-                        })
-                        .to_string(),
-                    )
+                    ToolCallResult::ok_json(json!({
+                        "captured": true,
+                        "base64_png": b64,
+                        "size_bytes": size
+                    }))
                 }
                 Err(e) => ToolCallResult::error(format!("Screenshot failed: {e}")),
             }
@@ -368,10 +344,10 @@ pub(crate) fn handle_click_at(args: &Value) -> ToolCallResult {
     let x = x_raw as i32;
     #[allow(clippy::cast_possible_truncation)]
     let y = y_raw as i32;
-    let click_type = args["click_type"].as_str().unwrap_or("single");
+    let click_type = extract_string_field_or(args, "click_type", "single");
 
     match click_at_coordinates(x, y, click_type) {
-        Ok(()) => ToolCallResult::ok(json!({"clicked": true, "x": x, "y": y}).to_string()),
+        Ok(()) => ToolCallResult::ok_json(json!({"clicked": true, "x": x, "y": y})),
         Err(e) => ToolCallResult::error(format!("click_at ({x},{y}) failed: {e}")),
     }
 }
@@ -410,11 +386,13 @@ pub(crate) fn handle_find_visual_with_sampling(
     registry: &Arc<AppRegistry>,
     sampling_ctx: crate::mcp::sampling::SamplingContext,
 ) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
+    let app_name = match extract_required_string_field(args, "app") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
-    let Some(description) = args["description"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: description");
+    let description = match extract_required_string_field(args, "description") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
 
     registry
@@ -448,25 +426,22 @@ fn build_find_visual_response(
             let (messages, system_prompt) =
                 crate::mcp::sampling::locate_element_messages(description, &png_bytes);
 
-            ToolCallResult::ok(
-                serde_json::json!({
-                    "sampling_available": true,
-                    "description": description,
-                    "screenshot_b64": b64,
-                    "screenshot_mime": "image/png",
-                    "sampling_request": {
-                        "method": "sampling/createMessage",
-                        "params": {
-                            "messages": messages,
-                            "maxTokens": 512,
-                            "systemPrompt": system_prompt
-                        }
-                    },
-                    "hint": "Send sampling_request to the LLM via sampling/createMessage, \
-                             then parse the JSON response for {found, x, y} coordinates."
-                })
-                .to_string(),
-            )
+            ToolCallResult::ok_json(serde_json::json!({
+                "sampling_available": true,
+                "description": description,
+                "screenshot_b64": b64,
+                "screenshot_mime": "image/png",
+                "sampling_request": {
+                    "method": "sampling/createMessage",
+                    "params": {
+                        "messages": messages,
+                        "maxTokens": 512,
+                        "systemPrompt": system_prompt
+                    }
+                },
+                "hint": "Send sampling_request to the LLM via sampling/createMessage, \
+                         then parse the JSON response for {found, x, y} coordinates."
+            }))
         }
         Err(e) => ToolCallResult::error(format!(
             "ax_find_visual: screenshot failed for visual sampling: {e}. \
@@ -476,10 +451,11 @@ fn build_find_visual_response(
 }
 
 pub(crate) fn handle_wait_idle(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
+    let app_name = match extract_required_string_field(args, "app") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
-    let timeout_ms = args["timeout_ms"].as_u64().unwrap_or(5000);
+    let timeout_ms = extract_u64_field_or(args, "timeout_ms", 5000);
 
     let start = std::time::Instant::now();
     registry
@@ -487,7 +463,7 @@ pub(crate) fn handle_wait_idle(args: &Value, registry: &Arc<AppRegistry>) -> Too
             let idle = app.wait_idle_native(timeout_ms);
             #[allow(clippy::cast_possible_truncation)]
             let elapsed = start.elapsed().as_millis() as u64;
-            ToolCallResult::ok(json!({"idle": idle, "elapsed_ms": elapsed}).to_string())
+            ToolCallResult::ok_json(json!({"idle": idle, "elapsed_ms": elapsed}))
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -508,15 +484,49 @@ fn build_locator(
     json!({
         "role": role,
         "title": title,
-        "bounds": bounds.map(|(x, y, w, h)| [x, y, w, h])
+        "bounds": format_bounds(bounds)
     })
 }
 
-fn extract_required_string_field(args: &Value, field: &str) -> Result<String, String> {
+pub(crate) fn extract_required_string_field(args: &Value, field: &str) -> Result<String, String> {
     args[field]
         .as_str()
         .map(str::to_string)
         .ok_or_else(|| format!("Missing required field: {field}"))
+}
+
+pub(crate) fn extract_optional_string_field(args: &Value, field: &str) -> Option<String> {
+    args[field].as_str().map(str::to_string)
+}
+
+pub(crate) fn extract_string_field_or<'a>(
+    args: &'a Value,
+    field: &str,
+    default: &'a str,
+) -> &'a str {
+    args[field].as_str().unwrap_or(default)
+}
+
+pub(crate) fn extract_u64_field_or(args: &Value, field: &str, default: u64) -> u64 {
+    args[field].as_u64().unwrap_or(default)
+}
+
+pub(crate) fn extract_bool_field_or(args: &Value, field: &str, default: bool) -> bool {
+    args[field].as_bool().unwrap_or(default)
+}
+
+pub(crate) fn extract_clamped_u64_field_or(
+    args: &Value,
+    field: &str,
+    default: u64,
+    min: u64,
+    max: u64,
+) -> u64 {
+    extract_u64_field_or(args, field, default).clamp(min, max)
+}
+
+pub(crate) fn format_bounds(bounds: Option<(f64, f64, f64, f64)>) -> Option<Value> {
+    bounds.map(|(x, y, w, h)| json!([x, y, w, h]))
 }
 
 /// Extract the mandatory `app` and `query` string fields from an argument object.
@@ -531,7 +541,7 @@ pub(crate) fn extract_app_query(args: &Value) -> Result<(String, String), String
 pub(crate) fn extract_app_optional_query(args: &Value) -> Result<(String, Option<String>), String> {
     Ok((
         extract_required_string_field(args, "app")?,
-        args["query"].as_str().map(str::to_string),
+        extract_optional_string_field(args, "query"),
     ))
 }
 
@@ -771,6 +781,73 @@ mod tests {
         assert_eq!(parse_action_mode("focus"), crate::ActionMode::Focus);
     }
 
+    #[test]
+    fn extract_optional_string_field_returns_some_when_present() {
+        let args = json!({"query": "Save"});
+        assert_eq!(
+            extract_optional_string_field(&args, "query").as_deref(),
+            Some("Save")
+        );
+    }
+
+    #[test]
+    fn extract_optional_string_field_returns_none_when_absent() {
+        let args = json!({});
+        assert_eq!(extract_optional_string_field(&args, "query"), None);
+    }
+
+    #[test]
+    fn extract_string_field_or_uses_value_then_default() {
+        let args = json!({"mode": "focus"});
+        assert_eq!(
+            extract_string_field_or(&args, "mode", "background"),
+            "focus"
+        );
+        assert_eq!(
+            extract_string_field_or(&json!({}), "mode", "background"),
+            "background"
+        );
+    }
+
+    #[test]
+    fn extract_u64_field_or_uses_value_then_default() {
+        let args = json!({"timeout_ms": 123});
+        assert_eq!(extract_u64_field_or(&args, "timeout_ms", 5000), 123);
+        assert_eq!(extract_u64_field_or(&json!({}), "timeout_ms", 5000), 5000);
+    }
+
+    #[test]
+    fn extract_bool_field_or_uses_value_then_default() {
+        let args = json!({"confirm": true});
+        assert!(extract_bool_field_or(&args, "confirm", false));
+        assert!(!extract_bool_field_or(&json!({}), "confirm", false));
+    }
+
+    #[test]
+    fn extract_clamped_u64_field_or_applies_default_and_bounds() {
+        assert_eq!(
+            extract_clamped_u64_field_or(&json!({"depth": 0}), "depth", 3, 1, 10),
+            1
+        );
+        assert_eq!(
+            extract_clamped_u64_field_or(&json!({"depth": 20}), "depth", 3, 1, 10),
+            10
+        );
+        assert_eq!(
+            extract_clamped_u64_field_or(&json!({}), "depth", 3, 1, 10),
+            3
+        );
+    }
+
+    #[test]
+    fn format_bounds_serialises_array_shape() {
+        assert_eq!(
+            format_bounds(Some((1.0, 2.0, 3.0, 4.0))),
+            Some(json!([1.0, 2.0, 3.0, 4.0]))
+        );
+        assert_eq!(format_bounds(None), None);
+    }
+
     // ------------------------------------------------------------------
     // Destructive gate helpers
     // ------------------------------------------------------------------
@@ -806,7 +883,7 @@ mod tests {
         // GIVEN: args with explicit confirm=false (same as absent)
         let args = json!({"app": "x", "query": "q", "confirm": false});
         // WHEN: confirm is extracted
-        let confirmed = args["confirm"].as_bool().unwrap_or(false);
+        let confirmed = extract_bool_field_or(&args, "confirm", false);
         // THEN: treated as not confirmed
         assert!(!confirmed);
     }
@@ -816,7 +893,7 @@ mod tests {
         // GIVEN: args with explicit confirm=true
         let args = json!({"app": "x", "query": "q", "confirm": true});
         // WHEN: confirm is extracted
-        let confirmed = args["confirm"].as_bool().unwrap_or(false);
+        let confirmed = extract_bool_field_or(&args, "confirm", false);
         // THEN: treated as confirmed
         assert!(confirmed);
     }
@@ -826,7 +903,7 @@ mod tests {
         // GIVEN: args without a confirm field
         let args = json!({"app": "x", "query": "q"});
         // WHEN: confirm is extracted with default
-        let confirmed = args["confirm"].as_bool().unwrap_or(false);
+        let confirmed = extract_bool_field_or(&args, "confirm", false);
         // THEN: defaults to false (unconfirmed)
         assert!(!confirmed);
     }

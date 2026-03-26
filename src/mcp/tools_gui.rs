@@ -360,10 +360,11 @@ pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
         Ok(v) => v,
         Err(e) => return ToolCallResult::error(e),
     };
-    let Some(direction) = args["direction"].as_str() else {
-        return ToolCallResult::error("Missing required field: direction");
+    let direction = match extract_required_string_field(args, "direction") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
-    let amount = args["amount"].as_u64().unwrap_or(3).clamp(1, 100) as u32;
+    let amount = extract_clamped_u64_field_or(args, "amount", 3, 1, 100) as u32;
 
     registry
         .with_app(&app_name, |app| {
@@ -377,7 +378,7 @@ pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
                 None
             };
 
-            let ax_action = match direction {
+            let ax_action = match direction.as_str() {
                 "up" | "left" => actions::AX_DECREMENT,
                 _ => actions::AX_INCREMENT,
             };
@@ -394,38 +395,35 @@ pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
 
             // Fall back to CGScrollWheel event when AX action unavailable.
             if !ax_ok {
-                let (dx, dy) = scroll_deltas(direction, amount);
+                let (dx, dy) = scroll_deltas(&direction, amount);
                 if let Err(e) = post_scroll_event(dx, dy) {
                     return ToolCallResult::error(format!("Scroll failed: {e}"));
                 }
             }
 
-            ToolCallResult::ok(
-                json!({
-                    "scrolled":  true,
-                    "direction": direction,
-                    "amount":    amount
-                })
-                .to_string(),
-            )
+            ToolCallResult::ok_json(json!({
+                "scrolled":  true,
+                "direction": direction,
+                "amount":    amount
+            }))
         })
         .unwrap_or_else(ToolCallResult::error)
 }
 
 pub(crate) fn handle_key_press(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
+    let app_name = match extract_required_string_field(args, "app") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
-    let Some(keys_str) = args["keys"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: keys");
+    let keys_str = match extract_required_string_field(args, "keys") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
 
     registry
         .with_app(&app_name, |app| {
             match parse_and_post_key_event(app.pid, &keys_str) {
-                Ok(()) => {
-                    ToolCallResult::ok(json!({ "pressed": true, "keys": keys_str }).to_string())
-                }
+                Ok(()) => ToolCallResult::ok_json(json!({ "pressed": true, "keys": keys_str })),
                 Err(e) => ToolCallResult::error(format!("key_press failed: {e}")),
             }
         })
@@ -441,7 +439,7 @@ pub(crate) fn handle_get_attributes(args: &Value, registry: &Arc<AppRegistry>) -
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => {
-                let bounds_val = el.bounds().map(|(x, y, w, h)| json!([x, y, w, h]));
+                let bounds_val = format_bounds(el.bounds());
                 let attrs = json!({
                     "role":        el.role(),
                     "title":       el.title(),
@@ -453,9 +451,9 @@ pub(crate) fn handle_get_attributes(args: &Value, registry: &Arc<AppRegistry>) -
                     "focused":     el.focused(),
                     "bounds":      bounds_val
                 });
-                ToolCallResult::ok(json!({"found": true, "attributes": attrs}).to_string())
+                ToolCallResult::ok_json(json!({"found": true, "attributes": attrs}))
             }
-            Err(_) => ToolCallResult::ok(json!({"found": false}).to_string()),
+            Err(_) => ToolCallResult::ok_json(json!({"found": false})),
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -472,11 +470,11 @@ pub(crate) fn handle_get_tree<W: Write>(
 
     // When format == "llm", skip the element tree entirely and return a
     // token-optimised CopilotState summary built from the live AX tree.
-    if args["format"].as_str() == Some("llm") {
+    if extract_string_field_or(args, "format", "default") == "llm" {
         return handle_get_tree_llm_format(&app_name, registry);
     }
 
-    let depth = args["depth"].as_u64().unwrap_or(3).clamp(1, 10) as usize;
+    let depth = extract_clamped_u64_field_or(args, "depth", 3, 1, 10) as usize;
 
     // Emit progress when depth ≥ 2 (otherwise it completes too fast to matter).
     #[allow(clippy::cast_possible_truncation)] // depth is clamped to 1..=10 above
@@ -492,18 +490,16 @@ pub(crate) fn handle_get_tree<W: Write>(
                 match app.find_native(q, Some(100)) {
                     Ok(el) => {
                         let tree = build_element_tree(el.element, depth, &mut reporter);
-                        return ToolCallResult::ok(
-                            json!({"found": true, "tree": tree}).to_string(),
-                        );
+                        return ToolCallResult::ok_json(json!({"found": true, "tree": tree}));
                     }
-                    Err(_) => return ToolCallResult::ok(json!({"found": false}).to_string()),
+                    Err(_) => return ToolCallResult::ok_json(json!({"found": false})),
                 }
             } else {
                 app.element
             };
 
             let tree = build_app_root_tree(root_element, depth, &mut reporter);
-            ToolCallResult::ok(json!({"found": true, "tree": tree}).to_string())
+            ToolCallResult::ok_json(json!({"found": true, "tree": tree}))
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -521,20 +517,17 @@ fn handle_get_tree_llm_format(app_name: &str, registry: &Arc<AppRegistry>) -> To
         .with_app(app_name, |app| {
             let state = read_copilot_state(app.element);
             let summary = format_for_llm(&state, &FormatOptions::default());
-            ToolCallResult::ok(
-                json!({
-                    "found": true,
-                    "llm_summary": summary
-                })
-                .to_string(),
-            )
+            ToolCallResult::ok_json(json!({
+                "found": true,
+                "llm_summary": summary
+            }))
         })
         .unwrap_or_else(ToolCallResult::error)
 }
 
 pub(crate) fn handle_list_apps() -> ToolCallResult {
     let apps = list_running_apps();
-    ToolCallResult::ok(json!({ "apps": apps }).to_string())
+    ToolCallResult::ok_json(json!({ "apps": apps }))
 }
 
 pub(crate) fn handle_drag(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
@@ -564,14 +557,11 @@ pub(crate) fn handle_drag(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
             };
 
             match post_drag_event(from_center, to_center) {
-                Ok(()) => ToolCallResult::ok(
-                    json!({
-                        "dragged":    true,
-                        "from_query": from_query,
-                        "to_query":   to_query
-                    })
-                    .to_string(),
-                ),
+                Ok(()) => ToolCallResult::ok_json(json!({
+                    "dragged":    true,
+                    "from_query": from_query,
+                    "to_query":   to_query
+                })),
                 Err(e) => ToolCallResult::error(format!("Drag failed: {e}")),
             }
         })
@@ -583,11 +573,13 @@ pub(crate) fn handle_assert(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
         Ok(v) => v,
         Err(e) => return ToolCallResult::error(e),
     };
-    let Some(property) = args["property"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: property");
+    let property = match extract_required_string_field(args, "property") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
-    let Some(expected) = args["expected"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: expected");
+    let expected = match extract_required_string_field(args, "expected") {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
 
     registry
@@ -597,42 +589,33 @@ pub(crate) fn handle_assert(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
                 let exists = app.find_native(&query, Some(100)).is_ok();
                 let actual = if exists { "true" } else { "false" }.to_string();
                 let passed = actual == expected;
-                return ToolCallResult::ok(
-                    json!({
-                        "passed":   passed,
-                        "actual":   actual,
-                        "expected": expected,
-                        "property": property
-                    })
-                    .to_string(),
-                );
+                return ToolCallResult::ok_json(json!({
+                    "passed":   passed,
+                    "actual":   actual,
+                    "expected": expected,
+                    "property": property
+                }));
             }
 
             match app.find_native(&query, Some(100)) {
                 Ok(el) => {
                     let actual = read_element_property(&el, &property);
                     let passed = actual == expected;
-                    ToolCallResult::ok(
-                        json!({
-                            "passed":   passed,
-                            "actual":   actual,
-                            "expected": expected,
-                            "property": property
-                        })
-                        .to_string(),
-                    )
+                    ToolCallResult::ok_json(json!({
+                        "passed":   passed,
+                        "actual":   actual,
+                        "expected": expected,
+                        "property": property
+                    }))
                 }
                 Err(_) => {
                     // Element not found — assert fails with empty actual.
-                    ToolCallResult::ok(
-                        json!({
-                            "passed":   false,
-                            "actual":   "",
-                            "expected": expected,
-                            "property": property
-                        })
-                        .to_string(),
-                    )
+                    ToolCallResult::ok_json(json!({
+                        "passed":   false,
+                        "actual":   "",
+                        "expected": expected,
+                        "property": property
+                    }))
                 }
             }
         })
@@ -740,6 +723,8 @@ pub(crate) use crate::mcp::tools_gui_events::{
 };
 pub(crate) use crate::mcp::tools_handlers::{
     extract_app_from_to_queries, extract_app_optional_query, extract_app_query,
+    extract_clamped_u64_field_or, extract_required_string_field, extract_string_field_or,
+    format_bounds,
 };
 // Private helpers used only within this file.
 use crate::mcp::tools_gui_events::{parse_and_post_key_event, post_drag_event, post_scroll_event};
