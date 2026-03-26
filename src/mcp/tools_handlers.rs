@@ -495,6 +495,22 @@ pub(crate) fn extract_clamped_u64_field_or(
     extract_u64_field_or(args, field, default).clamp(min, max)
 }
 
+pub(crate) fn scan_scene_or_error(
+    element: crate::accessibility::AXUIElementRef,
+) -> Result<crate::intent::SceneGraph, String> {
+    crate::intent::scan_scene(element).map_err(|e| format!("scan_scene failed: {e}"))
+}
+
+pub(crate) fn parse_json_array<T, F>(value: &Value, mut parser: F) -> Vec<T>
+where
+    F: FnMut(&Value) -> Option<T>,
+{
+    value
+        .as_array()
+        .map(|arr| arr.iter().filter_map(&mut parser).collect())
+        .unwrap_or_default()
+}
+
 pub(crate) fn format_bounds(bounds: Option<(f64, f64, f64, f64)>) -> Option<Value> {
     bounds.map(|(x, y, w, h)| json!([x, y, w, h]))
 }
@@ -819,6 +835,18 @@ mod tests {
             extract_clamped_u64_field_or(&json!({}), "depth", 3, 1, 10),
             3
         );
+    }
+
+    #[test]
+    fn parse_json_array_returns_empty_for_non_array() {
+        let values: Vec<u64> = parse_json_array(&json!({"not": "an array"}), Value::as_u64);
+        assert!(values.is_empty());
+    }
+
+    #[test]
+    fn parse_json_array_filters_out_invalid_items() {
+        let values = parse_json_array(&json!([1, "two", 3, null]), Value::as_u64);
+        assert_eq!(values, vec![1, 3]);
     }
 
     #[test]

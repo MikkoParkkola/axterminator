@@ -24,6 +24,10 @@ use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::server::WorkflowState;
 use crate::mcp::tools::AppRegistry;
+use crate::mcp::tools_handlers::{
+    extract_app_query, extract_or_return, extract_required_string_field, extract_string_field_or,
+    parse_json_array, scan_scene_or_error,
+};
 
 // ---------------------------------------------------------------------------
 // Global tracker for ax_track_workflow
@@ -597,10 +601,8 @@ pub(crate) fn call_workflow_tool<W: Write>(
 /// | `stop`   | End session, return all events as serialised JSON |
 /// | `status` | Return recording state and event count (non-destructive) |
 fn handle_ax_record(args: &Value) -> ToolCallResult {
-    let Some(app) = args["app"].as_str() else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let action = args["action"].as_str().unwrap_or("record");
+    let app = extract_or_return!(extract_required_string_field(args, "app"));
+    let action = extract_string_field_or(args, "action", "record");
 
     let Ok(mut recorder) = WORKFLOW_RECORDER.lock() else {
         return ToolCallResult::error("Recorder mutex poisoned");
@@ -650,14 +652,14 @@ fn handle_ax_record(args: &Value) -> ToolCallResult {
                     "Missing required field: action_type (click|type|assert)",
                 );
             };
-            let label = args["query"].as_str().unwrap_or("");
+            let label = extract_string_field_or(args, "query", "");
             let recorded_action = match action_type {
                 "click" => crate::recording::RecordedAction::Click { x: 0.0, y: 0.0 },
                 "type" => crate::recording::RecordedAction::Type {
-                    text: args["text"].as_str().unwrap_or("").to_owned(),
+                    text: extract_string_field_or(args, "text", "").to_owned(),
                 },
                 "assert" => crate::recording::RecordedAction::KeyPress {
-                    key: args["value"].as_str().unwrap_or("").to_owned(),
+                    key: extract_string_field_or(args, "value", "").to_owned(),
                     modifiers: vec![],
                 },
                 other => {
@@ -693,19 +695,11 @@ fn handle_ax_record(args: &Value) -> ToolCallResult {
 
 /// Handle `ax_query` — build a SceneGraph from the live AX tree, then query it.
 fn handle_ax_query(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let Some(query) = args["query"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: query");
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
 
     registry
         .with_app(&app_name, |app| {
-            let scene = match crate::intent::scan_scene(app.element) {
-                Ok(g) => g,
-                Err(e) => return ToolCallResult::error(format!("scan_scene failed: {e}")),
-            };
+            let scene = extract_or_return!(scan_scene_or_error(app.element));
 
             let result = crate::scene::SceneEngine::new().query(&query, &scene);
 
@@ -815,12 +809,8 @@ fn capability_to_str(cap: &crate::electron_profiles::AppCapability) -> String {
 /// notifications are not feasible without restructuring the runner; the
 /// before/after pair lets MCP clients display a spinner during the test run.
 fn handle_ax_test_run<W: Write>(args: &Value, out: &mut W) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let Some(test_name) = args["test_name"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: test_name");
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
+    let test_name = extract_or_return!(extract_required_string_field(args, "test_name"));
 
     let steps = parse_test_steps(&args["steps"]);
     let assertions = parse_test_assertions(&args["assertions"]);
@@ -859,11 +849,7 @@ fn handle_ax_test_run<W: Write>(args: &Value, out: &mut W) -> ToolCallResult {
 /// Steps that cannot be parsed are silently skipped so a single malformed
 /// entry does not abort the entire test run.
 fn parse_test_steps(steps_val: &Value) -> Vec<crate::blackbox::TestStep> {
-    let Some(arr) = steps_val.as_array() else {
-        return vec![];
-    };
-
-    arr.iter().filter_map(parse_single_step).collect()
+    parse_json_array(steps_val, parse_single_step)
 }
 
 /// Parse a single step JSON object into a `TestStep`, or `None` on error.
@@ -895,11 +881,7 @@ fn parse_single_step(s: &Value) -> Option<crate::blackbox::TestStep> {
 
 /// Parse a JSON array of assertion objects into `Vec<TestAssertion>`.
 fn parse_test_assertions(assertions_val: &Value) -> Vec<crate::blackbox::TestAssertion> {
-    let Some(arr) = assertions_val.as_array() else {
-        return vec![];
-    };
-
-    arr.iter().filter_map(parse_single_assertion).collect()
+    parse_json_array(assertions_val, parse_single_assertion)
 }
 
 /// Parse a single assertion JSON object into a `TestAssertion`, or `None` on error.
@@ -1430,17 +1412,12 @@ fn suggestion_to_json(s: &Suggestion) -> Value {
 /// - `"actions"` — only suggested next actions
 /// - `"all"` (default) — everything combined
 fn handle_ax_analyze(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let focus = args["focus"].as_str().unwrap_or("all");
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
+    let focus = extract_string_field_or(args, "focus", "all");
 
     registry
         .with_app(&app_name, |app| {
-            let scene = match crate::intent::scan_scene(app.element) {
-                Ok(g) => g,
-                Err(e) => return ToolCallResult::error(format!("scan_scene failed: {e}")),
-            };
+            let scene = extract_or_return!(scan_scene_or_error(app.element));
 
             let node_count = scene.len();
             let patterns = detect_ui_patterns(&scene);
@@ -1548,9 +1525,7 @@ fn handle_ax_workflow_create(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
-    let Some(name) = args["name"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: name");
-    };
+    let name = extract_or_return!(extract_required_string_field(args, "name"));
 
     let steps = parse_workflow_steps(&args["steps"]);
     let step_count = steps.len();
@@ -1587,16 +1562,14 @@ fn handle_ax_workflow_step<W: Write>(
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
     out: &mut W,
 ) -> ToolCallResult {
-    let Some(name) = args["name"].as_str() else {
-        return ToolCallResult::error("Missing required field: name");
-    };
+    let name = extract_or_return!(extract_required_string_field(args, "name"));
 
     let mut guard = match workflows.lock() {
         Ok(g) => g,
         Err(_) => return ToolCallResult::error("Workflow mutex poisoned"),
     };
 
-    let Some(state) = guard.get_mut(name) else {
+    let Some(state) = guard.get_mut(&name) else {
         return ToolCallResult::error(format!(
             "Workflow '{name}' not found — call ax_workflow_create first"
         ));
@@ -1679,16 +1652,14 @@ fn handle_ax_workflow_status(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
-    let Some(name) = args["name"].as_str() else {
-        return ToolCallResult::error("Missing required field: name");
-    };
+    let name = extract_or_return!(extract_required_string_field(args, "name"));
 
     let guard = match workflows.lock() {
         Ok(g) => g,
         Err(_) => return ToolCallResult::error("Workflow mutex poisoned"),
     };
 
-    let Some(state) = guard.get(name) else {
+    let Some(state) = guard.get(&name) else {
         return ToolCallResult::error(format!(
             "Workflow '{name}' not found — call ax_workflow_create first"
         ));
@@ -1710,10 +1681,7 @@ fn handle_ax_workflow_status(
 ///
 /// Steps with an unrecognised `action` or missing required fields are skipped.
 fn parse_workflow_steps(steps_val: &Value) -> Vec<crate::durable_steps::DurableStep> {
-    let Some(arr) = steps_val.as_array() else {
-        return vec![];
-    };
-    arr.iter().filter_map(parse_single_workflow_step).collect()
+    parse_json_array(steps_val, parse_single_workflow_step)
 }
 
 /// Parse one step JSON object into a [`DurableStep`], returning `None` on error.
@@ -1772,16 +1740,14 @@ fn step_action_label(action: &crate::durable_steps::StepAction) -> &'static str 
 /// The [`crate::mcp::annotations::DESTRUCTIVE`] annotation signals to clients
 /// that this tool can modify system state.
 fn handle_ax_run_script(args: &Value) -> ToolCallResult {
-    let Some(script) = args["script"].as_str() else {
-        return ToolCallResult::error("Missing required field: script");
-    };
-    let language = args["language"].as_str().unwrap_or("applescript");
+    let script = extract_or_return!(extract_required_string_field(args, "script"));
+    let language = extract_string_field_or(args, "language", "applescript");
 
     let mut cmd = std::process::Command::new("osascript");
     if language == "jxa" {
-        cmd.args(["-l", "JavaScript", "-e", script]);
+        cmd.args(["-l", "JavaScript", "-e", script.as_str()]);
     } else {
-        cmd.args(["-e", script]);
+        cmd.args(["-e", script.as_str()]);
     }
 
     match cmd.output() {
@@ -2157,15 +2123,11 @@ fn compute_diff(baseline: &[u8], current: &[u8]) -> f64 {
 /// Handle `ax_visual_diff` — capture the live screenshot and compare it byte-for-byte
 /// against the caller-supplied baseline.
 fn handle_ax_visual_diff(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let Some(baseline_b64) = args["baseline"].as_str() else {
-        return ToolCallResult::error("Missing required field: baseline");
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
+    let baseline_b64 = extract_or_return!(extract_required_string_field(args, "baseline"));
     let threshold = args["threshold"].as_f64().unwrap_or(0.01);
 
-    let baseline = match decode_baseline_b64(baseline_b64) {
+    let baseline = match decode_baseline_b64(&baseline_b64) {
         Ok(b) => b,
         Err(e) => return ToolCallResult::error(format!("baseline decode failed: {e}")),
     };
@@ -2336,18 +2298,13 @@ fn count_by_severity(issues: &[Value], level: &str) -> u64 {
 
 /// Handle `ax_a11y_audit` — scan the live AX tree and report WCAG violations.
 fn handle_ax_a11y_audit(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     // `scope` validated by schema; reserved for focused-window filtering.
-    let _scope = args["scope"].as_str().unwrap_or("full");
+    let _scope = extract_string_field_or(args, "scope", "full");
 
     registry
         .with_app(&app_name, |app| {
-            let scene = match crate::intent::scan_scene(app.element) {
-                Ok(g) => g,
-                Err(e) => return ToolCallResult::error(format!("scan_scene failed: {e}")),
-            };
+            let scene = extract_or_return!(scan_scene_or_error(app.element));
 
             let issues = audit_accessibility(&scene);
             let issue_count = issues.len() as u64;
@@ -2633,7 +2590,7 @@ mod tests {
         let mut out = Vec::<u8>::new();
         let result = super::handle_ax_test_run(&json!({"test_name": "t"}), &mut out);
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
@@ -2642,7 +2599,7 @@ mod tests {
         let mut out = Vec::<u8>::new();
         let result = super::handle_ax_test_run(&json!({"app": "TextEdit"}), &mut out);
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: test_name");
     }
 
     #[test]
@@ -2837,7 +2794,7 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let result = super::handle_ax_query(&json!({"query": "find the button"}), &registry);
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
@@ -2846,7 +2803,7 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let result = super::handle_ax_query(&json!({"app": "Safari"}), &registry);
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: query");
     }
 
     #[test]
@@ -2879,7 +2836,7 @@ mod tests {
         let result = super::handle_ax_workflow_create(&json!({}), &wf);
         // THEN: error payload
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: name");
     }
 
     #[test]
@@ -2932,7 +2889,7 @@ mod tests {
         let result = super::handle_ax_workflow_step(&json!({}), &wf, &mut out);
         // THEN: error payload
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: name");
     }
 
     #[test]
@@ -3027,7 +2984,7 @@ mod tests {
         let result = super::handle_ax_workflow_status(&json!({}), &wf);
         // THEN: error payload
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: name");
     }
 
     #[test]
@@ -3154,7 +3111,7 @@ mod tests {
         let result = super::handle_ax_record(&json!({}));
         // THEN: error with message
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("app"));
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
@@ -3727,7 +3684,7 @@ mod tests {
         let result = super::handle_ax_analyze(&json!({}), &registry);
         // THEN: error mentions missing field
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
@@ -3813,7 +3770,7 @@ mod tests {
         let result = super::handle_ax_run_script(&json!({}));
         // THEN: error payload with descriptive message
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("script"));
+        assert_eq!(result.content[0].text, "Missing required field: script");
     }
 
     #[test]
@@ -4203,7 +4160,7 @@ mod tests {
         let result = super::handle_ax_visual_diff(&json!({"baseline": "SGVsbG8="}), &registry);
         // THEN: error mentions missing field
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
@@ -4214,7 +4171,7 @@ mod tests {
         let result = super::handle_ax_visual_diff(&json!({"app": "Safari"}), &registry);
         // THEN: error mentions missing field
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: baseline");
     }
 
     #[test]
@@ -4442,7 +4399,7 @@ mod tests {
         let result = super::handle_ax_a11y_audit(&json!({}), &registry);
         // THEN: error mentions missing field
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("Missing"));
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
