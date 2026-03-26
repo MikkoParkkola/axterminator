@@ -13,7 +13,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 
 use crate::app::AXApp;
-use crate::mcp::elicitation::is_destructive_element;
+use crate::mcp::action_safety::{is_element_destructive, require_destructive_confirmation};
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tools::AppRegistry;
 
@@ -154,37 +154,20 @@ pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => {
                 let destructive = is_element_destructive(&el);
-                if destructive && !confirmed {
-                    return destructive_gate_error(&query);
+                if let Err(error) = require_destructive_confirmation(
+                    &query,
+                    destructive,
+                    confirmed,
+                    "ax_click",
+                    "clicking",
+                ) {
+                    return error;
                 }
                 perform_click(&el, click_type, mode, &query, destructive)
             }
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
         })
         .unwrap_or_else(ToolCallResult::error)
-}
-
-/// Return `true` when the element's title or description contains a destructive keyword.
-fn is_element_destructive(el: &crate::AXElement) -> bool {
-    let title_hit = el
-        .title()
-        .as_deref()
-        .map(is_destructive_element)
-        .unwrap_or(false);
-    let desc_hit = el
-        .description()
-        .as_deref()
-        .map(is_destructive_element)
-        .unwrap_or(false);
-    title_hit || desc_hit
-}
-
-/// Build the error returned when a destructive click is blocked.
-fn destructive_gate_error(query: &str) -> ToolCallResult {
-    ToolCallResult::error(format!(
-        "Destructive action detected: clicking '{query}'. \
-         Re-call ax_click with confirm=true to proceed."
-    ))
 }
 
 /// Execute the click and build the success response.
@@ -851,32 +834,6 @@ mod tests {
     // ------------------------------------------------------------------
     // Destructive gate helpers
     // ------------------------------------------------------------------
-
-    #[test]
-    fn destructive_gate_error_contains_query_and_confirm_hint() {
-        // GIVEN: a destructive element query
-        // WHEN: gate error is built
-        let result = destructive_gate_error("Delete All Files");
-        // THEN: error text names the query and the escape hatch
-        assert!(result.is_error);
-        let msg = &result.content[0].text;
-        assert!(
-            msg.contains("Delete All Files"),
-            "query missing from: {msg}"
-        );
-        assert!(
-            msg.contains("confirm=true"),
-            "confirm hint missing from: {msg}"
-        );
-    }
-
-    #[test]
-    fn destructive_gate_error_is_error_result() {
-        // GIVEN/WHEN: any query
-        let result = destructive_gate_error("Reset");
-        // THEN: is_error flag is set
-        assert!(result.is_error);
-    }
 
     #[test]
     fn confirm_arg_false_is_treated_as_unconfirmed() {
