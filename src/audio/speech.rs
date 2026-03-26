@@ -340,29 +340,34 @@ fn transcribe_with_sf_speech(audio: &AudioData, locale: &str) -> Result<String, 
 
 /// Write `bytes` to a `0600`-permissioned temp file under `/tmp`.
 ///
-/// Each call produces a unique path by combining the process ID with the
-/// current time in nanoseconds, making concurrent calls safe within the
-/// same process.
+/// Each call produces a unique path by combining the process ID, the current
+/// time, and a process-local sequence number, then opens it with `create_new`
+/// so concurrent callers cannot clobber one another's temp files.
 fn write_temp_wav(bytes: &[u8]) -> Result<String, std::io::Error> {
     use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+    static NEXT_TEMP_WAV_ID: AtomicU64 = AtomicU64::new(0);
+
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
+        .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!(
-        "/tmp/axterminator_audio_{}_{}.wav",
+    let unique = NEXT_TEMP_WAV_ID.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "axterminator_audio_{}_{}_{}.wav",
         std::process::id(),
-        nanos
-    );
+        nanos,
+        unique
+    ));
     let mut file = std::fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(0o600)
         .open(&path)?;
     std::io::Write::write_all(&mut file, bytes)?;
-    Ok(path)
+    file.sync_all()?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Run `SFSpeechRecognizer` on a WAV file at `path`.

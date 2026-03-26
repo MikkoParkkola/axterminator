@@ -2014,6 +2014,20 @@ fn handle_ax_undo(args: &Value) -> ToolCallResult {
     };
     let count = args["count"].as_u64().unwrap_or(1).clamp(1, 50) as usize;
 
+    dispatch_ax_undo(app_name, count);
+
+    ToolCallResult::ok(
+        json!({
+            "app":    app_name,
+            "undone": count,
+            "ok":     true
+        })
+        .to_string(),
+    )
+}
+
+#[cfg(not(test))]
+fn dispatch_ax_undo(app_name: &str, count: usize) {
     let activate = format!("tell application \"{app_name}\" to activate");
     for _ in 0..count {
         std::process::Command::new("osascript")
@@ -2029,15 +2043,12 @@ fn handle_ax_undo(args: &Value) -> ToolCallResult {
             .ok();
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+}
 
-    ToolCallResult::ok(
-        json!({
-            "app":    app_name,
-            "undone": count,
-            "ok":     true
-        })
-        .to_string(),
-    )
+#[cfg(test)]
+fn dispatch_ax_undo(_app_name: &str, _count: usize) {
+    // Unit tests validate argument handling and result shaping only; they must
+    // not emit live keystrokes into the user's session.
 }
 
 // ---------------------------------------------------------------------------
