@@ -176,23 +176,8 @@ impl AXApp {
         // Parse the query into search criteria
         let criteria = SearchCriteria::parse(query)?;
 
-        // Try cache first (disabled temporarily)
-        // let cache_key = crate::cache::CacheKey {
-        //     pid: self.pid,
-        //     query: query.to_string(),
-        // };
-        //
-        // if let Some(cached) = crate::cache::global_cache().get(&cache_key) {
-        //     if cached.exists() {
-        //         return Ok(cached);
-        //     }
-        // }
-
         // Perform breadth-first search of accessibility tree
         let result = self.breadth_first_search(&criteria)?;
-
-        // Cache the result (disabled temporarily)
-        // crate::cache::global_cache().put(cache_key, result.clone());
 
         Ok(result)
     }
