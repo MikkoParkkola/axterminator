@@ -3924,7 +3924,7 @@ mod tests {
 
     #[test]
     fn ax_clipboard_write_without_text_returns_error() {
-        let _guard = crate::mcp::security::security_mode_test_lock()
+        let _guard = crate::test_sync::security_mode_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: action=write but no text field, not sandboxed
@@ -3938,7 +3938,7 @@ mod tests {
 
     #[test]
     fn ax_clipboard_write_blocked_in_sandboxed_mode() {
-        let _guard = crate::mcp::security::security_mode_test_lock()
+        let _guard = crate::test_sync::security_mode_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: sandboxed mode
@@ -3982,7 +3982,7 @@ mod tests {
 
     #[test]
     fn ax_session_info_security_mode_reflects_env() {
-        let _guard = crate::mcp::security::security_mode_test_lock()
+        let _guard = crate::test_sync::security_mode_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: sandboxed mode set in the environment

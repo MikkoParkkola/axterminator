@@ -403,7 +403,7 @@ mod tests {
     use super::*;
 
     fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
-        crate::context::appkit_test_lock()
+        crate::test_sync::appkit_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner())
     }
@@ -902,7 +902,7 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_status_no_session_returns_running_false() {
-        let _guard = crate::mcp::tools_capture::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: no active capture session
@@ -923,7 +923,7 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_transcription_no_session_returns_empty_segments() {
-        let _guard = crate::mcp::tools_capture::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: no active session
@@ -944,7 +944,7 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_screen_no_session_returns_running_false_json() {
-        let _guard = crate::mcp::tools_capture::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: no active session
@@ -964,7 +964,7 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_status_active_session_returns_running_true() {
-        let _guard = crate::mcp::tools_capture::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: started idle session (no audio/screen to avoid hardware)
@@ -986,7 +986,7 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_transcription_active_session_returns_running_true() {
-        let _guard = crate::mcp::tools_capture::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: started idle session
@@ -1009,7 +1009,7 @@ mod tests {
     #[cfg(feature = "audio")]
     #[test]
     fn read_capture_screen_active_session_no_frame_returns_json() {
-        let _guard = crate::mcp::tools_capture::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: started idle session (screen=false so no frame is captured)

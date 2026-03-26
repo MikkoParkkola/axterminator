@@ -52,6 +52,8 @@ mod router;
 pub mod scene;
 pub mod semantic_find;
 mod sync;
+#[cfg(test)]
+mod test_sync;
 pub mod triple_understanding;
 
 pub use accessibility::*;

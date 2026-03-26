@@ -106,12 +106,6 @@ impl SecurityMode {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn security_mode_test_lock() -> &'static std::sync::Mutex<()> {
-    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| std::sync::Mutex::new(()))
-}
-
 /// Tools that execute arbitrary scripts or shell commands.
 fn is_script_tool(name: &str) -> bool {
     matches!(

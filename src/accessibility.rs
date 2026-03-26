@@ -574,17 +574,6 @@ pub mod roles {
 mod tests {
     use super::*;
 
-    /// Serialise tests that create and release AXUIElements.
-    ///
-    /// `AXUIElementCreateSystemWide()` returns a process-global singleton on macOS.
-    /// Concurrent `CFRelease` calls from multiple test threads corrupt the
-    /// reference count, causing a SIGSEGV during process teardown.  This mutex
-    /// forces such tests to run one at a time.
-    fn ax_element_test_lock() -> &'static std::sync::Mutex<()> {
-        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        LOCK.get_or_init(|| std::sync::Mutex::new(()))
-    }
-
     #[test]
     fn test_check_accessibility() {
         // This will return true if running with accessibility permissions
@@ -593,7 +582,7 @@ mod tests {
 
     #[test]
     fn test_create_system_wide_element_requires_permissions() {
-        let _guard = ax_element_test_lock()
+        let _guard = crate::test_sync::accessibility_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: System may or may not have accessibility enabled
@@ -615,7 +604,7 @@ mod tests {
 
     #[test]
     fn test_create_application_element_requires_valid_pid() {
-        let _guard = ax_element_test_lock()
+        let _guard = crate::test_sync::accessibility_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility permissions (or test will skip)
@@ -878,7 +867,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_system_wide_element_integration() {
-        let _guard = ax_element_test_lock()
+        let _guard = crate::test_sync::accessibility_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility enabled (skip if not)
@@ -908,7 +897,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_get_children_integration() {
-        let _guard = ax_element_test_lock()
+        let _guard = crate::test_sync::accessibility_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility enabled (skip if not)
@@ -950,7 +939,7 @@ mod tests {
 
     #[test]
     fn test_memory_safety_double_release() {
-        let _guard = ax_element_test_lock()
+        let _guard = crate::test_sync::accessibility_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: Accessibility enabled (skip if not)

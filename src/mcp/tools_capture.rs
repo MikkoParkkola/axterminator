@@ -443,24 +443,6 @@ fn parse_capture_config(args: &Value) -> CaptureConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
-/// A process-wide mutex that serialises all tests that touch the global
-/// capture session singleton.  Because the singleton is shared across test
-/// threads, tests that start/stop a session must hold this lock for their
-/// entire duration to prevent races with other tests that assert on the
-/// no-session state.
-///
-/// Exposed as `pub(crate)` so that sibling test modules (e.g.
-/// `resources::tests`) can acquire the same lock.
-#[cfg(test)]
-pub(crate) fn session_test_lock() -> &'static std::sync::Mutex<()> {
-    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| std::sync::Mutex::new(()))
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -624,7 +606,7 @@ mod tests {
 
     #[test]
     fn handle_ax_capture_status_returns_diff_counters_when_session_active() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: active session (no audio, no screen — counters start at 0)
@@ -654,7 +636,7 @@ mod tests {
 
     #[test]
     fn handle_ax_capture_status_no_session_returns_running_false() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running (stop any lingering global state).
@@ -672,7 +654,7 @@ mod tests {
 
     #[test]
     fn handle_ax_get_transcription_no_session_returns_error() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running.
@@ -685,7 +667,7 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_no_session_returns_stopped_false() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // Ensure no session is running.
@@ -699,7 +681,7 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_wrong_session_id_returns_error() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: an active session
@@ -726,7 +708,7 @@ mod tests {
 
     #[test]
     fn handle_ax_stop_capture_correct_session_id_stops_session() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: an active session
@@ -757,7 +739,7 @@ mod tests {
 
     #[test]
     fn start_stop_lifecycle_produces_valid_json() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: start a session with no audio (avoids hardware dependency)
@@ -796,7 +778,7 @@ mod tests {
 
     #[test]
     fn start_capture_twice_replaces_old_session() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         // GIVEN: start first session
@@ -848,7 +830,7 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_capture_status_dispatches() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         use crate::mcp::tools::AppRegistry;
@@ -871,7 +853,7 @@ mod tests {
 
     #[test]
     fn call_tool_extended_ax_get_transcription_no_session_returns_error() {
-        let _guard = super::session_test_lock()
+        let _guard = crate::test_sync::capture_session_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         use crate::mcp::tools::AppRegistry;

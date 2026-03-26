@@ -1376,7 +1376,7 @@ fn resources_subscribe_missing_params_returns_error() {
 
 #[test]
 fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
-    let _guard = crate::mcp::security::security_mode_test_lock()
+    let _guard = crate::test_sync::security_mode_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     // GIVEN: sandboxed mode server — the env var is set before constructing
@@ -1388,10 +1388,8 @@ fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
     // The test passes `AXTERMINATOR_SECURITY_MODE` only for the narrow window
     // of Server construction.
     //
-    // IMPORTANT: do NOT run this test in parallel with other tests that also
-    // set AXTERMINATOR_SECURITY_MODE. The standard `cargo test` runner
-    // serialises tests within a process on a per-module basis, so the risk of
-    // interference with other *server_tests.rs* tests is low.
+    // Tests that mutate AXTERMINATOR_SECURITY_MODE share a global mutex so the
+    // env var only changes for the narrow server-construction window.
     #[allow(unsafe_code)]
     unsafe {
         std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
@@ -1845,7 +1843,7 @@ fn resources_subscribe_capture_screen_stores_uri() {
 #[cfg(feature = "audio")]
 #[test]
 fn ax_start_capture_subscribed_emits_capture_status_notification() {
-    let _guard = crate::mcp::tools_capture::session_test_lock()
+    let _guard = crate::test_sync::capture_session_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     // GIVEN: initialized server subscribed to all three capture URIs
@@ -1897,7 +1895,7 @@ fn ax_start_capture_subscribed_emits_capture_status_notification() {
 #[cfg(feature = "audio")]
 #[test]
 fn ax_stop_capture_subscribed_emits_capture_status_notification() {
-    let _guard = crate::mcp::tools_capture::session_test_lock()
+    let _guard = crate::test_sync::capture_session_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     // GIVEN: initialized server with active session, subscribed to capture/status

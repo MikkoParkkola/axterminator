@@ -531,7 +531,7 @@ mod tests {
     use super::*;
 
     fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
-        crate::context::appkit_test_lock()
+        crate::test_sync::appkit_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner())
     }
