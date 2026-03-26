@@ -283,6 +283,10 @@ mod tests {
         let mut cfg = WatchConfig::default();
         let cfg2 = cfg.clone();
         cfg.audio_enabled = true;
+        assert!(
+            cfg.audio_enabled,
+            "original should reflect its own mutation"
+        );
         assert!(!cfg2.audio_enabled, "clone must be independent");
     }
 

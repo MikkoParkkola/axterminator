@@ -218,6 +218,12 @@ pub(crate) fn handle_ax_location(args: &Value) -> ToolCallResult {
 mod tests {
     use super::*;
 
+    fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        crate::context::appkit_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn context_tools_returns_expected_count() {
         let tools = context_tools();
@@ -239,6 +245,7 @@ mod tests {
 
     #[test]
     fn handle_system_context_returns_valid_json() {
+        let _guard = appkit_test_guard();
         let result = handle_ax_system_context();
         assert!(
             !result.is_error,
@@ -252,6 +259,7 @@ mod tests {
 
     #[test]
     fn handle_clipboard_read_returns_valid_json() {
+        let _guard = appkit_test_guard();
         let result = handle_ax_clipboard(&json!({}));
         assert!(
             !result.is_error,
@@ -264,6 +272,7 @@ mod tests {
 
     #[test]
     fn handle_clipboard_write_then_read() {
+        let _guard = appkit_test_guard();
         let test_text = "ax_context_test_67890";
         let write_result = handle_ax_clipboard(&json!({ "text": test_text }));
         assert!(!write_result.is_error);

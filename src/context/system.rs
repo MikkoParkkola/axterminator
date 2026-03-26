@@ -530,8 +530,15 @@ fn frontmost_app_name() -> Option<String> {
 mod tests {
     use super::*;
 
+    fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        crate::context::appkit_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn collect_system_context_does_not_panic() {
+        let _guard = appkit_test_guard();
         let ctx = collect_system_context();
         // At minimum these should always have values on macOS.
         assert!(!ctx.macos_version.is_empty());
@@ -544,6 +551,7 @@ mod tests {
 
     #[test]
     fn system_context_serializes_to_json() {
+        let _guard = appkit_test_guard();
         let ctx = collect_system_context();
         let json = serde_json::to_string(&ctx).unwrap();
         assert!(json.contains("macos_version"));
@@ -553,6 +561,7 @@ mod tests {
 
     #[test]
     fn screen_dimensions_are_positive() {
+        let _guard = appkit_test_guard();
         let w = screen_width();
         let h = screen_height();
         // CI might not have a display, but on real macOS these should be > 0.
@@ -564,6 +573,7 @@ mod tests {
 
     #[test]
     fn dark_mode_returns_bool() {
+        let _guard = appkit_test_guard();
         // Just verify it doesn't panic.
         let _ = is_dark_mode();
     }

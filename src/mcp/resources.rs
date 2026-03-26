@@ -402,6 +402,12 @@ pub fn parse_app_name(uri: &str) -> Result<&str, ResourceError> {
 mod tests {
     use super::*;
 
+    fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        crate::context::appkit_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     // -----------------------------------------------------------------------
     // parse_app_name
     // -----------------------------------------------------------------------
@@ -487,6 +493,7 @@ mod tests {
 
     #[test]
     fn read_clipboard_returns_json_with_text_field() {
+        let _guard = appkit_test_guard();
         // GIVEN: an empty registry (clipboard needs no connected apps)
         let registry = Arc::new(AppRegistry::default());
         // WHEN: reading the clipboard resource
@@ -505,6 +512,7 @@ mod tests {
 
     #[test]
     fn read_clipboard_mime_type_is_application_json() {
+        let _guard = appkit_test_guard();
         let registry = Arc::new(AppRegistry::default());
         let result = read_resource("axterminator://clipboard", &registry).unwrap();
         assert_eq!(result.contents[0].mime_type, "application/json");
@@ -654,6 +662,7 @@ mod tests {
 
     #[test]
     fn read_system_displays_returns_valid_json() {
+        let _guard = appkit_test_guard();
         // GIVEN: an empty registry
         let registry = Arc::new(AppRegistry::default());
         // WHEN: reading the displays resource
@@ -670,6 +679,7 @@ mod tests {
 
     #[test]
     fn read_system_displays_each_entry_has_required_fields() {
+        let _guard = appkit_test_guard();
         let registry = Arc::new(AppRegistry::default());
         let result = read_resource("axterminator://system/displays", &registry).unwrap();
         let text = result.contents[0].text.as_ref().unwrap();
@@ -686,6 +696,7 @@ mod tests {
 
     #[test]
     fn read_system_displays_exactly_one_primary() {
+        let _guard = appkit_test_guard();
         let registry = Arc::new(AppRegistry::default());
         let result = read_resource("axterminator://system/displays", &registry).unwrap();
         let text = result.contents[0].text.as_ref().unwrap();
@@ -701,6 +712,7 @@ mod tests {
 
     #[test]
     fn read_system_displays_primary_has_non_negative_x() {
+        let _guard = appkit_test_guard();
         // Primary display is always at (0,0) in macOS coordinate space.
         let registry = Arc::new(AppRegistry::default());
         let result = read_resource("axterminator://system/displays", &registry).unwrap();
@@ -1046,7 +1058,10 @@ mod tests {
             .resources
             .iter()
             .find(|r| r.uri == "axterminator://guide/quickstart");
-        assert!(entry.is_some(), "guide/quickstart must be in static resource list");
+        assert!(
+            entry.is_some(),
+            "guide/quickstart must be in static resource list"
+        );
         assert_eq!(entry.unwrap().mime_type, "text/markdown");
     }
 
@@ -1059,7 +1074,10 @@ mod tests {
             .resources
             .iter()
             .find(|r| r.uri == "axterminator://guide/patterns");
-        assert!(entry.is_some(), "guide/patterns must be in static resource list");
+        assert!(
+            entry.is_some(),
+            "guide/patterns must be in static resource list"
+        );
         assert_eq!(entry.unwrap().mime_type, "text/markdown");
     }
 
@@ -1072,7 +1090,10 @@ mod tests {
             .resources
             .iter()
             .find(|r| r.uri == "axterminator://guide/audio");
-        assert!(entry.is_some(), "guide/audio must be in static resource list");
+        assert!(
+            entry.is_some(),
+            "guide/audio must be in static resource list"
+        );
         assert_eq!(entry.unwrap().mime_type, "text/markdown");
     }
 
@@ -1105,8 +1126,14 @@ mod tests {
         // THEN: returns Ok with content covering at least 5 patterns
         let result = result.expect("read_guide_patterns must succeed");
         let text = result.contents[0].text.as_deref().unwrap_or("");
-        assert!(text.contains("Pattern 1"), "patterns guide must contain Pattern 1");
-        assert!(text.contains("Pattern 5"), "patterns guide must contain Pattern 5");
+        assert!(
+            text.contains("Pattern 1"),
+            "patterns guide must contain Pattern 1"
+        );
+        assert!(
+            text.contains("Pattern 5"),
+            "patterns guide must contain Pattern 5"
+        );
     }
 
     #[test]
@@ -1118,8 +1145,17 @@ mod tests {
         // THEN: returns Ok with content describing the capture lifecycle
         let result = result.expect("read_guide_audio must succeed");
         let text = result.contents[0].text.as_deref().unwrap_or("");
-        assert!(text.contains("ax_start_capture"), "audio guide must mention ax_start_capture");
-        assert!(text.contains("ax_stop_capture"), "audio guide must mention ax_stop_capture");
-        assert!(text.contains("ax_get_transcription"), "audio guide must mention ax_get_transcription");
+        assert!(
+            text.contains("ax_start_capture"),
+            "audio guide must mention ax_start_capture"
+        );
+        assert!(
+            text.contains("ax_stop_capture"),
+            "audio guide must mention ax_stop_capture"
+        );
+        assert!(
+            text.contains("ax_get_transcription"),
+            "audio guide must mention ax_get_transcription"
+        );
     }
 }

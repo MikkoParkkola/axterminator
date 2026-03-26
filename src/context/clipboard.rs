@@ -169,15 +169,22 @@ pub fn write_clipboard(text: &str) -> Result<i64, String> {
 mod tests {
     use super::*;
 
+    fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        crate::context::appkit_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn read_clipboard_returns_content() {
+        let _guard = appkit_test_guard();
         // Should not panic regardless of clipboard state.
-        let content = read_clipboard();
-        assert!(content.item_count >= 0);
+        let _content = read_clipboard();
     }
 
     #[test]
     fn clipboard_content_serializes() {
+        let _guard = appkit_test_guard();
         let content = read_clipboard();
         let json = serde_json::to_string(&content).unwrap();
         assert!(json.contains("change_count"));
@@ -185,6 +192,7 @@ mod tests {
 
     #[test]
     fn write_then_read_clipboard_round_trips() {
+        let _guard = appkit_test_guard();
         let test_text = "axterminator_clipboard_test_12345";
         let result = write_clipboard(test_text);
         assert!(result.is_ok(), "write failed: {:?}", result);

@@ -881,7 +881,7 @@ fn client_supports_sampling_false_by_default_before_initialize() {
 }
 
 #[test]
-fn sampling_createMessage_is_method_not_found_from_server_side() {
+fn sampling_create_message_is_method_not_found_from_server_side() {
     // GIVEN: initialized server — sampling/createMessage is a CLIENT-to-LLM
     //        call, not a server method. The server should not handle it.
     let mut s = Server::new();
@@ -1111,34 +1111,65 @@ fn prompts_get_analyze_app_resolves() {
 // Resources: exact static + template counts (default features)
 // -----------------------------------------------------------------------
 
+fn expected_static_resource_uris() -> Vec<&'static str> {
+    let mut uris = vec![
+        "axterminator://system/status",
+        "axterminator://system/displays",
+        "axterminator://apps",
+        "axterminator://clipboard",
+        "axterminator://workflows",
+        "axterminator://guide/quickstart",
+        "axterminator://guide/patterns",
+        "axterminator://guide/audio",
+        "axterminator://profiles",
+    ];
+
+    #[cfg(feature = "spaces")]
+    uris.push("axterminator://spaces");
+
+    #[cfg(feature = "audio")]
+    uris.extend([
+        "axterminator://audio/devices",
+        "axterminator://capture/transcription",
+        "axterminator://capture/screen",
+        "axterminator://capture/status",
+    ]);
+
+    #[cfg(feature = "camera")]
+    uris.push("axterminator://camera/devices");
+
+    uris
+}
+
+fn expected_resource_template_uris() -> [&'static str; 4] {
+    [
+        "axterminator://app/{name}/tree",
+        "axterminator://app/{name}/screenshot",
+        "axterminator://app/{name}/state",
+        "axterminator://app/{name}/query/{question}",
+    ]
+}
+
 #[test]
-fn resources_list_returns_six_static_resources_with_default_features() {
+fn resources_list_returns_expected_static_resources() {
     // GIVEN: initialized server
     let mut s = Server::new();
     initialize_server(&mut s);
     // WHEN: resources/list
     let v = send(&mut s, 111, "resources/list", None);
     let resources = v["result"]["resources"].as_array().unwrap();
-    // THEN: exactly 6 static resources in the base build:
-    //   system/status, system/displays, apps, clipboard, workflows, profiles
-    // (+1 spaces when enabled)
-    // (+4 audio: audio/devices, capture/transcription, capture/screen, capture/status)
-    // (+1 camera when enabled)
-    let base: usize = 6;
-    let extra_spaces: usize = if cfg!(feature = "spaces") { 1 } else { 0 };
-    let extra_audio: usize = if cfg!(feature = "audio") { 4 } else { 0 };
-    let extra_camera: usize = if cfg!(feature = "camera") { 1 } else { 0 };
-    let expected = base + extra_spaces + extra_audio + extra_camera;
+    let expected = expected_static_resource_uris();
     assert_eq!(
         resources.len(),
-        expected,
-        "expected {expected} static resources, got {}",
+        expected.len(),
+        "expected {} static resources, got {}",
+        expected.len(),
         resources.len()
     );
 }
 
 #[test]
-fn resources_list_contains_all_six_base_static_uris() {
+fn resources_list_contains_all_expected_static_uris() {
     // GIVEN: initialized server
     let mut s = Server::new();
     initialize_server(&mut s);
@@ -1149,18 +1180,9 @@ fn resources_list_contains_all_six_base_static_uris() {
         .iter()
         .map(|r| r["uri"].as_str().unwrap())
         .collect();
-    // THEN: all six base URIs are always present regardless of features
-    let base_uris = [
-        "axterminator://system/status",
-        "axterminator://system/displays",
-        "axterminator://apps",
-        "axterminator://clipboard",
-        "axterminator://workflows",
-        "axterminator://profiles",
-    ];
-    for uri in &base_uris {
+    for uri in expected_static_resource_uris() {
         assert!(
-            uris.contains(uri),
+            uris.contains(&uri),
             "static resource '{uri}' missing from resources/list; found: {uris:?}"
         );
     }
@@ -1174,11 +1196,12 @@ fn resources_templates_list_returns_exactly_four_templates() {
     // WHEN: resources/templates/list
     let v = send(&mut s, 113, "resources/templates/list", None);
     let templates = v["result"]["resourceTemplates"].as_array().unwrap();
-    // THEN: exactly 4 URI templates
+    let expected = expected_resource_template_uris();
     assert_eq!(
         templates.len(),
-        4,
-        "expected 4 resource templates, got {}",
+        expected.len(),
+        "expected {} resource templates, got {}",
+        expected.len(),
         templates.len()
     );
 }
@@ -1195,15 +1218,9 @@ fn resources_templates_list_contains_all_four_template_uris() {
         .iter()
         .map(|t| t["uriTemplate"].as_str().unwrap())
         .collect();
-    let expected_templates = [
-        "axterminator://app/{name}/tree",
-        "axterminator://app/{name}/screenshot",
-        "axterminator://app/{name}/state",
-        "axterminator://app/{name}/query/{question}",
-    ];
-    for tmpl in &expected_templates {
+    for tmpl in expected_resource_template_uris() {
         assert!(
-            tmpl_uris.contains(tmpl),
+            tmpl_uris.contains(&tmpl),
             "resource template '{tmpl}' missing; found: {tmpl_uris:?}"
         );
     }
