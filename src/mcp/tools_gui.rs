@@ -356,14 +356,8 @@ pub(crate) fn tool_ax_assert() -> Tool {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_optional_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
-    let direction = match extract_required_string_field(args, "direction") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_optional_query(args));
+    let direction = extract_or_return!(extract_required_string_field(args, "direction"));
     let amount = extract_clamped_u64_field_or(args, "amount", 3, 1, 100) as u32;
 
     registry
@@ -411,14 +405,8 @@ pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
 }
 
 pub(crate) fn handle_key_press(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let app_name = match extract_required_string_field(args, "app") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
-    let keys_str = match extract_required_string_field(args, "keys") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
+    let keys_str = extract_or_return!(extract_required_string_field(args, "keys"));
 
     registry
         .with_app(&app_name, |app| {
@@ -431,10 +419,7 @@ pub(crate) fn handle_key_press(args: &Value, registry: &Arc<AppRegistry>) -> Too
 }
 
 pub(crate) fn handle_get_attributes(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
@@ -463,10 +448,7 @@ pub(crate) fn handle_get_tree<W: Write>(
     registry: &Arc<AppRegistry>,
     out: &mut W,
 ) -> ToolCallResult {
-    let (app_name, query) = match extract_app_optional_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_optional_query(args));
 
     // When format == "llm", skip the element tree entirely and return a
     // token-optimised CopilotState summary built from the live AX tree.
@@ -531,10 +513,7 @@ pub(crate) fn handle_list_apps() -> ToolCallResult {
 }
 
 pub(crate) fn handle_drag(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, from_query, to_query) = match extract_app_from_to_queries(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, from_query, to_query) = extract_or_return!(extract_app_from_to_queries(args));
 
     registry
         .with_app(&app_name, |app| {
@@ -569,18 +548,9 @@ pub(crate) fn handle_drag(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
 }
 
 pub(crate) fn handle_assert(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
-    let property = match extract_required_string_field(args, "property") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
-    let expected = match extract_required_string_field(args, "expected") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
+    let property = extract_or_return!(extract_required_string_field(args, "property"));
+    let expected = extract_or_return!(extract_required_string_field(args, "expected"));
 
     registry
         .with_app(&app_name, |app| {
@@ -723,8 +693,8 @@ pub(crate) use crate::mcp::tools_gui_events::{
 };
 pub(crate) use crate::mcp::tools_handlers::{
     extract_app_from_to_queries, extract_app_optional_query, extract_app_query,
-    extract_clamped_u64_field_or, extract_required_string_field, extract_string_field_or,
-    format_bounds,
+    extract_clamped_u64_field_or, extract_or_return, extract_required_string_field,
+    extract_string_field_or, format_bounds,
 };
 // Private helpers used only within this file.
 use crate::mcp::tools_gui_events::{parse_and_post_key_event, post_drag_event, post_scroll_event};

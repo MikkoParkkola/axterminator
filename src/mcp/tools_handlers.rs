@@ -17,6 +17,17 @@ use crate::mcp::action_safety::{is_element_destructive, require_destructive_conf
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tools::AppRegistry;
 
+macro_rules! extract_or_return {
+    ($result:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(error) => return ToolCallResult::error(error),
+        }
+    };
+}
+
+pub(crate) use extract_or_return;
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -70,10 +81,7 @@ pub(crate) fn handle_connect(args: &Value, registry: &Arc<AppRegistry>) -> ToolC
 }
 
 pub(crate) fn handle_find(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
     let timeout_ms = extract_u64_field_or(args, "timeout_ms", 5000);
 
     registry
@@ -141,10 +149,7 @@ fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResul
 }
 
 pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
     let mode_str = extract_string_field_or(args, "mode", "background");
     let click_type = extract_string_field_or(args, "click_type", "single");
     let confirmed = extract_bool_field_or(args, "confirm", false);
@@ -201,10 +206,7 @@ fn perform_click(
 }
 
 pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
     let text = match args["text"].as_str() {
         Some(t) => t.to_string(),
         None => return ToolCallResult::error("Missing required field: text"),
@@ -225,10 +227,7 @@ pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
 }
 
 pub(crate) fn handle_set_value(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
     let value = match args["value"].as_str() {
         Some(v) => v.to_string(),
         None => return ToolCallResult::error("Missing required field: value"),
@@ -246,10 +245,7 @@ pub(crate) fn handle_set_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
 }
 
 pub(crate) fn handle_get_value(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let (app_name, query) = match extract_app_query(args) {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let (app_name, query) = extract_or_return!(extract_app_query(args));
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
@@ -369,14 +365,8 @@ pub(crate) fn handle_find_visual_with_sampling(
     registry: &Arc<AppRegistry>,
     sampling_ctx: crate::mcp::sampling::SamplingContext,
 ) -> ToolCallResult {
-    let app_name = match extract_required_string_field(args, "app") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
-    let description = match extract_required_string_field(args, "description") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
+    let description = extract_or_return!(extract_required_string_field(args, "description"));
 
     registry
         .with_app(&app_name, |app| {
@@ -434,10 +424,7 @@ fn build_find_visual_response(
 }
 
 pub(crate) fn handle_wait_idle(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let app_name = match extract_required_string_field(args, "app") {
-        Ok(v) => v,
-        Err(e) => return ToolCallResult::error(e),
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let timeout_ms = extract_u64_field_or(args, "timeout_ms", 5000);
 
     let start = std::time::Instant::now();
@@ -748,6 +735,18 @@ mod tests {
             extract_app_from_to_queries(&args).unwrap_err(),
             "Missing required field: to_query"
         );
+    }
+
+    #[test]
+    fn extract_or_return_macro_preserves_error_text() {
+        fn extract_app(args: &Value) -> ToolCallResult {
+            let app = extract_or_return!(extract_required_string_field(args, "app"));
+            ToolCallResult::ok_json(json!({ "app": app }))
+        }
+
+        let result = extract_app(&json!({}));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: app");
     }
 
     #[test]
