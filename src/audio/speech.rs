@@ -338,7 +338,7 @@ fn transcribe_with_sf_speech(audio: &AudioData, locale: &str) -> Result<String, 
     result
 }
 
-/// Write `bytes` to a `0600`-permissioned temp file under `/tmp`.
+/// Write `bytes` to a `0600`-permissioned temp file in the system temp directory.
 ///
 /// Each call produces a unique path by combining the process ID, the current
 /// time, and a process-local sequence number, then opens it with `create_new`
