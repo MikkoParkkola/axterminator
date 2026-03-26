@@ -26,7 +26,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Skip tests that require accessibility permissions (not available in CI)
       - run: cargo test --all-features -- --skip accessibility --skip integration
-        continue-on-error: true
 
   fmt:
     runs-on: macos-latest
