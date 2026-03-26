@@ -733,17 +733,19 @@ fn element_center(el: &crate::element::AXElement) -> Option<(f64, f64)> {
     el.bounds().map(|(x, y, w, h)| (x + w / 2.0, y + h / 2.0))
 }
 
-// CGEvent helpers, key-code table, property reader, and arg-extraction live
-// in a sibling module (tools_gui_events) to keep this file under 800 LOC.
+// CGEvent helpers, key-code table, and property reader live in a sibling
+// module (tools_gui_events) to keep this file under 800 LOC.
 //
 // `pub(crate) use` re-exports items so callers can address them as
 // `crate::mcp::tools_gui::*`; it also brings them into local scope.
-// `key_name_to_code` and `list_running_apps` are re-exported for use by the
-// test module in `tools_extended`; they are not used locally in this file.
+// `extract_app_query`, `key_name_to_code`, and `list_running_apps` are
+// re-exported for use by sibling modules and tests; only `extract_app_query`
+// is used locally in this file.
 #[allow(unused_imports)]
 pub(crate) use crate::mcp::tools_gui_events::{
-    extract_app_query, key_name_to_code, list_running_apps, read_element_property, scroll_deltas,
+    key_name_to_code, list_running_apps, read_element_property, scroll_deltas,
 };
+pub(crate) use crate::mcp::tools_handlers::extract_app_query;
 // Private helpers used only within this file.
 use crate::mcp::tools_gui_events::{parse_and_post_key_event, post_drag_event, post_scroll_event};
 

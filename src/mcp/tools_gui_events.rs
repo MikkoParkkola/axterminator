@@ -7,7 +7,7 @@
 //!
 //! Also contains shared value-extraction helpers used across GUI handlers.
 
-use serde_json::{json, Value};
+use serde_json::json;
 
 // ---------------------------------------------------------------------------
 // Running apps enumeration
@@ -284,21 +284,4 @@ pub(crate) fn read_element_property(el: &crate::element::AXElement, property: &s
         "focused" => el.focused().to_string(),
         _ => String::new(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// Shared arg-extraction helper
-// ---------------------------------------------------------------------------
-
-/// Extract `(app, query)` from a tool arguments `Value`.
-pub(crate) fn extract_app_query(args: &Value) -> Result<(String, String), String> {
-    let app = args["app"]
-        .as_str()
-        .ok_or_else(|| "Missing required field: app".to_string())?
-        .to_string();
-    let query = args["query"]
-        .as_str()
-        .ok_or_else(|| "Missing required field: query".to_string())?
-        .to_string();
-    Ok((app, query))
 }
