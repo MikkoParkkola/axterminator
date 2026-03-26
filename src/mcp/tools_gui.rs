@@ -356,14 +356,14 @@ pub(crate) fn tool_ax_assert() -> Tool {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
+    let (app_name, query) = match extract_app_optional_query(args) {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
     let Some(direction) = args["direction"].as_str() else {
         return ToolCallResult::error("Missing required field: direction");
     };
     let amount = args["amount"].as_u64().unwrap_or(3).clamp(1, 100) as u32;
-    let query = args["query"].as_str().map(str::to_string);
 
     registry
         .with_app(&app_name, |app| {
@@ -465,8 +465,9 @@ pub(crate) fn handle_get_tree<W: Write>(
     registry: &Arc<AppRegistry>,
     out: &mut W,
 ) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
+    let (app_name, query) = match extract_app_optional_query(args) {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
 
     // When format == "llm", skip the element tree entirely and return a
@@ -476,7 +477,6 @@ pub(crate) fn handle_get_tree<W: Write>(
     }
 
     let depth = args["depth"].as_u64().unwrap_or(3).clamp(1, 10) as usize;
-    let query = args["query"].as_str().map(str::to_string);
 
     // Emit progress when depth ≥ 2 (otherwise it completes too fast to matter).
     #[allow(clippy::cast_possible_truncation)] // depth is clamped to 1..=10 above
@@ -538,14 +538,9 @@ pub(crate) fn handle_list_apps() -> ToolCallResult {
 }
 
 pub(crate) fn handle_drag(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let Some(from_query) = args["from_query"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: from_query");
-    };
-    let Some(to_query) = args["to_query"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: to_query");
+    let (app_name, from_query, to_query) = match extract_app_from_to_queries(args) {
+        Ok(v) => v,
+        Err(e) => return ToolCallResult::error(e),
     };
 
     registry
@@ -738,14 +733,14 @@ fn element_center(el: &crate::element::AXElement) -> Option<(f64, f64)> {
 //
 // `pub(crate) use` re-exports items so callers can address them as
 // `crate::mcp::tools_gui::*`; it also brings them into local scope.
-// `extract_app_query`, `key_name_to_code`, and `list_running_apps` are
-// re-exported for use by sibling modules and tests; only `extract_app_query`
-// is used locally in this file.
+// GUI helper utilities are re-exported for use by sibling modules and tests.
 #[allow(unused_imports)]
 pub(crate) use crate::mcp::tools_gui_events::{
     key_name_to_code, list_running_apps, read_element_property, scroll_deltas,
 };
-pub(crate) use crate::mcp::tools_handlers::extract_app_query;
+pub(crate) use crate::mcp::tools_handlers::{
+    extract_app_from_to_queries, extract_app_optional_query, extract_app_query,
+};
 // Private helpers used only within this file.
 use crate::mcp::tools_gui_events::{parse_and_post_key_event, post_drag_event, post_scroll_event};
 

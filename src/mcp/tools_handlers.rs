@@ -512,17 +512,38 @@ fn build_locator(
     })
 }
 
+fn extract_required_string_field(args: &Value, field: &str) -> Result<String, String> {
+    args[field]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| format!("Missing required field: {field}"))
+}
+
 /// Extract the mandatory `app` and `query` string fields from an argument object.
 pub(crate) fn extract_app_query(args: &Value) -> Result<(String, String), String> {
-    let app = args["app"]
-        .as_str()
-        .ok_or_else(|| "Missing required field: app".to_string())?
-        .to_string();
-    let query = args["query"]
-        .as_str()
-        .ok_or_else(|| "Missing required field: query".to_string())?
-        .to_string();
-    Ok((app, query))
+    Ok((
+        extract_required_string_field(args, "app")?,
+        extract_required_string_field(args, "query")?,
+    ))
+}
+
+/// Extract the mandatory `app` field plus an optional `query` string field.
+pub(crate) fn extract_app_optional_query(args: &Value) -> Result<(String, Option<String>), String> {
+    Ok((
+        extract_required_string_field(args, "app")?,
+        args["query"].as_str().map(str::to_string),
+    ))
+}
+
+/// Extract the mandatory `app`, `from_query`, and `to_query` string fields.
+pub(crate) fn extract_app_from_to_queries(
+    args: &Value,
+) -> Result<(String, String, String), String> {
+    Ok((
+        extract_required_string_field(args, "app")?,
+        extract_required_string_field(args, "from_query")?,
+        extract_required_string_field(args, "to_query")?,
+    ))
 }
 
 /// Parse an app identifier string into (name, `bundle_id`, pid) for `AXApp::connect`.
@@ -656,13 +677,84 @@ mod tests {
     #[test]
     fn extract_app_query_fails_without_app() {
         let args = json!({"query": "Save"});
-        assert!(extract_app_query(&args).is_err());
+        assert_eq!(
+            extract_app_query(&args).unwrap_err(),
+            "Missing required field: app"
+        );
     }
 
     #[test]
     fn extract_app_query_fails_without_query() {
         let args = json!({"app": "Safari"});
-        assert!(extract_app_query(&args).is_err());
+        assert_eq!(
+            extract_app_query(&args).unwrap_err(),
+            "Missing required field: query"
+        );
+    }
+
+    #[test]
+    fn extract_app_optional_query_succeeds_with_query() {
+        let args = json!({"app": "Safari", "query": "Save"});
+        let (app, query) = extract_app_optional_query(&args).unwrap();
+        assert_eq!(app, "Safari");
+        assert_eq!(query.as_deref(), Some("Save"));
+    }
+
+    #[test]
+    fn extract_app_optional_query_succeeds_without_query() {
+        let args = json!({"app": "Safari"});
+        let (app, query) = extract_app_optional_query(&args).unwrap();
+        assert_eq!(app, "Safari");
+        assert_eq!(query, None);
+    }
+
+    #[test]
+    fn extract_app_optional_query_fails_without_app() {
+        let args = json!({"query": "Save"});
+        assert_eq!(
+            extract_app_optional_query(&args).unwrap_err(),
+            "Missing required field: app"
+        );
+    }
+
+    #[test]
+    fn extract_app_from_to_queries_succeeds_with_valid_args() {
+        let args = json!({
+            "app": "Finder",
+            "from_query": "Downloads",
+            "to_query": "Desktop"
+        });
+        let (app, from_query, to_query) = extract_app_from_to_queries(&args).unwrap();
+        assert_eq!(app, "Finder");
+        assert_eq!(from_query, "Downloads");
+        assert_eq!(to_query, "Desktop");
+    }
+
+    #[test]
+    fn extract_app_from_to_queries_fails_without_app() {
+        let args = json!({"from_query": "Downloads", "to_query": "Desktop"});
+        assert_eq!(
+            extract_app_from_to_queries(&args).unwrap_err(),
+            "Missing required field: app"
+        );
+    }
+
+    #[test]
+    fn extract_app_from_to_queries_fails_without_from_query() {
+        let args = json!({"app": "Finder", "to_query": "Desktop"});
+        assert_eq!(
+            extract_app_from_to_queries(&args).unwrap_err(),
+            "Missing required field: from_query"
+        );
+    }
+
+    #[test]
+    fn extract_app_from_to_queries_fails_without_to_query() {
+        let args = json!({"app": "Finder", "from_query": "Downloads"});
+        assert_eq!(
+            extract_app_from_to_queries(&args).unwrap_err(),
+            "Missing required field: to_query"
+        );
     }
 
     #[test]
