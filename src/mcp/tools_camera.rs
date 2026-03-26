@@ -18,6 +18,17 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "camera")]
+pub(crate) const TOOL_AX_CAMERA_CAPTURE: &str = "ax_camera_capture";
+#[cfg(feature = "camera")]
+pub(crate) const TOOL_AX_GESTURE_DETECT: &str = "ax_gesture_detect";
+#[cfg(feature = "camera")]
+pub(crate) const TOOL_AX_GESTURE_LISTEN: &str = "ax_gesture_listen";
+
+// ---------------------------------------------------------------------------
 // Tool declarations
 // ---------------------------------------------------------------------------
 
@@ -41,7 +52,7 @@ pub fn camera_tools() -> Vec<Tool> {
 #[cfg(feature = "camera")]
 fn tool_ax_camera_capture() -> Tool {
     Tool {
-        name: "ax_camera_capture",
+        name: TOOL_AX_CAMERA_CAPTURE,
         title: "Capture a single camera frame",
         description: "Capture one JPEG frame from the specified camera (default: front-facing \
             FaceTime camera) and return it base64-encoded.\n\
@@ -77,7 +88,7 @@ fn tool_ax_camera_capture() -> Tool {
 #[cfg(feature = "camera")]
 fn tool_ax_gesture_detect() -> Tool {
     Tool {
-        name: "ax_gesture_detect",
+        name: TOOL_AX_GESTURE_DETECT,
         title: "Capture frame and detect hand / face gestures",
         description: "Capture one camera frame then run Vision framework gesture detection \
             on it. Returns all detected gestures with confidence scores.\n\
@@ -121,7 +132,7 @@ fn tool_ax_gesture_detect() -> Tool {
 #[cfg(feature = "camera")]
 fn tool_ax_gesture_listen() -> Tool {
     Tool {
-        name: "ax_gesture_listen",
+        name: TOOL_AX_GESTURE_LISTEN,
         title: "Monitor camera for gestures (up to 60 s)",
         description: "Poll the camera repeatedly until one of the specified gestures is \
             detected or the duration elapses. Returns the first matching gesture or an \

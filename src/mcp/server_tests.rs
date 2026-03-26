@@ -1376,6 +1376,9 @@ fn resources_subscribe_missing_params_returns_error() {
 
 #[test]
 fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
+    let _guard = crate::mcp::security::security_mode_test_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     // GIVEN: sandboxed mode server — the env var is set before constructing
     // the server so SecurityGuard::from_env() picks it up.
     //

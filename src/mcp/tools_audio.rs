@@ -18,6 +18,17 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_LISTEN: &str = "ax_listen";
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_SPEAK: &str = "ax_speak";
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_AUDIO_DEVICES: &str = "ax_audio_devices";
+
+// ---------------------------------------------------------------------------
 // Tool declarations
 // ---------------------------------------------------------------------------
 
@@ -30,7 +41,7 @@ pub(crate) fn audio_tools() -> Vec<Tool> {
 #[cfg(feature = "audio")]
 fn tool_ax_listen() -> Tool {
     Tool {
-        name: "ax_listen",
+        name: TOOL_AX_LISTEN,
         title: "Capture audio and optionally transcribe it",
         description: "Capture audio from the system (microphone or loopback output) for \
             `duration` seconds and return the raw WAV data as base64. When `transcribe` is \
@@ -150,7 +161,7 @@ fn tool_ax_listen() -> Tool {
 #[cfg(feature = "audio")]
 fn tool_ax_speak() -> Tool {
     Tool {
-        name: "ax_speak",
+        name: TOOL_AX_SPEAK,
         title: "Synthesize and play text as speech",
         description: "Speak `text` through the default system audio output using \
             NSSpeechSynthesizer (on-device, no network). Blocks until synthesis \
@@ -186,7 +197,7 @@ fn tool_ax_speak() -> Tool {
 #[cfg(feature = "audio")]
 fn tool_ax_audio_devices() -> Tool {
     Tool {
-        name: "ax_audio_devices",
+        name: TOOL_AX_AUDIO_DEVICES,
         title: "List available audio input/output devices",
         description: "Enumerate all CoreAudio devices on the system with their name, ID, \
             input/output capability, sample rate, and default-device status.\n\

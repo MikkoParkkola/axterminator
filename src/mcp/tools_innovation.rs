@@ -3924,6 +3924,9 @@ mod tests {
 
     #[test]
     fn ax_clipboard_write_without_text_returns_error() {
+        let _guard = crate::mcp::security::security_mode_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: action=write but no text field, not sandboxed
         std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
         // WHEN: dispatching
@@ -3935,6 +3938,9 @@ mod tests {
 
     #[test]
     fn ax_clipboard_write_blocked_in_sandboxed_mode() {
+        let _guard = crate::mcp::security::security_mode_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: sandboxed mode
         std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
         // WHEN: dispatching a write
@@ -3976,6 +3982,9 @@ mod tests {
 
     #[test]
     fn ax_session_info_security_mode_reflects_env() {
+        let _guard = crate::mcp::security::security_mode_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // GIVEN: sandboxed mode set in the environment
         std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
         let registry = Arc::new(AppRegistry::default());

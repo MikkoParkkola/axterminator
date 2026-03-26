@@ -28,6 +28,15 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "docker")]
+pub(crate) const TOOL_AX_BROWSER_LAUNCH: &str = "ax_browser_launch";
+#[cfg(feature = "docker")]
+pub(crate) const TOOL_AX_BROWSER_STOP: &str = "ax_browser_stop";
+
+// ---------------------------------------------------------------------------
 // Tool declarations
 // ---------------------------------------------------------------------------
 
@@ -43,7 +52,7 @@ pub fn docker_tools() -> Vec<Tool> {
 #[cfg(feature = "docker")]
 fn tool_ax_browser_launch() -> Tool {
     Tool {
-        name: "ax_browser_launch",
+        name: TOOL_AX_BROWSER_LAUNCH,
         title: "Launch an isolated browser container",
         description: "Launch a Neko browser container as an isolated, reproducible test target. \
             The container exposes a CDP WebSocket endpoint for scripting and VNC for visual \
@@ -101,7 +110,7 @@ fn tool_ax_browser_launch() -> Tool {
 #[cfg(feature = "docker")]
 fn tool_ax_browser_stop() -> Tool {
     Tool {
-        name: "ax_browser_stop",
+        name: TOOL_AX_BROWSER_STOP,
         title: "Stop and remove a browser container",
         description: "Stop and remove a Neko browser container previously launched with \
             ax_browser_launch. Always call this when the test completes to free resources.",

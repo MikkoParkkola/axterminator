@@ -25,12 +25,24 @@ use crate::mcp::tools::AppRegistry;
 use crate::accessibility::actions;
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+pub(crate) const TOOL_AX_SCROLL: &str = "ax_scroll";
+pub(crate) const TOOL_AX_KEY_PRESS: &str = "ax_key_press";
+pub(crate) const TOOL_AX_GET_ATTRIBUTES: &str = "ax_get_attributes";
+pub(crate) const TOOL_AX_GET_TREE: &str = "ax_get_tree";
+pub(crate) const TOOL_AX_LIST_APPS: &str = "ax_list_apps";
+pub(crate) const TOOL_AX_DRAG: &str = "ax_drag";
+pub(crate) const TOOL_AX_ASSERT: &str = "ax_assert";
+
+// ---------------------------------------------------------------------------
 // Tool declarations
 // ---------------------------------------------------------------------------
 
 pub(crate) fn tool_ax_scroll() -> Tool {
     Tool {
-        name: "ax_scroll",
+        name: TOOL_AX_SCROLL,
         title: "Scroll an element or window",
         description: "Scroll an element (e.g. a list, scroll area, or the app window) in the \
             given direction. Uses the AXIncrement/AXDecrement accessibility action and falls \
@@ -81,7 +93,7 @@ pub(crate) fn tool_ax_scroll() -> Tool {
 
 pub(crate) fn tool_ax_key_press() -> Tool {
     Tool {
-        name: "ax_key_press",
+        name: TOOL_AX_KEY_PRESS,
         title: "Press keyboard keys or shortcuts",
         description: "Simulate a keyboard shortcut or key press in a connected application. \
             Sends events to the application's PID using `CGEventPostToPid` (background-safe).\n\
@@ -125,7 +137,7 @@ pub(crate) fn tool_ax_key_press() -> Tool {
 
 pub(crate) fn tool_ax_get_attributes() -> Tool {
     Tool {
-        name: "ax_get_attributes",
+        name: TOOL_AX_GET_ATTRIBUTES,
         title: "Get all accessibility attributes of an element",
         description: "Read every AX attribute of a matched element and return them as a JSON \
             object. Useful for exploring unknown UIs before writing more targeted queries.\n\
@@ -173,7 +185,7 @@ pub(crate) fn tool_ax_get_attributes() -> Tool {
 
 pub(crate) fn tool_ax_get_tree() -> Tool {
     Tool {
-        name: "ax_get_tree",
+        name: TOOL_AX_GET_TREE,
         title: "Get the element hierarchy tree",
         description: "Walk the accessibility element tree starting from the application root \
             (or a specific element matched by `query`) and return a nested JSON structure.\n\
@@ -236,7 +248,7 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
 
 pub(crate) fn tool_ax_list_apps() -> Tool {
     Tool {
-        name: "ax_list_apps",
+        name: TOOL_AX_LIST_APPS,
         title: "List all accessible running applications",
         description: "Return all running macOS applications that expose an accessibility element. \
             Use this to discover app names and PIDs before calling ax_connect.",
@@ -268,7 +280,7 @@ pub(crate) fn tool_ax_list_apps() -> Tool {
 
 pub(crate) fn tool_ax_drag() -> Tool {
     Tool {
-        name: "ax_drag",
+        name: TOOL_AX_DRAG,
         title: "Drag from one element to another",
         description: "Perform a mouse drag from the centre of `from_query` to the centre of \
             `to_query` using `CGEvent` drag events. Both elements must belong to the same \
@@ -299,7 +311,7 @@ pub(crate) fn tool_ax_drag() -> Tool {
 
 pub(crate) fn tool_ax_assert() -> Tool {
     Tool {
-        name: "ax_assert",
+        name: TOOL_AX_ASSERT,
         title: "Assert an element property against an expected value",
         description: "Verify that a specific accessibility property of a matched element \
             equals an expected string. Returns `passed: true` when the actual value matches, \

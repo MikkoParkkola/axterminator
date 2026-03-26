@@ -12,6 +12,14 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+pub(crate) const TOOL_AX_SYSTEM_CONTEXT: &str = "ax_system_context";
+#[cfg(feature = "context")]
+pub(crate) const TOOL_AX_LOCATION: &str = "ax_location";
+
+// ---------------------------------------------------------------------------
 // Tool declarations
 // ---------------------------------------------------------------------------
 
@@ -29,7 +37,7 @@ pub(crate) fn context_tools() -> Vec<Tool> {
 
 fn tool_ax_system_context() -> Tool {
     Tool {
-        name: "ax_system_context",
+        name: TOOL_AX_SYSTEM_CONTEXT,
         title: "Get full system context snapshot",
         description: "Returns a comprehensive environmental snapshot for AI agent situational \
             awareness. Includes: battery level & power source, dark mode, screen dimensions, \
@@ -116,7 +124,7 @@ fn tool_ax_clipboard() -> Tool {
 #[cfg(feature = "context")]
 fn tool_ax_location() -> Tool {
     Tool {
-        name: "ax_location",
+        name: TOOL_AX_LOCATION,
         title: "Get current GPS location",
         description: "Request the device's current geographic location via CoreLocation.\n\
             \n\

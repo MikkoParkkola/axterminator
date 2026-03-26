@@ -35,6 +35,19 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_START_CAPTURE: &str = "ax_start_capture";
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_STOP_CAPTURE: &str = "ax_stop_capture";
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_GET_TRANSCRIPTION: &str = "ax_get_transcription";
+#[cfg(feature = "audio")]
+pub(crate) const TOOL_AX_CAPTURE_STATUS: &str = "ax_capture_status";
+
+// ---------------------------------------------------------------------------
 // Global session store
 // ---------------------------------------------------------------------------
 
@@ -71,7 +84,7 @@ pub(crate) fn capture_tools() -> Vec<Tool> {
 #[cfg(feature = "audio")]
 fn tool_ax_start_capture() -> Tool {
     Tool {
-        name: "ax_start_capture",
+        name: TOOL_AX_START_CAPTURE,
         title: "Start background screen + audio capture",
         description: "Begin a continuous background capture session that records system audio \
             into a ring buffer and optionally transcribes it on-device via SFSpeechRecognizer. \
@@ -139,7 +152,7 @@ fn tool_ax_start_capture() -> Tool {
 #[cfg(feature = "audio")]
 fn tool_ax_stop_capture() -> Tool {
     Tool {
-        name: "ax_stop_capture",
+        name: TOOL_AX_STOP_CAPTURE,
         title: "Stop a running capture session",
         description: "Stop the active capture session and release all resources. \
             The audio ring buffer and transcription segments are discarded.\n\
@@ -173,7 +186,7 @@ fn tool_ax_stop_capture() -> Tool {
 #[cfg(feature = "audio")]
 fn tool_ax_get_transcription() -> Tool {
     Tool {
-        name: "ax_get_transcription",
+        name: TOOL_AX_GET_TRANSCRIPTION,
         title: "Get recent transcription from the capture buffer",
         description: "Return transcription segments accumulated by the background capture \
             session in the last `since_seconds` seconds.\n\
@@ -226,7 +239,7 @@ fn tool_ax_get_transcription() -> Tool {
 #[cfg(feature = "audio")]
 fn tool_ax_capture_status() -> Tool {
     Tool {
-        name: "ax_capture_status",
+        name: TOOL_AX_CAPTURE_STATUS,
         title: "Query capture session status",
         description: "Return health and fill-level information for the active capture \
             session.\n\

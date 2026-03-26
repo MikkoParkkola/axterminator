@@ -25,6 +25,21 @@ use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::tools::AppRegistry;
 
 // ---------------------------------------------------------------------------
+// Tool names
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "spaces")]
+pub(crate) const TOOL_AX_LIST_SPACES: &str = "ax_list_spaces";
+#[cfg(feature = "spaces")]
+pub(crate) const TOOL_AX_CREATE_SPACE: &str = "ax_create_space";
+#[cfg(feature = "spaces")]
+pub(crate) const TOOL_AX_MOVE_TO_SPACE: &str = "ax_move_to_space";
+#[cfg(feature = "spaces")]
+pub(crate) const TOOL_AX_SWITCH_SPACE: &str = "ax_switch_space";
+#[cfg(feature = "spaces")]
+pub(crate) const TOOL_AX_DESTROY_SPACE: &str = "ax_destroy_space";
+
+// ---------------------------------------------------------------------------
 // Tool declarations
 // ---------------------------------------------------------------------------
 
@@ -47,7 +62,7 @@ pub fn spaces_tools() -> Vec<Tool> {
 #[cfg(feature = "spaces")]
 fn tool_ax_list_spaces() -> Tool {
     Tool {
-        name: "ax_list_spaces",
+        name: TOOL_AX_LIST_SPACES,
         title: "List virtual desktops (Spaces)",
         description: "Enumerate all macOS virtual desktops (Spaces) with their IDs, types \
             (user/fullscreen/system), active flag, and whether each was created by the agent.\n\
@@ -81,7 +96,7 @@ fn tool_ax_list_spaces() -> Tool {
 #[cfg(feature = "spaces")]
 fn tool_ax_create_space() -> Tool {
     Tool {
-        name: "ax_create_space",
+        name: TOOL_AX_CREATE_SPACE,
         title: "Create an isolated agent virtual desktop",
         description: "Create a new macOS virtual desktop (Space) for agent use. The new Space \
             is NOT switched to automatically — the user's current desktop is undisturbed.\n\
@@ -106,7 +121,7 @@ fn tool_ax_create_space() -> Tool {
 #[cfg(feature = "spaces")]
 fn tool_ax_move_to_space() -> Tool {
     Tool {
-        name: "ax_move_to_space",
+        name: TOOL_AX_MOVE_TO_SPACE,
         title: "Move an app's windows to a virtual desktop",
         description: "Move all windows of a connected application to the specified Space.\n\
             Returns the count of windows moved.\n\
@@ -141,7 +156,7 @@ fn tool_ax_move_to_space() -> Tool {
 #[cfg(feature = "spaces")]
 fn tool_ax_switch_space() -> Tool {
     Tool {
-        name: "ax_switch_space",
+        name: TOOL_AX_SWITCH_SPACE,
         title: "Switch the active virtual desktop",
         description: "Switch to the specified Space, making it the visible desktop.\n\
             \n\
@@ -173,7 +188,7 @@ fn tool_ax_switch_space() -> Tool {
 #[cfg(feature = "spaces")]
 fn tool_ax_destroy_space() -> Tool {
     Tool {
-        name: "ax_destroy_space",
+        name: TOOL_AX_DESTROY_SPACE,
         title: "Destroy an agent-created virtual desktop",
         description: "Destroy a Space that was created by `ax_create_space`. Refuses to destroy \
             Spaces created by the user (returns error `not_agent_space`).\n\

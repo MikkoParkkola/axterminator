@@ -103,54 +103,100 @@ pub fn call_tool_extended<W: Write>(
     out: &mut W,
 ) -> Option<ToolCallResult> {
     match name {
-        "ax_scroll" => Some(crate::mcp::tools_gui::handle_scroll(args, registry)),
-        "ax_key_press" => Some(crate::mcp::tools_gui::handle_key_press(args, registry)),
-        "ax_get_attributes" => Some(crate::mcp::tools_gui::handle_get_attributes(args, registry)),
-        "ax_get_tree" => Some(crate::mcp::tools_gui::handle_get_tree(args, registry, out)),
-        "ax_list_apps" => Some(crate::mcp::tools_gui::handle_list_apps()),
-        "ax_drag" => Some(crate::mcp::tools_gui::handle_drag(args, registry)),
-        "ax_assert" => Some(crate::mcp::tools_gui::handle_assert(args, registry)),
+        crate::mcp::tools_gui::TOOL_AX_SCROLL => {
+            Some(crate::mcp::tools_gui::handle_scroll(args, registry))
+        }
+        crate::mcp::tools_gui::TOOL_AX_KEY_PRESS => {
+            Some(crate::mcp::tools_gui::handle_key_press(args, registry))
+        }
+        crate::mcp::tools_gui::TOOL_AX_GET_ATTRIBUTES => {
+            Some(crate::mcp::tools_gui::handle_get_attributes(args, registry))
+        }
+        crate::mcp::tools_gui::TOOL_AX_GET_TREE => {
+            Some(crate::mcp::tools_gui::handle_get_tree(args, registry, out))
+        }
+        crate::mcp::tools_gui::TOOL_AX_LIST_APPS => Some(crate::mcp::tools_gui::handle_list_apps()),
+        crate::mcp::tools_gui::TOOL_AX_DRAG => {
+            Some(crate::mcp::tools_gui::handle_drag(args, registry))
+        }
+        crate::mcp::tools_gui::TOOL_AX_ASSERT => {
+            Some(crate::mcp::tools_gui::handle_assert(args, registry))
+        }
         #[cfg(feature = "spaces")]
-        "ax_list_spaces" => Some(crate::mcp::tools_spaces::handle_ax_list_spaces()),
+        crate::mcp::tools_spaces::TOOL_AX_LIST_SPACES => {
+            Some(crate::mcp::tools_spaces::handle_ax_list_spaces())
+        }
         #[cfg(feature = "spaces")]
-        "ax_create_space" => Some(crate::mcp::tools_spaces::handle_ax_create_space()),
+        crate::mcp::tools_spaces::TOOL_AX_CREATE_SPACE => {
+            Some(crate::mcp::tools_spaces::handle_ax_create_space())
+        }
         #[cfg(feature = "spaces")]
-        "ax_move_to_space" => Some(crate::mcp::tools_spaces::handle_ax_move_to_space(
-            args, registry,
-        )),
+        crate::mcp::tools_spaces::TOOL_AX_MOVE_TO_SPACE => Some(
+            crate::mcp::tools_spaces::handle_ax_move_to_space(args, registry),
+        ),
         #[cfg(feature = "spaces")]
-        "ax_switch_space" => Some(crate::mcp::tools_spaces::handle_ax_switch_space(args)),
+        crate::mcp::tools_spaces::TOOL_AX_SWITCH_SPACE => {
+            Some(crate::mcp::tools_spaces::handle_ax_switch_space(args))
+        }
         #[cfg(feature = "spaces")]
-        "ax_destroy_space" => Some(crate::mcp::tools_spaces::handle_ax_destroy_space(args)),
+        crate::mcp::tools_spaces::TOOL_AX_DESTROY_SPACE => {
+            Some(crate::mcp::tools_spaces::handle_ax_destroy_space(args))
+        }
         #[cfg(feature = "audio")]
-        "ax_listen" => Some(crate::mcp::tools_audio::handle_ax_listen(args)),
+        crate::mcp::tools_audio::TOOL_AX_LISTEN => {
+            Some(crate::mcp::tools_audio::handle_ax_listen(args))
+        }
         #[cfg(feature = "audio")]
-        "ax_speak" => Some(crate::mcp::tools_audio::handle_ax_speak(args)),
+        crate::mcp::tools_audio::TOOL_AX_SPEAK => {
+            Some(crate::mcp::tools_audio::handle_ax_speak(args))
+        }
         #[cfg(feature = "audio")]
-        "ax_audio_devices" => Some(crate::mcp::tools_audio::handle_ax_audio_devices()),
+        crate::mcp::tools_audio::TOOL_AX_AUDIO_DEVICES => {
+            Some(crate::mcp::tools_audio::handle_ax_audio_devices())
+        }
         #[cfg(feature = "audio")]
-        "ax_start_capture" => Some(crate::mcp::tools_capture::handle_ax_start_capture(args)),
+        crate::mcp::tools_capture::TOOL_AX_START_CAPTURE => {
+            Some(crate::mcp::tools_capture::handle_ax_start_capture(args))
+        }
         #[cfg(feature = "audio")]
-        "ax_stop_capture" => Some(crate::mcp::tools_capture::handle_ax_stop_capture(args)),
+        crate::mcp::tools_capture::TOOL_AX_STOP_CAPTURE => {
+            Some(crate::mcp::tools_capture::handle_ax_stop_capture(args))
+        }
         #[cfg(feature = "audio")]
-        "ax_get_transcription" => {
+        crate::mcp::tools_capture::TOOL_AX_GET_TRANSCRIPTION => {
             Some(crate::mcp::tools_capture::handle_ax_get_transcription(args))
         }
         #[cfg(feature = "audio")]
-        "ax_capture_status" => Some(crate::mcp::tools_capture::handle_ax_capture_status()),
+        crate::mcp::tools_capture::TOOL_AX_CAPTURE_STATUS => {
+            Some(crate::mcp::tools_capture::handle_ax_capture_status())
+        }
         #[cfg(feature = "camera")]
-        "ax_camera_capture" => Some(crate::mcp::tools_camera::handle_ax_camera_capture(args)),
+        crate::mcp::tools_camera::TOOL_AX_CAMERA_CAPTURE => {
+            Some(crate::mcp::tools_camera::handle_ax_camera_capture(args))
+        }
         #[cfg(feature = "camera")]
-        "ax_gesture_detect" => Some(crate::mcp::tools_camera::handle_ax_gesture_detect(args)),
+        crate::mcp::tools_camera::TOOL_AX_GESTURE_DETECT => {
+            Some(crate::mcp::tools_camera::handle_ax_gesture_detect(args))
+        }
         #[cfg(feature = "camera")]
-        "ax_gesture_listen" => Some(crate::mcp::tools_camera::handle_ax_gesture_listen(args)),
+        crate::mcp::tools_camera::TOOL_AX_GESTURE_LISTEN => {
+            Some(crate::mcp::tools_camera::handle_ax_gesture_listen(args))
+        }
         #[cfg(feature = "docker")]
-        "ax_browser_launch" => Some(crate::mcp::tools_docker::handle_ax_browser_launch(args)),
+        crate::mcp::tools_docker::TOOL_AX_BROWSER_LAUNCH => {
+            Some(crate::mcp::tools_docker::handle_ax_browser_launch(args))
+        }
         #[cfg(feature = "docker")]
-        "ax_browser_stop" => Some(crate::mcp::tools_docker::handle_ax_browser_stop(args)),
-        "ax_system_context" => Some(crate::mcp::tools_context::handle_ax_system_context()),
+        crate::mcp::tools_docker::TOOL_AX_BROWSER_STOP => {
+            Some(crate::mcp::tools_docker::handle_ax_browser_stop(args))
+        }
+        crate::mcp::tools_context::TOOL_AX_SYSTEM_CONTEXT => {
+            Some(crate::mcp::tools_context::handle_ax_system_context())
+        }
         #[cfg(feature = "context")]
-        "ax_location" => Some(crate::mcp::tools_context::handle_ax_location(args)),
+        crate::mcp::tools_context::TOOL_AX_LOCATION => {
+            Some(crate::mcp::tools_context::handle_ax_location(args))
+        }
         // Watch tools require a WatchState which is not available in the stateless
         // extended dispatcher.  These are dispatched by the server's handle_tools_call
         // via the Server::call_watch_tool helper instead.
