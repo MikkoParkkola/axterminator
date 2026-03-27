@@ -24,6 +24,7 @@ use crate::mcp::args::{
 };
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tools::AppRegistry;
+use crate::mcp::tools_error::{element_not_found, element_not_found_semantic_fallback};
 use crate::mcp::tools_response::ok_found_value;
 
 // ---------------------------------------------------------------------------
@@ -117,9 +118,7 @@ fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResul
     let scene = match crate::intent::scan_scene(app.element) {
         Ok(s) => s,
         Err(_) => {
-            return ToolCallResult::error(format!(
-                "Element not found: '{query}' (semantic fallback also failed)"
-            ))
+            return element_not_found_semantic_fallback(query);
         }
     };
 
@@ -141,7 +140,7 @@ fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResul
         }
     }
 
-    ToolCallResult::error(format!("Element not found: '{query}'"))
+    element_not_found(query)
 }
 
 pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
@@ -166,7 +165,7 @@ pub(crate) fn handle_click(args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
                 }
                 perform_click(&el, click_type, mode, &query, destructive)
             }
-            Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
+            Err(_) => element_not_found(&query),
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -214,7 +213,7 @@ pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
                 Ok(()) => ToolCallResult::ok_json(json!({"typed": true, "char_count": char_count})),
                 Err(e) => ToolCallResult::error(format!("Type failed: {e}")),
             },
-            Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
+            Err(_) => element_not_found(&query),
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -229,7 +228,7 @@ pub(crate) fn handle_set_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
                 Ok(()) => ToolCallResult::ok_json(json!({"set": true, "value": value})),
                 Err(e) => ToolCallResult::error(format!("set_value failed: {e}")),
             },
-            Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
+            Err(_) => element_not_found(&query),
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -240,7 +239,7 @@ pub(crate) fn handle_get_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
             Ok(el) => ok_found_value(el.value()),
-            Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
+            Err(_) => element_not_found(&query),
         })
         .unwrap_or_else(ToolCallResult::error)
 }

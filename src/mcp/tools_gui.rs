@@ -20,6 +20,7 @@ use crate::mcp::annotations;
 use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::tools::AppRegistry;
+use crate::mcp::tools_error::element_not_found;
 use crate::mcp::tools_response::{
     ok_apps, ok_assertion, ok_found_attributes, ok_found_false, ok_found_tree,
 };
@@ -369,7 +370,7 @@ pub(crate) fn handle_scroll(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
             let element = if let Some(ref q) = query {
                 match app.find_native(q, Some(100)) {
                     Ok(el) => Some(el),
-                    Err(_) => return ToolCallResult::error(format!("Element not found: '{q}'")),
+                    Err(_) => return element_not_found(q),
                 }
             } else {
                 None

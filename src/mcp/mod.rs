@@ -54,6 +54,7 @@ pub mod tools_capture;
 pub mod tools_context;
 #[cfg(feature = "docker")]
 pub mod tools_docker;
+pub(crate) mod tools_error;
 pub mod tools_extended;
 pub mod tools_gui;
 pub(crate) mod tools_gui_events;
