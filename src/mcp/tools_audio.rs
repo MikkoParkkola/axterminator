@@ -17,7 +17,9 @@ use crate::mcp::annotations;
 #[cfg(feature = "audio")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "audio")]
-use crate::mcp::tools_handlers::extract_f64_field_or;
+use crate::mcp::tools_handlers::{
+    extract_f64_field_or, extract_or_return, extract_required_string_field,
+};
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -345,9 +347,7 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
 /// Handle `ax_speak` — text-to-speech via NSSpeechSynthesizer.
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_speak(args: &Value) -> ToolCallResult {
-    let Some(text) = args["text"].as_str().map(str::to_string) else {
-        return ToolCallResult::error("Missing required field: text");
-    };
+    let text = extract_or_return!(extract_required_string_field(args, "text"));
 
     match crate::audio::speak(&text) {
         Ok(elapsed) => ToolCallResult::ok(
@@ -462,9 +462,7 @@ mod tests {
         let args = json!({});
         let result = handle_ax_speak(&args);
         assert!(result.is_error);
-        assert!(result.content[0]
-            .text
-            .contains("Missing required field: text"));
+        assert_eq!(result.content[0].text, "Missing required field: text");
     }
 
     #[test]

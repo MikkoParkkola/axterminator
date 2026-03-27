@@ -26,6 +26,8 @@ use serde_json::json;
 use crate::mcp::annotations;
 #[cfg(feature = "docker")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
+#[cfg(feature = "docker")]
+use crate::mcp::tools_handlers::{extract_or_return, extract_required_string_field};
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -191,13 +193,11 @@ pub fn handle_ax_browser_launch(args: &serde_json::Value) -> ToolCallResult {
 pub fn handle_ax_browser_stop(args: &serde_json::Value) -> ToolCallResult {
     use crate::docker_browser::{BrowserType, DockerManager, NekoBrowser};
 
-    let Some(container_id) = args["container_id"].as_str() else {
-        return ToolCallResult::error("Missing required field: container_id");
-    };
+    let container_id = extract_or_return!(extract_required_string_field(args, "container_id"));
 
     // Construct a minimal handle — DockerManager::stop only needs the container_id.
     let browser = NekoBrowser {
-        container_id: container_id.to_string(),
+        container_id: container_id.clone(),
         cdp_port: 0,
         vnc_port: 0,
         browser: BrowserType::Chromium,
@@ -280,7 +280,10 @@ mod tests {
         let result = super::handle_ax_browser_stop(&json!({}));
         // THEN: error payload
         assert!(result.is_error);
-        assert!(result.content[0].text.contains("container_id"));
+        assert_eq!(
+            result.content[0].text,
+            "Missing required field: container_id"
+        );
     }
 
     #[test]

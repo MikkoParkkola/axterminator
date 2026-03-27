@@ -53,12 +53,10 @@ pub(crate) fn handle_is_accessible() -> ToolCallResult {
 }
 
 pub(crate) fn handle_connect(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let Some(app_id) = args["app"].as_str() else {
-        return ToolCallResult::error("Missing required field: app");
-    };
-    let alias = extract_string_field_or(args, "alias", app_id);
+    let app_id = extract_or_return!(extract_required_string_field(args, "app"));
+    let alias = extract_optional_string_field(args, "alias").unwrap_or_else(|| app_id.clone());
 
-    let (name, bundle_id, pid) = parse_app_identifier(app_id);
+    let (name, bundle_id, pid) = parse_app_identifier(&app_id);
     match AXApp::connect_native(name.as_deref(), bundle_id.as_deref(), pid) {
         Ok(app) => {
             #[allow(clippy::cast_sign_loss)]
@@ -67,7 +65,7 @@ pub(crate) fn handle_connect(args: &Value, registry: &Arc<AppRegistry>) -> ToolC
             let app_type = crate::router::detect_app_type(bundle.as_deref().unwrap_or(""), app.pid)
                 .name()
                 .to_string();
-            registry.insert(alias.to_string(), app);
+            registry.insert(alias.clone(), app);
             ToolCallResult::ok_json(json!({
                 "connected": true,
                 "alias": alias,
@@ -207,10 +205,7 @@ fn perform_click(
 
 pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     let (app_name, query) = extract_or_return!(extract_app_query(args));
-    let text = match args["text"].as_str() {
-        Some(t) => t.to_string(),
-        None => return ToolCallResult::error("Missing required field: text"),
-    };
+    let text = extract_or_return!(extract_required_string_field(args, "text"));
     let mode_str = extract_string_field_or(args, "mode", "focus");
     let mode = parse_action_mode(mode_str);
 
@@ -228,10 +223,7 @@ pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
 
 pub(crate) fn handle_set_value(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     let (app_name, query) = extract_or_return!(extract_app_query(args));
-    let value = match args["value"].as_str() {
-        Some(v) => v.to_string(),
-        None => return ToolCallResult::error("Missing required field: value"),
-    };
+    let value = extract_or_return!(extract_required_string_field(args, "value"));
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
@@ -256,10 +248,7 @@ pub(crate) fn handle_get_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
 }
 
 pub(crate) fn handle_list_windows(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let app_name = match args["app"].as_str() {
-        Some(s) => s.to_string(),
-        None => return ToolCallResult::error("Missing required field: app"),
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
 
     registry
         .with_app(&app_name, |app| match app.windows_native() {
@@ -279,10 +268,7 @@ pub(crate) fn handle_list_windows(args: &Value, registry: &Arc<AppRegistry>) -> 
 }
 
 pub(crate) fn handle_screenshot(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    let app_name = match args["app"].as_str() {
-        Some(s) => s.to_string(),
-        None => return ToolCallResult::error("Missing required field: app"),
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let query = args["query"].as_str().map(str::to_string);
 
     registry
@@ -771,6 +757,46 @@ mod tests {
         }
 
         let result = extract_app(&json!({}));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: app");
+    }
+
+    #[test]
+    fn handle_connect_missing_app_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_connect(&json!({}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: app");
+    }
+
+    #[test]
+    fn handle_type_missing_text_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_type(&json!({"app": "Safari", "query": "Search"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: text");
+    }
+
+    #[test]
+    fn handle_set_value_missing_value_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_set_value(&json!({"app": "Safari", "query": "Search"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: value");
+    }
+
+    #[test]
+    fn handle_list_windows_missing_app_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_list_windows(&json!({}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: app");
+    }
+
+    #[test]
+    fn handle_screenshot_missing_app_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_screenshot(&json!({}), &registry);
         assert!(result.is_error);
         assert_eq!(result.content[0].text, "Missing required field: app");
     }
