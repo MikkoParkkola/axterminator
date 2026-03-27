@@ -22,6 +22,8 @@ use crate::accessibility::{attributes, get_attribute, AXUIElementRef};
 use crate::element::AXElement;
 use crate::error::{AXError, AXResult};
 
+use tracing::{debug, warn};
+
 /// Healing strategy enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HealStrategy {
@@ -143,10 +145,18 @@ pub struct ElementQuery {
 pub fn find_with_healing(query: &ElementQuery, root: AXUIElementRef) -> AXResult<AXElement> {
     let config = get_global_config();
 
+    debug!(
+        query = %query.original,
+        strategies = config.strategies.len(),
+        cache = config.cache_healed,
+        "healing search started"
+    );
+
     // Check cache first if enabled
     if config.cache_healed {
         if let Ok(cache) = HEALING_CACHE.read() {
             if let Some(cached_query) = cache.get(&query.original) {
+                debug!(query = %query.original, "cache hit: retrying with previously successful query");
                 // Try the cached successful query first
                 for strategy_name in &config.strategies {
                     let strategy = parse_strategy(strategy_name);
@@ -160,6 +170,7 @@ pub fn find_with_healing(query: &ElementQuery, root: AXUIElementRef) -> AXResult
 
     let start = Instant::now();
     let timeout = Duration::from_millis(config.max_heal_time_ms);
+    let mut strategies_tried: usize = 0;
 
     // Try each strategy in order
     for strategy_name in &config.strategies {
@@ -167,8 +178,11 @@ pub fn find_with_healing(query: &ElementQuery, root: AXUIElementRef) -> AXResult
             break;
         }
 
+        strategies_tried += 1;
+        debug!(query = %query.original, strategy = %strategy_name, "trying healing strategy");
         let strategy = parse_strategy(strategy_name);
         if let Some(element) = try_strategy(strategy, query, root) {
+            debug!(query = %query.original, strategy = %strategy_name, "healing strategy succeeded");
             // Cache successful query if enabled
             if config.cache_healed {
                 if let Ok(mut cache) = HEALING_CACHE.write() {
@@ -179,6 +193,13 @@ pub fn find_with_healing(query: &ElementQuery, root: AXUIElementRef) -> AXResult
         }
     }
 
+    warn!(
+        query = %query.original,
+        strategies_tried,
+        elapsed_ms = start.elapsed().as_millis(),
+        budget_ms = config.max_heal_time_ms,
+        "element not found after healing"
+    );
     Err(AXError::ElementNotFoundAfterHealing(query.original.clone()))
 }
 

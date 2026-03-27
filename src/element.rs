@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use tracing::{debug, warn};
+
 use crate::accessibility::{
     self, actions, attributes, get_attribute, perform_action, AXUIElementRef,
 };
@@ -186,6 +188,7 @@ impl AXElement {
         match press_result {
             Ok(()) => Ok(()),
             Err(AXError::BackgroundNotSupported(_)) | Err(AXError::ActionFailed(_)) => {
+                debug!("AXPress unsupported or failed; falling back to CGEvent coordinate click");
                 self.click_at_center()
             }
             Err(e) => Err(e),
@@ -393,10 +396,20 @@ impl AXElement {
         let start = Instant::now();
         let timeout = timeout.unwrap_or(Duration::from_millis(100));
 
+        debug!(
+            query,
+            timeout_ms = timeout.as_millis(),
+            "find_child: searching for element"
+        );
+
         loop {
             match self.search_child(query) {
-                Ok(element) => return Ok(element),
+                Ok(element) => {
+                    debug!(query, "find_child: element found");
+                    return Ok(element);
+                }
                 Err(_) if start.elapsed() >= timeout => {
+                    warn!(query, "find_child: element not found within timeout");
                     return Err(AXError::ElementNotFound(query.to_string()));
                 }
                 Err(_) => {

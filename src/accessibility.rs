@@ -19,6 +19,8 @@ use std::ptr;
 
 use crate::error::{AXError, AXResult};
 
+use tracing::debug;
+
 // External declarations for macOS Accessibility APIs
 #[link(name = "ApplicationServices", kind = "framework")]
 #[allow(dead_code)]
@@ -170,7 +172,9 @@ pub fn perform_action(element: AXUIElementRef, action: &str) -> AXResult<()> {
         unsafe { AXUIElementPerformAction(element, action_str.as_concrete_TypeRef() as CFTypeRef) };
 
     if result != AX_ERROR_SUCCESS {
-        return Err(ax_error_to_result(result, action));
+        let err = ax_error_to_result(result, action);
+        debug!(action, error = %err, ax_code = result, "perform_action failed");
+        return Err(err);
     }
 
     Ok(())
