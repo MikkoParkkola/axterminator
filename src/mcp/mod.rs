@@ -32,6 +32,7 @@
 //! Entry points: [`server::run_stdio`] (stdio), [`transport::serve`] (any).
 
 pub(crate) mod action_safety;
+pub(crate) mod analysis_engine;
 pub mod annotations;
 pub(crate) mod args;
 pub mod auth;

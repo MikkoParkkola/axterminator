@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
+use crate::mcp::analysis_engine::analyze_scene;
 use crate::mcp::annotations;
 use crate::mcp::args::{
     extract_app_query, extract_clamped_u64_field_or, extract_f64_field_or, extract_or_return,
@@ -1014,397 +1015,6 @@ fn handle_workflow_stats() -> ToolCallResult {
 // Accessibility Intelligence Engine — ax_analyze
 // ---------------------------------------------------------------------------
 
-/// Detected UI pattern with an associated confidence score.
-#[derive(Debug, Clone, PartialEq)]
-struct UiPattern {
-    pattern: &'static str,
-    confidence: f64,
-}
-
-/// Inferred high-level application state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AppState {
-    Idle,
-    Loading,
-    Error,
-    Modal,
-    AuthRequired,
-}
-
-impl AppState {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Idle => "idle",
-            Self::Loading => "loading",
-            Self::Error => "error",
-            Self::Modal => "modal",
-            Self::AuthRequired => "auth_required",
-        }
-    }
-}
-
-/// A node-role predicate: returns `true` when `role` matches the target.
-fn has_role(nodes: &[&crate::intent::SceneNode], role: &str) -> bool {
-    nodes.iter().any(|n| n.role.as_deref() == Some(role))
-}
-
-/// Returns `true` when any node's text labels contain `needle` (case-insensitive).
-fn any_label_contains(nodes: &[&crate::intent::SceneNode], needle: &str) -> bool {
-    nodes.iter().any(|n| {
-        n.text_labels()
-            .iter()
-            .any(|l| l.to_lowercase().contains(needle))
-    })
-}
-
-/// Detect common UI patterns from a `SceneGraph`.
-///
-/// Each pattern is evaluated independently; multiple patterns may match a single scene.
-/// Confidence values reflect the reliability of the heuristic — stronger structural
-/// signals produce higher scores.
-fn detect_ui_patterns(scene: &crate::intent::SceneGraph) -> Vec<UiPattern> {
-    let nodes: Vec<&crate::intent::SceneNode> = scene.iter().collect();
-    let mut patterns = Vec::new();
-
-    // Login form: secure password field + a plain text field + a submit button.
-    let has_password = has_role(&nodes, "AXSecureTextField");
-    let has_text_field = has_role(&nodes, "AXTextField");
-    let has_button = has_role(&nodes, "AXButton");
-    if has_password && has_text_field && has_button {
-        patterns.push(UiPattern {
-            pattern: "login_form",
-            confidence: 0.90,
-        });
-    }
-
-    // Search interface: a dedicated search field or a text field labelled "search".
-    let has_search_field = has_role(&nodes, "AXSearchField");
-    let has_search_label = has_text_field && any_label_contains(&nodes, "search");
-    if has_search_field || has_search_label {
-        patterns.push(UiPattern {
-            pattern: "search_interface",
-            confidence: 0.85,
-        });
-    }
-
-    // Navigation: a tab group or a toolbar containing multiple buttons.
-    let has_tab_group = has_role(&nodes, "AXTabGroup");
-    let has_toolbar = has_role(&nodes, "AXToolbar");
-    if has_tab_group || has_toolbar {
-        patterns.push(UiPattern {
-            pattern: "navigation",
-            confidence: 0.80,
-        });
-    }
-
-    // Table / data view.
-    let has_table =
-        has_role(&nodes, "AXTable") || has_role(&nodes, "AXGrid") || has_role(&nodes, "AXOutline");
-    if has_table {
-        patterns.push(UiPattern {
-            pattern: "table_view",
-            confidence: 0.88,
-        });
-    }
-
-    // Modal / dialog: sheet or dialog element is present.
-    let has_modal = has_role(&nodes, "AXSheet") || has_role(&nodes, "AXDialog");
-    if has_modal {
-        patterns.push(UiPattern {
-            pattern: "modal_dialog",
-            confidence: 0.95,
-        });
-    }
-
-    // File-save dialog: modal + Save button + filename field.
-    if has_modal && has_button {
-        let save_btn = any_label_contains(&nodes, "save");
-        let open_btn = any_label_contains(&nodes, "open");
-        let cancel_btn = any_label_contains(&nodes, "cancel");
-        if save_btn && cancel_btn {
-            patterns.push(UiPattern {
-                pattern: "file_save_dialog",
-                confidence: 0.88,
-            });
-        } else if open_btn && cancel_btn {
-            patterns.push(UiPattern {
-                pattern: "file_open_dialog",
-                confidence: 0.88,
-            });
-        }
-    }
-
-    // Confirmation / alert dialog: alert element with OK/Yes + Cancel/No buttons.
-    let has_alert = has_role(&nodes, "AXAlert");
-    if has_alert && has_button {
-        let ok = any_label_contains(&nodes, "ok") || any_label_contains(&nodes, "yes");
-        let cancel = any_label_contains(&nodes, "cancel") || any_label_contains(&nodes, "no");
-        if ok && cancel {
-            patterns.push(UiPattern {
-                pattern: "confirmation_dialog",
-                confidence: 0.87,
-            });
-        } else {
-            patterns.push(UiPattern {
-                pattern: "error_alert",
-                confidence: 0.80,
-            });
-        }
-    }
-
-    // Settings page: multiple labeled groups of controls (no modal, no login).
-    let has_groups = scene.nodes_by_role("AXGroup").len() >= 3;
-    let has_checkboxes = has_role(&nodes, "AXCheckBox");
-    let has_popups = has_role(&nodes, "AXPopUpButton");
-    if has_groups && (has_checkboxes || has_popups) && !has_modal && !has_password {
-        patterns.push(UiPattern {
-            pattern: "settings_page",
-            confidence: 0.75,
-        });
-    }
-
-    // Text editor: large scrollable text area with optional toolbar.
-    let has_text_area = has_role(&nodes, "AXTextArea");
-    if has_text_area && (has_toolbar || nodes.len() > 10) {
-        patterns.push(UiPattern {
-            pattern: "text_editor",
-            confidence: 0.78,
-        });
-    }
-
-    // Browser main: address bar heuristic (text field with URL-like identifier).
-    let browser_addr = nodes.iter().any(|n| {
-        n.role.as_deref() == Some("AXTextField")
-            && n.identifier
-                .as_deref()
-                .is_some_and(|id| id.contains("address") || id.contains("url"))
-    });
-    if browser_addr && has_tab_group {
-        patterns.push(UiPattern {
-            pattern: "browser_main",
-            confidence: 0.85,
-        });
-    }
-
-    // Form: group of labeled text fields (distinct from login — no password field).
-    let text_field_count = scene.nodes_by_role("AXTextField").len();
-    if text_field_count >= 2 && !has_password && has_button {
-        patterns.push(UiPattern {
-            pattern: "form",
-            confidence: 0.72,
-        });
-    }
-
-    // Progress / loading indicator.
-    let has_progress =
-        has_role(&nodes, "AXProgressIndicator") || has_role(&nodes, "AXBusyIndicator");
-    if has_progress {
-        patterns.push(UiPattern {
-            pattern: "progress_indicator",
-            confidence: 0.93,
-        });
-    }
-
-    patterns
-}
-
-/// Infer the high-level application state from a `SceneGraph`.
-///
-/// States are evaluated in priority order: modal > loading > error > auth_required > idle.
-fn infer_app_state(scene: &crate::intent::SceneGraph) -> AppState {
-    let nodes: Vec<&crate::intent::SceneNode> = scene.iter().collect();
-
-    // Modal blocks all other interactions — highest priority.
-    if has_role(&nodes, "AXSheet") || has_role(&nodes, "AXDialog") {
-        return AppState::Modal;
-    }
-
-    // Loading indicators: spinner or progress bar visible.
-    let loading = has_role(&nodes, "AXProgressIndicator")
-        || has_role(&nodes, "AXBusyIndicator")
-        || any_label_contains(&nodes, "loading");
-    if loading {
-        return AppState::Loading;
-    }
-
-    // Error state: error text or error alert present.
-    let error = has_role(&nodes, "AXAlert")
-        || any_label_contains(&nodes, "error")
-        || any_label_contains(&nodes, "failed")
-        || any_label_contains(&nodes, "invalid");
-    if error {
-        return AppState::Error;
-    }
-
-    // Auth required: password field visible without a modal wrapping it.
-    if has_role(&nodes, "AXSecureTextField") {
-        return AppState::AuthRequired;
-    }
-
-    AppState::Idle
-}
-
-/// A suggested next action for the agent.
-#[derive(Debug, Clone)]
-struct Suggestion {
-    action: &'static str,
-    tool: &'static str,
-    query: &'static str,
-}
-
-/// Generate next-action suggestions from detected patterns and app state.
-///
-/// Suggestions are purely informational — they are never executed automatically.
-/// The list is ordered from most-specific to most-general.
-fn suggest_actions(patterns: &[UiPattern], state: AppState) -> Vec<Suggestion> {
-    let mut suggestions: Vec<Suggestion> = Vec::new();
-
-    // State-driven suggestions take priority.
-    match state {
-        AppState::Modal => {
-            suggestions.push(Suggestion {
-                action: "Dismiss or interact with the modal dialog before continuing",
-                tool: "ax_click",
-                query: "Cancel",
-            });
-        }
-        AppState::Loading => {
-            suggestions.push(Suggestion {
-                action: "Wait for the app to finish loading",
-                tool: "ax_wait_idle",
-                query: "",
-            });
-        }
-        AppState::Error => {
-            suggestions.push(Suggestion {
-                action: "Acknowledge the error and check error details",
-                tool: "ax_get_value",
-                query: "error message",
-            });
-        }
-        AppState::AuthRequired => {
-            suggestions.push(Suggestion {
-                action: "Enter credentials to authenticate",
-                tool: "ax_type",
-                query: "username",
-            });
-        }
-        AppState::Idle => {}
-    }
-
-    // Pattern-driven suggestions.
-    let pattern_names: Vec<&str> = patterns.iter().map(|p| p.pattern).collect();
-
-    if pattern_names.contains(&"login_form") {
-        suggestions.push(Suggestion {
-            action: "Type your username into the text field",
-            tool: "ax_type",
-            query: "username",
-        });
-        suggestions.push(Suggestion {
-            action: "Type your password into the secure field",
-            tool: "ax_type",
-            query: "password",
-        });
-        suggestions.push(Suggestion {
-            action: "Click the sign-in button to submit credentials",
-            tool: "ax_click",
-            query: "Sign In",
-        });
-    }
-
-    if pattern_names.contains(&"search_interface") {
-        suggestions.push(Suggestion {
-            action: "Type your query into the search field",
-            tool: "ax_type",
-            query: "search",
-        });
-    }
-
-    if pattern_names.contains(&"file_save_dialog") {
-        suggestions.push(Suggestion {
-            action: "Type a filename and click Save to confirm",
-            tool: "ax_type",
-            query: "Save As",
-        });
-        suggestions.push(Suggestion {
-            action: "Click Save to confirm the file",
-            tool: "ax_click",
-            query: "Save",
-        });
-    }
-
-    if pattern_names.contains(&"file_open_dialog") {
-        suggestions.push(Suggestion {
-            action: "Navigate to the desired file and click Open",
-            tool: "ax_click",
-            query: "Open",
-        });
-    }
-
-    if pattern_names.contains(&"confirmation_dialog") {
-        suggestions.push(Suggestion {
-            action: "Confirm the action by clicking OK or Yes",
-            tool: "ax_click",
-            query: "OK",
-        });
-        suggestions.push(Suggestion {
-            action: "Cancel the action to dismiss the dialog",
-            tool: "ax_click",
-            query: "Cancel",
-        });
-    }
-
-    if pattern_names.contains(&"error_alert") {
-        suggestions.push(Suggestion {
-            action: "Dismiss the error alert",
-            tool: "ax_click",
-            query: "OK",
-        });
-    }
-
-    if pattern_names.contains(&"table_view") {
-        suggestions.push(Suggestion {
-            action: "Read the visible rows from the data table",
-            tool: "ax_get_value",
-            query: "table row",
-        });
-    }
-
-    if pattern_names.contains(&"text_editor") {
-        suggestions.push(Suggestion {
-            action: "Type or edit text in the editor area",
-            tool: "ax_type",
-            query: "text area",
-        });
-    }
-
-    if pattern_names.contains(&"form") {
-        suggestions.push(Suggestion {
-            action: "Fill in the form fields",
-            tool: "ax_type",
-            query: "text field",
-        });
-        suggestions.push(Suggestion {
-            action: "Submit the form",
-            tool: "ax_click",
-            query: "Submit",
-        });
-    }
-
-    suggestions
-}
-
-/// Serialize a single `UiPattern` to JSON.
-fn pattern_to_json(p: &UiPattern) -> Value {
-    json!({ "pattern": p.pattern, "confidence": p.confidence })
-}
-
-/// Serialize a single `Suggestion` to JSON.
-fn suggestion_to_json(s: &Suggestion) -> Value {
-    json!({ "action": s.action, "tool": s.tool, "query": s.query })
-}
-
 /// Handle `ax_analyze` — detect patterns, infer state, and suggest actions.
 ///
 /// The `focus` parameter limits the output:
@@ -1419,42 +1029,7 @@ fn handle_ax_analyze(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResul
     registry
         .with_app(&app_name, |app| {
             let scene = extract_or_return!(scan_scene_or_error(app.element));
-
-            let node_count = scene.len();
-            let patterns = detect_ui_patterns(&scene);
-            let state = infer_app_state(&scene);
-            let actions = suggest_actions(&patterns, state);
-
-            let patterns_json: Vec<Value> = patterns.iter().map(pattern_to_json).collect();
-            let suggestions_json: Vec<Value> = actions.iter().map(suggestion_to_json).collect();
-
-            let payload = match focus {
-                "patterns" => json!({
-                    "node_count": node_count,
-                    "app_state":  state.as_str(),
-                    "patterns":   patterns_json,
-                    "suggestions": []
-                }),
-                "state" => json!({
-                    "node_count": node_count,
-                    "app_state":  state.as_str(),
-                    "patterns":   [],
-                    "suggestions": []
-                }),
-                "actions" => json!({
-                    "node_count":  node_count,
-                    "app_state":   state.as_str(),
-                    "patterns":    [],
-                    "suggestions": suggestions_json
-                }),
-                _ => json!({
-                    "node_count":  node_count,
-                    "app_state":   state.as_str(),
-                    "patterns":    patterns_json,
-                    "suggestions": suggestions_json
-                }),
-            };
-
+            let payload = analyze_scene(&scene).focused_payload(focus);
             ToolCallResult::ok(payload.to_string())
         })
         .unwrap_or_else(ToolCallResult::error)
@@ -2329,6 +1904,10 @@ fn handle_ax_a11y_audit(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallRe
 
 #[cfg(test)]
 mod tests {
+    use crate::mcp::analysis_engine::{
+        detect_ui_patterns, infer_app_state, pattern_to_json, suggest_actions, suggestion_to_json,
+        AppState, Suggestion, UiPattern,
+    };
     use std::sync::Arc;
 
     use serde_json::json;
@@ -3221,7 +2800,7 @@ mod tests {
             ("AXButton", Some("Sign In"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: login_form detected
         assert!(
             patterns.iter().any(|p| p.pattern == "login_form"),
@@ -3237,7 +2816,7 @@ mod tests {
             ("AXButton", Some("Submit"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: login_form NOT detected
         assert!(
             !patterns.iter().any(|p| p.pattern == "login_form"),
@@ -3250,7 +2829,7 @@ mod tests {
         // GIVEN: AXSearchField present
         let scene = make_scene(&[("AXSearchField", Some("Search"), None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: search_interface detected
         assert!(patterns.iter().any(|p| p.pattern == "search_interface"));
     }
@@ -3260,7 +2839,7 @@ mod tests {
         // GIVEN: AXTextField labelled "Search Items"
         let scene = make_scene(&[("AXTextField", None, Some("Search Items"), None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: search_interface detected
         assert!(patterns.iter().any(|p| p.pattern == "search_interface"));
     }
@@ -3270,7 +2849,7 @@ mod tests {
         // GIVEN: AXTabGroup present
         let scene = make_scene(&[("AXTabGroup", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: navigation detected
         assert!(patterns.iter().any(|p| p.pattern == "navigation"));
     }
@@ -3280,7 +2859,7 @@ mod tests {
         // GIVEN: AXToolbar present
         let scene = make_scene(&[("AXToolbar", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: navigation detected
         assert!(patterns.iter().any(|p| p.pattern == "navigation"));
     }
@@ -3290,7 +2869,7 @@ mod tests {
         // GIVEN: AXTable present
         let scene = make_scene(&[("AXTable", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: table_view detected
         assert!(patterns.iter().any(|p| p.pattern == "table_view"));
     }
@@ -3300,7 +2879,7 @@ mod tests {
         // GIVEN: AXGrid present
         let scene = make_scene(&[("AXGrid", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: table_view detected
         assert!(patterns.iter().any(|p| p.pattern == "table_view"));
     }
@@ -3310,7 +2889,7 @@ mod tests {
         // GIVEN: AXSheet present
         let scene = make_scene(&[("AXSheet", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: modal_dialog detected
         assert!(patterns.iter().any(|p| p.pattern == "modal_dialog"));
     }
@@ -3320,7 +2899,7 @@ mod tests {
         // GIVEN: AXDialog present
         let scene = make_scene(&[("AXDialog", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: modal_dialog detected
         assert!(patterns.iter().any(|p| p.pattern == "modal_dialog"));
     }
@@ -3334,7 +2913,7 @@ mod tests {
             ("AXButton", Some("Cancel"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: file_save_dialog detected
         assert!(patterns.iter().any(|p| p.pattern == "file_save_dialog"));
     }
@@ -3348,7 +2927,7 @@ mod tests {
             ("AXButton", Some("Cancel"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: file_open_dialog detected
         assert!(patterns.iter().any(|p| p.pattern == "file_open_dialog"));
     }
@@ -3362,7 +2941,7 @@ mod tests {
             ("AXButton", Some("Cancel"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: confirmation_dialog detected
         assert!(patterns.iter().any(|p| p.pattern == "confirmation_dialog"));
     }
@@ -3375,7 +2954,7 @@ mod tests {
             ("AXButton", Some("OK"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: error_alert detected (OK but no Cancel → single-button alert)
         assert!(patterns.iter().any(|p| p.pattern == "error_alert"));
     }
@@ -3385,7 +2964,7 @@ mod tests {
         // GIVEN: AXProgressIndicator
         let scene = make_scene(&[("AXProgressIndicator", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: progress_indicator detected
         assert!(patterns.iter().any(|p| p.pattern == "progress_indicator"));
     }
@@ -3399,7 +2978,7 @@ mod tests {
             ("AXButton", Some("Submit"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: form detected
         assert!(patterns.iter().any(|p| p.pattern == "form"));
     }
@@ -3409,7 +2988,7 @@ mod tests {
         // GIVEN: empty scene graph
         let scene = crate::intent::SceneGraph::empty();
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: no patterns (not a panic)
         assert!(patterns.is_empty());
     }
@@ -3423,7 +3002,7 @@ mod tests {
             ("AXTabGroup", None, None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: all confidence values are in [0.0, 1.0]
         for p in &patterns {
             assert!(
@@ -3442,9 +3021,9 @@ mod tests {
         // GIVEN: empty scene
         let scene = crate::intent::SceneGraph::empty();
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: idle
-        assert_eq!(state, super::AppState::Idle);
+        assert_eq!(state, AppState::Idle);
     }
 
     #[test]
@@ -3452,9 +3031,9 @@ mod tests {
         // GIVEN: scene with an AXSheet
         let scene = make_scene(&[("AXSheet", None, None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: modal (highest priority)
-        assert_eq!(state, super::AppState::Modal);
+        assert_eq!(state, AppState::Modal);
     }
 
     #[test]
@@ -3462,9 +3041,9 @@ mod tests {
         // GIVEN: progress indicator, no modal
         let scene = make_scene(&[("AXProgressIndicator", None, None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: loading
-        assert_eq!(state, super::AppState::Loading);
+        assert_eq!(state, AppState::Loading);
     }
 
     #[test]
@@ -3472,9 +3051,9 @@ mod tests {
         // GIVEN: alert element, no modal/progress
         let scene = make_scene(&[("AXAlert", None, None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: error
-        assert_eq!(state, super::AppState::Error);
+        assert_eq!(state, AppState::Error);
     }
 
     #[test]
@@ -3482,9 +3061,9 @@ mod tests {
         // GIVEN: static text labelled "Error"
         let scene = make_scene(&[("AXStaticText", Some("Error: file not found"), None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: error
-        assert_eq!(state, super::AppState::Error);
+        assert_eq!(state, AppState::Error);
     }
 
     #[test]
@@ -3492,9 +3071,9 @@ mod tests {
         // GIVEN: secure text field, no modal or progress
         let scene = make_scene(&[("AXSecureTextField", Some("Password"), None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: auth_required
-        assert_eq!(state, super::AppState::AuthRequired);
+        assert_eq!(state, AppState::AuthRequired);
     }
 
     #[test]
@@ -3505,9 +3084,9 @@ mod tests {
             ("AXProgressIndicator", None, None, None),
         ]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: modal wins (higher priority)
-        assert_eq!(state, super::AppState::Modal);
+        assert_eq!(state, AppState::Modal);
     }
 
     #[test]
@@ -3518,15 +3097,15 @@ mod tests {
             ("AXAlert", None, None, None),
         ]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: loading overrides error
-        assert_eq!(state, super::AppState::Loading);
+        assert_eq!(state, AppState::Loading);
     }
 
     #[test]
     fn app_state_as_str_covers_all_variants() {
         // GIVEN / WHEN / THEN: every variant maps to a non-empty string
-        use super::AppState;
+
         for (state, expected) in &[
             (AppState::Idle, "idle"),
             (AppState::Loading, "loading"),
@@ -3543,7 +3122,7 @@ mod tests {
     #[test]
     fn suggest_actions_idle_empty_patterns_returns_empty() {
         // GIVEN: idle state, no patterns
-        let suggestions = super::suggest_actions(&[], super::AppState::Idle);
+        let suggestions = suggest_actions(&[], AppState::Idle);
         // THEN: no suggestions
         assert!(suggestions.is_empty());
     }
@@ -3551,7 +3130,7 @@ mod tests {
     #[test]
     fn suggest_actions_modal_state_suggests_dismiss() {
         // GIVEN: modal state
-        let suggestions = super::suggest_actions(&[], super::AppState::Modal);
+        let suggestions = suggest_actions(&[], AppState::Modal);
         // THEN: dismiss suggestion present
         assert!(suggestions.iter().any(|s| s.tool == "ax_click"));
     }
@@ -3559,7 +3138,7 @@ mod tests {
     #[test]
     fn suggest_actions_loading_state_suggests_wait() {
         // GIVEN: loading state
-        let suggestions = super::suggest_actions(&[], super::AppState::Loading);
+        let suggestions = suggest_actions(&[], AppState::Loading);
         // THEN: wait suggestion present
         assert!(suggestions.iter().any(|s| s.tool == "ax_wait_idle"));
     }
@@ -3567,7 +3146,7 @@ mod tests {
     #[test]
     fn suggest_actions_error_state_suggests_get_value() {
         // GIVEN: error state
-        let suggestions = super::suggest_actions(&[], super::AppState::Error);
+        let suggestions = suggest_actions(&[], AppState::Error);
         // THEN: read the error message
         assert!(suggestions.iter().any(|s| s.tool == "ax_get_value"));
     }
@@ -3575,7 +3154,7 @@ mod tests {
     #[test]
     fn suggest_actions_auth_required_suggests_type() {
         // GIVEN: auth_required state
-        let suggestions = super::suggest_actions(&[], super::AppState::AuthRequired);
+        let suggestions = suggest_actions(&[], AppState::AuthRequired);
         // THEN: type action suggested
         assert!(suggestions.iter().any(|s| s.tool == "ax_type"));
     }
@@ -3583,11 +3162,11 @@ mod tests {
     #[test]
     fn suggest_actions_login_form_includes_submit() {
         // GIVEN: login_form pattern detected
-        let login = super::UiPattern {
+        let login = UiPattern {
             pattern: "login_form",
             confidence: 0.9,
         };
-        let suggestions = super::suggest_actions(&[login], super::AppState::Idle);
+        let suggestions = suggest_actions(&[login], AppState::Idle);
         // THEN: click the sign-in button
         assert!(
             suggestions
@@ -3600,11 +3179,11 @@ mod tests {
     #[test]
     fn suggest_actions_search_interface_suggests_type() {
         // GIVEN: search_interface pattern
-        let search = super::UiPattern {
+        let search = UiPattern {
             pattern: "search_interface",
             confidence: 0.85,
         };
-        let suggestions = super::suggest_actions(&[search], super::AppState::Idle);
+        let suggestions = suggest_actions(&[search], AppState::Idle);
         // THEN: type into search
         assert!(suggestions.iter().any(|s| s.tool == "ax_type"));
     }
@@ -3612,11 +3191,11 @@ mod tests {
     #[test]
     fn suggest_actions_file_save_dialog_suggests_save_click() {
         // GIVEN: file_save_dialog pattern
-        let save_dlg = super::UiPattern {
+        let save_dlg = UiPattern {
             pattern: "file_save_dialog",
             confidence: 0.88,
         };
-        let suggestions = super::suggest_actions(&[save_dlg], super::AppState::Idle);
+        let suggestions = suggest_actions(&[save_dlg], AppState::Idle);
         // THEN: click Save
         assert!(suggestions
             .iter()
@@ -3626,11 +3205,11 @@ mod tests {
     #[test]
     fn suggest_actions_confirmation_dialog_includes_cancel() {
         // GIVEN: confirmation_dialog pattern
-        let conf = super::UiPattern {
+        let conf = UiPattern {
             pattern: "confirmation_dialog",
             confidence: 0.87,
         };
-        let suggestions = super::suggest_actions(&[conf], super::AppState::Idle);
+        let suggestions = suggest_actions(&[conf], AppState::Idle);
         // THEN: Cancel action present
         assert!(suggestions
             .iter()
@@ -3640,11 +3219,11 @@ mod tests {
     #[test]
     fn suggest_actions_table_view_suggests_get_value() {
         // GIVEN: table_view pattern
-        let table = super::UiPattern {
+        let table = UiPattern {
             pattern: "table_view",
             confidence: 0.88,
         };
-        let suggestions = super::suggest_actions(&[table], super::AppState::Idle);
+        let suggestions = suggest_actions(&[table], AppState::Idle);
         // THEN: read the table
         assert!(suggestions.iter().any(|s| s.tool == "ax_get_value"));
     }
@@ -3652,7 +3231,7 @@ mod tests {
     #[test]
     fn suggest_actions_all_suggestions_have_non_empty_action_and_tool() {
         // GIVEN: all pattern types simultaneously
-        let patterns: Vec<super::UiPattern> = [
+        let patterns: Vec<UiPattern> = [
             "login_form",
             "search_interface",
             "file_save_dialog",
@@ -3664,12 +3243,12 @@ mod tests {
             "form",
         ]
         .iter()
-        .map(|p| super::UiPattern {
+        .map(|p| UiPattern {
             pattern: p,
             confidence: 0.8,
         })
         .collect();
-        let suggestions = super::suggest_actions(&patterns, super::AppState::Idle);
+        let suggestions = suggest_actions(&patterns, AppState::Idle);
         for s in &suggestions {
             assert!(!s.action.is_empty(), "suggestion has empty action");
             assert!(!s.tool.is_empty(), "suggestion has empty tool");
@@ -3734,12 +3313,12 @@ mod tests {
     #[test]
     fn pattern_to_json_produces_expected_keys() {
         // GIVEN: a UiPattern
-        let p = super::UiPattern {
+        let p = UiPattern {
             pattern: "login_form",
             confidence: 0.9,
         };
         // WHEN
-        let v = super::pattern_to_json(&p);
+        let v = pattern_to_json(&p);
         // THEN: both required keys present
         assert_eq!(v["pattern"], "login_form");
         assert!((v["confidence"].as_f64().unwrap() - 0.9).abs() < f64::EPSILON);
@@ -3748,13 +3327,13 @@ mod tests {
     #[test]
     fn suggestion_to_json_produces_expected_keys() {
         // GIVEN: a Suggestion
-        let s = super::Suggestion {
+        let s = Suggestion {
             action: "Click Save",
             tool: "ax_click",
             query: "Save",
         };
         // WHEN
-        let v = super::suggestion_to_json(&s);
+        let v = suggestion_to_json(&s);
         // THEN: all three keys present
         assert_eq!(v["action"], "Click Save");
         assert_eq!(v["tool"], "ax_click");
@@ -4478,7 +4057,7 @@ mod tests {
         // GIVEN: AXOutline (tree view) is also a table-family role
         let scene = make_scene(&[("AXOutline", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: table_view detected
         assert!(
             patterns.iter().any(|p| p.pattern == "table_view"),
@@ -4491,7 +4070,7 @@ mod tests {
         // GIVEN: AXBusyIndicator (spinning progress) instead of AXProgressIndicator
         let scene = make_scene(&[("AXBusyIndicator", None, None, None)]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: progress_indicator detected
         assert!(
             patterns.iter().any(|p| p.pattern == "progress_indicator"),
@@ -4509,7 +4088,7 @@ mod tests {
             ("AXCheckBox", Some("Enable feature"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: settings_page detected
         assert!(
             patterns.iter().any(|p| p.pattern == "settings_page"),
@@ -4527,7 +4106,7 @@ mod tests {
             ("AXPopUpButton", Some("Color scheme"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: settings_page detected
         assert!(
             patterns.iter().any(|p| p.pattern == "settings_page"),
@@ -4546,7 +4125,7 @@ mod tests {
             ("AXSheet", None, None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: settings_page NOT detected (modal blocks it)
         assert!(
             !patterns.iter().any(|p| p.pattern == "settings_page"),
@@ -4562,7 +4141,7 @@ mod tests {
             ("AXToolbar", None, None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: text_editor detected
         assert!(
             patterns.iter().any(|p| p.pattern == "text_editor"),
@@ -4580,7 +4159,7 @@ mod tests {
         }
         let scene = make_scene(&nodes);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: text_editor detected (large scene threshold)
         assert!(
             patterns.iter().any(|p| p.pattern == "text_editor"),
@@ -4623,7 +4202,7 @@ mod tests {
         g.push(addr_node);
         g.push(tab_node);
         // WHEN
-        let patterns = super::detect_ui_patterns(&g);
+        let patterns = detect_ui_patterns(&g);
         // THEN: browser_main detected
         assert!(
             patterns.iter().any(|p| p.pattern == "browser_main"),
@@ -4651,7 +4230,7 @@ mod tests {
         };
         g.push(node);
         // WHEN
-        let patterns = super::detect_ui_patterns(&g);
+        let patterns = detect_ui_patterns(&g);
         // THEN: browser_main NOT detected without tab group
         assert!(
             !patterns.iter().any(|p| p.pattern == "browser_main"),
@@ -4667,7 +4246,7 @@ mod tests {
             ("AXButton", Some("Submit"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: form NOT detected (threshold is 2)
         assert!(
             !patterns.iter().any(|p| p.pattern == "form"),
@@ -4684,9 +4263,9 @@ mod tests {
         // GIVEN: AXDialog element (alternate modal role)
         let scene = make_scene(&[("AXDialog", None, None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: modal state
-        assert_eq!(state, super::AppState::Modal);
+        assert_eq!(state, AppState::Modal);
     }
 
     #[test]
@@ -4694,9 +4273,9 @@ mod tests {
         // GIVEN: AXBusyIndicator (spinning indicator), no modal
         let scene = make_scene(&[("AXBusyIndicator", None, None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: loading
-        assert_eq!(state, super::AppState::Loading);
+        assert_eq!(state, AppState::Loading);
     }
 
     #[test]
@@ -4704,9 +4283,9 @@ mod tests {
         // GIVEN: static text labelled "Loading…", no modal or spinner role
         let scene = make_scene(&[("AXStaticText", Some("Loading…"), None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: loading (label-based heuristic)
-        assert_eq!(state, super::AppState::Loading);
+        assert_eq!(state, AppState::Loading);
     }
 
     #[test]
@@ -4714,9 +4293,9 @@ mod tests {
         // GIVEN: label containing "failed"
         let scene = make_scene(&[("AXStaticText", Some("Connection failed"), None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: error
-        assert_eq!(state, super::AppState::Error);
+        assert_eq!(state, AppState::Error);
     }
 
     #[test]
@@ -4724,9 +4303,9 @@ mod tests {
         // GIVEN: label containing "invalid"
         let scene = make_scene(&[("AXStaticText", Some("Invalid password"), None, None)]);
         // WHEN
-        let state = super::infer_app_state(&scene);
+        let state = infer_app_state(&scene);
         // THEN: error
-        assert_eq!(state, super::AppState::Error);
+        assert_eq!(state, AppState::Error);
     }
 
     // -----------------------------------------------------------------------
@@ -4736,11 +4315,11 @@ mod tests {
     #[test]
     fn suggest_actions_file_open_dialog_suggests_open_click() {
         // GIVEN: file_open_dialog pattern
-        let open_dlg = super::UiPattern {
+        let open_dlg = UiPattern {
             pattern: "file_open_dialog",
             confidence: 0.88,
         };
-        let suggestions = super::suggest_actions(&[open_dlg], super::AppState::Idle);
+        let suggestions = suggest_actions(&[open_dlg], AppState::Idle);
         // THEN: click Open suggested
         assert!(
             suggestions
@@ -4753,11 +4332,11 @@ mod tests {
     #[test]
     fn suggest_actions_error_alert_suggests_dismiss_ok() {
         // GIVEN: error_alert pattern
-        let alert = super::UiPattern {
+        let alert = UiPattern {
             pattern: "error_alert",
             confidence: 0.80,
         };
-        let suggestions = super::suggest_actions(&[alert], super::AppState::Idle);
+        let suggestions = suggest_actions(&[alert], AppState::Idle);
         // THEN: ax_click with "OK" to dismiss the error alert
         assert!(
             suggestions
@@ -4770,11 +4349,11 @@ mod tests {
     #[test]
     fn suggest_actions_text_editor_suggests_type() {
         // GIVEN: text_editor pattern
-        let editor = super::UiPattern {
+        let editor = UiPattern {
             pattern: "text_editor",
             confidence: 0.78,
         };
-        let suggestions = super::suggest_actions(&[editor], super::AppState::Idle);
+        let suggestions = suggest_actions(&[editor], AppState::Idle);
         // THEN: type into the text area
         assert!(
             suggestions.iter().any(|s| s.tool == "ax_type"),
@@ -4785,11 +4364,11 @@ mod tests {
     #[test]
     fn suggest_actions_form_suggests_submit_click() {
         // GIVEN: form pattern
-        let form = super::UiPattern {
+        let form = UiPattern {
             pattern: "form",
             confidence: 0.72,
         };
-        let suggestions = super::suggest_actions(&[form], super::AppState::Idle);
+        let suggestions = suggest_actions(&[form], AppState::Idle);
         // THEN: click Submit to submit the form
         assert!(
             suggestions
@@ -5001,7 +4580,7 @@ mod tests {
             ("AXButton", Some("No"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: confirmation_dialog detected (yes/no are alternate labels)
         assert!(
             patterns.iter().any(|p| p.pattern == "confirmation_dialog"),
@@ -5018,7 +4597,7 @@ mod tests {
             ("AXButton", Some("Sign In"), None, None),
         ]);
         // WHEN
-        let patterns = super::detect_ui_patterns(&scene);
+        let patterns = detect_ui_patterns(&scene);
         // THEN: login_form has exactly 0.90 confidence
         let login = patterns.iter().find(|p| p.pattern == "login_form").unwrap();
         assert!(
