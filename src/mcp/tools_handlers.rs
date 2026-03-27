@@ -463,6 +463,14 @@ pub(crate) fn extract_u64_field_or(args: &Value, field: &str, default: u64) -> u
     args[field].as_u64().unwrap_or(default)
 }
 
+/// Extract a required `u64` field. Returns `Err` with the existing MCP
+/// integer-field wording when the field is absent or not an unsigned integer.
+pub(crate) fn extract_required_u64_field(args: &Value, field: &str) -> Result<u64, String> {
+    args[field]
+        .as_u64()
+        .ok_or_else(|| format!("Missing required field: {field} (integer)"))
+}
+
 pub(crate) fn extract_bool_field_or(args: &Value, field: &str, default: bool) -> bool {
     args[field].as_bool().unwrap_or(default)
 }
@@ -848,6 +856,24 @@ mod tests {
         let args = json!({"timeout_ms": 123});
         assert_eq!(extract_u64_field_or(&args, "timeout_ms", 5000), 123);
         assert_eq!(extract_u64_field_or(&json!({}), "timeout_ms", 5000), 5000);
+    }
+
+    #[test]
+    fn extract_required_u64_field_returns_value_when_present() {
+        let args = json!({"space_id": 42});
+        assert_eq!(extract_required_u64_field(&args, "space_id").unwrap(), 42);
+    }
+
+    #[test]
+    fn extract_required_u64_field_errors_when_absent() {
+        let err = extract_required_u64_field(&json!({}), "space_id").unwrap_err();
+        assert_eq!(err, "Missing required field: space_id (integer)");
+    }
+
+    #[test]
+    fn extract_required_u64_field_errors_when_wrong_type() {
+        let err = extract_required_u64_field(&json!({"space_id": "abc"}), "space_id").unwrap_err();
+        assert_eq!(err, "Missing required field: space_id (integer)");
     }
 
     #[test]

@@ -23,6 +23,8 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "spaces")]
 use crate::mcp::tools::AppRegistry;
+#[cfg(feature = "spaces")]
+use crate::mcp::tools_handlers::{extract_or_return, extract_required_u64_field};
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -278,9 +280,7 @@ pub(crate) fn handle_ax_move_to_space(args: &Value, registry: &Arc<AppRegistry>)
     let Some(app_name) = args["app"].as_str() else {
         return ToolCallResult::error("Missing required field: app");
     };
-    let Some(space_id) = args["space_id"].as_u64() else {
-        return ToolCallResult::error("Missing required field: space_id (integer)");
-    };
+    let space_id = extract_or_return!(extract_required_u64_field(args, "space_id"));
 
     let window_ids = match collect_window_ids(app_name, registry) {
         Ok(ids) => ids,
@@ -309,9 +309,7 @@ pub(crate) fn handle_ax_move_to_space(args: &Value, registry: &Arc<AppRegistry>)
 pub(crate) fn handle_ax_switch_space(args: &Value) -> ToolCallResult {
     use crate::spaces::SpaceManager;
 
-    let Some(space_id) = args["space_id"].as_u64() else {
-        return ToolCallResult::error("Missing required field: space_id (integer)");
-    };
+    let space_id = extract_or_return!(extract_required_u64_field(args, "space_id"));
 
     let mgr = SpaceManager::new();
     match mgr.switch_to_space(space_id) {
@@ -324,9 +322,7 @@ pub(crate) fn handle_ax_switch_space(args: &Value) -> ToolCallResult {
 pub(crate) fn handle_ax_destroy_space(args: &Value) -> ToolCallResult {
     use crate::spaces::{SpaceError, SpaceManager};
 
-    let Some(space_id) = args["space_id"].as_u64() else {
-        return ToolCallResult::error("Missing required field: space_id (integer)");
-    };
+    let space_id = extract_or_return!(extract_required_u64_field(args, "space_id"));
 
     // We need a manager that knows about agent-created spaces. Since tool
     // calls are stateless in the current architecture, we create a fresh
@@ -389,4 +385,41 @@ fn collect_window_ids(app_name: &str, registry: &Arc<AppRegistry>) -> Result<Vec
         .filter_map(|s| s.trim().parse::<u32>().ok())
         .collect();
     Ok(ids)
+}
+
+#[cfg(all(test, feature = "spaces"))]
+mod tests {
+    use super::*;
+    use crate::mcp::tools::AppRegistry;
+
+    #[test]
+    fn handle_ax_move_to_space_missing_space_id_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_ax_move_to_space(&json!({"app": "Safari"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Missing required field: space_id (integer)"
+        );
+    }
+
+    #[test]
+    fn handle_ax_switch_space_missing_space_id_returns_exact_error() {
+        let result = handle_ax_switch_space(&json!({}));
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Missing required field: space_id (integer)"
+        );
+    }
+
+    #[test]
+    fn handle_ax_destroy_space_missing_space_id_returns_exact_error() {
+        let result = handle_ax_destroy_space(&json!({}));
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Missing required field: space_id (integer)"
+        );
+    }
 }
