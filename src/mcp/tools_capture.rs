@@ -453,6 +453,72 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[track_caller]
+    fn tool_text(result: &ToolCallResult) -> &str {
+        result
+            .content
+            .first()
+            .map(|item| item.text.as_str())
+            .unwrap_or_else(|| {
+                panic!(
+                    "expected tool result to include at least one content item, got 0 (is_error={})",
+                    result.is_error
+                )
+            })
+    }
+
+    #[track_caller]
+    fn assert_tool_ok(result: &ToolCallResult) -> &str {
+        let text = tool_text(result);
+        assert!(!result.is_error, "unexpected error: {text}");
+        text
+    }
+
+    #[track_caller]
+    fn assert_tool_error(result: &ToolCallResult) -> &str {
+        let text = tool_text(result);
+        assert!(result.is_error, "expected tool error, got success: {text}");
+        text
+    }
+
+    #[track_caller]
+    fn assert_tool_error_contains(result: &ToolCallResult, expected: &str) {
+        let text = assert_tool_error(result);
+        assert!(
+            text.contains(expected),
+            "expected error containing {expected:?}, got: {text}"
+        );
+    }
+
+    #[track_caller]
+    fn parse_tool_json(result: &ToolCallResult) -> Value {
+        let text = assert_tool_ok(result);
+        serde_json::from_str(text).unwrap_or_else(|error| {
+            panic!("expected valid JSON tool result, got parse error: {error}; content: {text}")
+        })
+    }
+
+    #[track_caller]
+    fn string_field<'a>(value: &'a Value, field: &str) -> &'a str {
+        match value.get(field) {
+            Some(Value::String(text)) => text.as_str(),
+            Some(other) => panic!("expected JSON field '{field}' to be a string, got: {other}"),
+            None => panic!("expected JSON field '{field}' to be present"),
+        }
+    }
+
+    #[track_caller]
+    fn assert_nonempty_string_field<'a>(value: &'a Value, field: &str) -> &'a str {
+        let text = string_field(value, field);
+        assert!(!text.is_empty(), "{field} must not be empty");
+        text
+    }
+
+    #[track_caller]
+    fn dispatched(result: Option<ToolCallResult>, tool_name: &str) -> ToolCallResult {
+        result.unwrap_or_else(|| panic!("{tool_name} should dispatch"))
+    }
+
     // -----------------------------------------------------------------------
     // Tool declarations
     // -----------------------------------------------------------------------
@@ -618,12 +684,11 @@ mod tests {
             "transcribe": false,
             "screen": false
         }));
-        assert!(!start.is_error, "{}", start.content[0].text);
+        assert_tool_ok(&start);
 
         // WHEN: status queried
         let status = handle_ax_capture_status();
-        assert!(!status.is_error);
-        let v: Value = serde_json::from_str(&status.content[0].text).unwrap();
+        let v = parse_tool_json(&status);
 
         // THEN: diff counters are present and zero (no screen capture occurred)
         assert_eq!(v["frames_captured"], 0, "frames_captured should be 0");
@@ -645,12 +710,7 @@ mod tests {
         let _ = handle_ax_stop_capture(&json!({}));
 
         let result = handle_ax_capture_status();
-        assert!(
-            !result.is_error,
-            "unexpected error: {}",
-            result.content[0].text
-        );
-        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        let v = parse_tool_json(&result);
         assert_eq!(v["running"], false);
     }
 
@@ -663,8 +723,7 @@ mod tests {
         let _ = handle_ax_stop_capture(&json!({}));
 
         let result = handle_ax_get_transcription(&json!({}));
-        assert!(result.is_error);
-        assert!(result.content[0].text.contains("No active capture session"));
+        assert_tool_error_contains(&result, "No active capture session");
     }
 
     #[test]
@@ -676,8 +735,7 @@ mod tests {
         let _ = handle_ax_stop_capture(&json!({}));
 
         let result = handle_ax_stop_capture(&json!({}));
-        assert!(!result.is_error);
-        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        let v = parse_tool_json(&result);
         assert_eq!(v["stopped"], false);
     }
 
@@ -691,18 +749,13 @@ mod tests {
         let start = handle_ax_start_capture(&json!({
             "audio": false, "transcribe": false, "screen": false
         }));
-        assert!(!start.is_error);
+        assert_tool_ok(&start);
 
         // WHEN: stop is called with a wrong session_id
         let result = handle_ax_stop_capture(&json!({ "session_id": "deadbeef00000000" }));
 
         // THEN: error returned, session still running
-        assert!(result.is_error, "expected error for mismatched session_id");
-        assert!(
-            result.content[0].text.contains("session_id mismatch"),
-            "unexpected error text: {}",
-            result.content[0].text
-        );
+        assert_tool_error_contains(&result, "session_id mismatch");
 
         // Cleanup
         let _ = handle_ax_stop_capture(&json!({}));
@@ -718,20 +771,14 @@ mod tests {
         let start = handle_ax_start_capture(&json!({
             "audio": false, "transcribe": false, "screen": false
         }));
-        assert!(!start.is_error);
-        let sv: Value = serde_json::from_str(&start.content[0].text).unwrap();
-        let sid = sv["session_id"].as_str().unwrap().to_string();
+        let sv = parse_tool_json(&start);
+        let sid = assert_nonempty_string_field(&sv, "session_id").to_owned();
 
         // WHEN: stop is called with the correct session_id
         let result = handle_ax_stop_capture(&json!({ "session_id": sid }));
 
         // THEN: success
-        assert!(
-            !result.is_error,
-            "unexpected error: {}",
-            result.content[0].text
-        );
-        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        let v = parse_tool_json(&result);
         assert_eq!(v["stopped"], true);
     }
 
@@ -751,29 +798,24 @@ mod tests {
             "screen": false,
             "buffer_seconds": 5
         }));
-        assert!(!start_result.is_error, "{}", start_result.content[0].text);
-        let start_v: Value = serde_json::from_str(&start_result.content[0].text).unwrap();
+        let start_v = parse_tool_json(&start_result);
         assert_eq!(start_v["started"], true);
-        assert!(start_v["session_id"].is_string());
-        let _session_id = start_v["session_id"].as_str().unwrap().to_string();
+        assert_nonempty_string_field(&start_v, "session_id");
 
         // THEN: status shows running
         let status_result = handle_ax_capture_status();
-        assert!(!status_result.is_error);
-        let sv: Value = serde_json::from_str(&status_result.content[0].text).unwrap();
+        let sv = parse_tool_json(&status_result);
         assert_eq!(sv["running"], true);
 
         // AND: transcription returns empty segments (no audio captured)
         let tx_result = handle_ax_get_transcription(&json!({ "since_seconds": 30 }));
-        assert!(!tx_result.is_error);
-        let tv: Value = serde_json::from_str(&tx_result.content[0].text).unwrap();
+        let tv = parse_tool_json(&tx_result);
         assert!(tv["segments"].is_array());
         assert_eq!(tv["text"], "");
 
         // WHEN: stopped
         let stop_result = handle_ax_stop_capture(&json!({}));
-        assert!(!stop_result.is_error);
-        let stop_v: Value = serde_json::from_str(&stop_result.content[0].text).unwrap();
+        let stop_v = parse_tool_json(&stop_result);
         assert_eq!(stop_v["stopped"], true);
         assert!(stop_v["duration_ms"].is_number());
     }
@@ -787,19 +829,15 @@ mod tests {
         let r1 = handle_ax_start_capture(&json!({
             "audio": false, "transcribe": false, "screen": false
         }));
-        let id1 = serde_json::from_str::<Value>(&r1.content[0].text).unwrap()["session_id"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let r1_json = parse_tool_json(&r1);
+        let id1 = assert_nonempty_string_field(&r1_json, "session_id").to_owned();
 
         // WHEN: start second session (replaces first)
         let r2 = handle_ax_start_capture(&json!({
             "audio": false, "transcribe": false, "screen": false
         }));
-        let id2 = serde_json::from_str::<Value>(&r2.content[0].text).unwrap()["session_id"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let r2_json = parse_tool_json(&r2);
+        let id2 = assert_nonempty_string_field(&r2_json, "session_id").to_owned();
 
         // THEN: IDs differ
         assert_ne!(id1, id2);
@@ -848,9 +886,8 @@ mod tests {
             &registry,
             &mut out,
         );
-        assert!(result.is_some(), "ax_capture_status should dispatch");
-        let r = result.unwrap();
-        assert!(!r.is_error, "unexpected error: {}", r.content[0].text);
+        let r = dispatched(result, "ax_capture_status");
+        assert_tool_ok(&r);
     }
 
     #[test]
@@ -871,7 +908,7 @@ mod tests {
             &registry,
             &mut out,
         );
-        assert!(result.is_some());
-        assert!(result.unwrap().is_error);
+        let result = dispatched(result, "ax_get_transcription");
+        assert_tool_error(&result);
     }
 }

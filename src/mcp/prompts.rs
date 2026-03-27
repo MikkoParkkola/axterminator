@@ -805,6 +805,27 @@ mod tests {
         }
     }
 
+    #[track_caller]
+    fn prompt_ok(params: &PromptGetParams) -> PromptGetResult {
+        get_prompt(params).unwrap_or_else(|err| {
+            panic!(
+                "expected prompt '{}' to resolve successfully: {err}",
+                params.name
+            )
+        })
+    }
+
+    #[track_caller]
+    fn assert_two_messages(result: &PromptGetResult) -> (&str, &str) {
+        match result.messages.as_slice() {
+            [user, assistant] => (user.content.text.as_str(), assistant.content.text.as_str()),
+            messages => panic!(
+                "expected prompt result to contain exactly 2 messages (user + assistant), got {}",
+                messages.len()
+            ),
+        }
+    }
+
     // -----------------------------------------------------------------------
     // all_prompts
     // -----------------------------------------------------------------------
@@ -852,16 +873,17 @@ mod tests {
         // GIVEN: valid arguments for test-app
         let p = params("test-app", &[("app_name", "Safari")]);
         // WHEN: prompt resolved
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // THEN: two messages (user + assistant)
-        assert_eq!(result.messages.len(), 2);
+        assert_two_messages(&result);
     }
 
     #[test]
     fn test_app_user_message_contains_app_name() {
         let p = params("test-app", &[("app_name", "Finder")]);
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0].content.text.contains("Finder"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("Finder"));
     }
 
     #[test]
@@ -870,8 +892,9 @@ mod tests {
             "test-app",
             &[("app_name", "Safari"), ("focus_area", "toolbar")],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0].content.text.contains("toolbar"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("toolbar"));
     }
 
     #[test]
@@ -894,8 +917,8 @@ mod tests {
             "navigate-to",
             &[("app_name", "Safari"), ("target_screen", "Settings")],
         );
-        let result = get_prompt(&p).unwrap();
-        assert_eq!(result.messages.len(), 2);
+        let result = prompt_ok(&p);
+        assert_two_messages(&result);
     }
 
     #[test]
@@ -907,11 +930,9 @@ mod tests {
                 ("target_screen", "File > New Folder"),
             ],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("File > New Folder"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("File > New Folder"));
     }
 
     #[test]
@@ -934,8 +955,8 @@ mod tests {
                 ("data_description", "all contact names"),
             ],
         );
-        let result = get_prompt(&p).unwrap();
-        assert_eq!(result.messages.len(), 2);
+        let result = prompt_ok(&p);
+        assert_two_messages(&result);
     }
 
     #[test]
@@ -944,7 +965,7 @@ mod tests {
             "extract-data",
             &[("app_name", "Notes"), ("data_description", "note titles")],
         );
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         assert!(result.description.contains("note titles"));
     }
 
@@ -961,27 +982,26 @@ mod tests {
     #[test]
     fn accessibility_audit_with_valid_app_returns_two_messages() {
         let p = params("accessibility-audit", &[("app_name", "Mail")]);
-        let result = get_prompt(&p).unwrap();
-        assert_eq!(result.messages.len(), 2);
+        let result = prompt_ok(&p);
+        assert_two_messages(&result);
     }
 
     #[test]
     fn accessibility_audit_user_message_mentions_wcag() {
         let p = params("accessibility-audit", &[("app_name", "Mail")]);
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // The audit message should mention the WCAG criterion
-        assert!(result.messages[0].content.text.contains("WCAG"));
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("WCAG"));
     }
 
     #[test]
     fn accessibility_audit_mentions_resource_uri() {
         let p = params("accessibility-audit", &[("app_name", "Mail")]);
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // Should reference the tree resource for the named app
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://app/Mail/tree"));
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("axterminator://app/Mail/tree"));
     }
 
     #[test]
@@ -1005,9 +1025,9 @@ mod tests {
             &[("app_name", "TextEdit"), ("goal", "save the document")],
         );
         // WHEN: prompt resolved
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // THEN: two messages (user + assistant)
-        assert_eq!(result.messages.len(), 2);
+        assert_two_messages(&result);
     }
 
     #[test]
@@ -1016,8 +1036,9 @@ mod tests {
             "automate-workflow",
             &[("app_name", "Safari"), ("goal", "open Settings")],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0].content.text.contains("open Settings"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("open Settings"));
     }
 
     #[test]
@@ -1026,8 +1047,9 @@ mod tests {
             "automate-workflow",
             &[("app_name", "Finder"), ("goal", "create a folder")],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0].content.text.contains("ax_workflow"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("ax_workflow"));
     }
 
     #[test]
@@ -1056,9 +1078,9 @@ mod tests {
             &[("app_name", "Notes"), ("query", "title:New Note")],
         );
         // WHEN: prompt resolved
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // THEN: two messages (user + assistant)
-        assert_eq!(result.messages.len(), 2);
+        assert_two_messages(&result);
     }
 
     #[test]
@@ -1067,11 +1089,9 @@ mod tests {
             "debug-ui",
             &[("app_name", "Safari"), ("query", "role:AXButton title:Go")],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("role:AXButton title:Go"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("role:AXButton title:Go"));
     }
 
     #[test]
@@ -1080,8 +1100,9 @@ mod tests {
             "debug-ui",
             &[("app_name", "Finder"), ("query", "New Folder")],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0].content.text.contains("ax_get_tree"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("ax_get_tree"));
     }
 
     #[test]
@@ -1107,9 +1128,9 @@ mod tests {
             ],
         );
         // WHEN: prompt resolved
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // THEN: two messages (user + assistant)
-        assert_eq!(result.messages.len(), 2);
+        assert_two_messages(&result);
     }
 
     #[test]
@@ -1122,8 +1143,8 @@ mod tests {
                 ("data_description", "email addresses"),
             ],
         );
-        let result = get_prompt(&p).unwrap();
-        let text = &result.messages[0].content.text;
+        let result = prompt_ok(&p);
+        let (text, _) = assert_two_messages(&result);
         assert!(text.contains("Contacts"));
         assert!(text.contains("Sheets"));
     }
@@ -1138,11 +1159,9 @@ mod tests {
                 ("data_description", "note content"),
             ],
         );
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://clipboard"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("axterminator://clipboard"));
     }
 
     #[test]
@@ -1164,36 +1183,32 @@ mod tests {
         // GIVEN: required argument for analyze-app
         let p = params("analyze-app", &[("app_name", "Safari")]);
         // WHEN: prompt resolved
-        let result = get_prompt(&p).unwrap();
+        let result = prompt_ok(&p);
         // THEN: two messages (user + assistant)
-        assert_eq!(result.messages.len(), 2);
+        assert_two_messages(&result);
     }
 
     #[test]
     fn analyze_app_user_message_mentions_state_resource() {
         let p = params("analyze-app", &[("app_name", "Finder")]);
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://app/Finder/state"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("axterminator://app/Finder/state"));
     }
 
     #[test]
     fn analyze_app_user_message_mentions_tree_resource() {
         let p = params("analyze-app", &[("app_name", "Mail")]);
-        let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://app/Mail/tree"));
+        let result = prompt_ok(&p);
+        let (user_text, _) = assert_two_messages(&result);
+        assert!(user_text.contains("axterminator://app/Mail/tree"));
     }
 
     #[test]
     fn analyze_app_description_contains_analysis_summary_sections() {
         let p = params("analyze-app", &[("app_name", "Notes")]);
-        let result = get_prompt(&p).unwrap();
-        let text = &result.messages[0].content.text;
+        let result = prompt_ok(&p);
+        let (text, _) = assert_two_messages(&result);
         // Must guide toward all four required sections
         assert!(text.contains("UI Pattern"));
         assert!(text.contains("Suggested Actions"));
