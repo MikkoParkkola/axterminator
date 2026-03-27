@@ -11,6 +11,7 @@ pub(crate) fn security_mode_lock() -> &'static Mutex<()> {
 }
 
 /// Serializes tests that mutate the shared audio capture session store.
+#[cfg(feature = "audio")]
 pub(crate) fn capture_session_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     shared_lock(&LOCK)

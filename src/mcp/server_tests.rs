@@ -1112,7 +1112,7 @@ fn prompts_get_analyze_app_resolves() {
 // -----------------------------------------------------------------------
 
 fn expected_static_resource_uris() -> Vec<&'static str> {
-    let mut uris = vec![
+    let uris = vec![
         "axterminator://system/status",
         "axterminator://system/displays",
         "axterminator://apps",
@@ -1125,18 +1125,27 @@ fn expected_static_resource_uris() -> Vec<&'static str> {
     ];
 
     #[cfg(feature = "spaces")]
-    uris.push("axterminator://spaces");
+    let uris = uris
+        .into_iter()
+        .chain(["axterminator://spaces"])
+        .collect::<Vec<_>>();
 
     #[cfg(feature = "audio")]
-    uris.extend([
-        "axterminator://audio/devices",
-        "axterminator://capture/transcription",
-        "axterminator://capture/screen",
-        "axterminator://capture/status",
-    ]);
+    let uris = uris
+        .into_iter()
+        .chain([
+            "axterminator://audio/devices",
+            "axterminator://capture/transcription",
+            "axterminator://capture/screen",
+            "axterminator://capture/status",
+        ])
+        .collect::<Vec<_>>();
 
     #[cfg(feature = "camera")]
-    uris.push("axterminator://camera/devices");
+    let uris = uris
+        .into_iter()
+        .chain(["axterminator://camera/devices"])
+        .collect::<Vec<_>>();
 
     uris
 }
