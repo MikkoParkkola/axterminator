@@ -16,6 +16,7 @@ use crate::app::AXApp;
 use crate::mcp::action_safety::{is_element_destructive, require_destructive_confirmation};
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tools::AppRegistry;
+use crate::mcp::tools_response::ok_found_value;
 
 macro_rules! extract_or_return {
     ($result:expr) => {
@@ -241,7 +242,7 @@ pub(crate) fn handle_get_value(args: &Value, registry: &Arc<AppRegistry>) -> Too
 
     registry
         .with_app(&app_name, |app| match app.find_native(&query, Some(100)) {
-            Ok(el) => ToolCallResult::ok_json(json!({"found": true, "value": el.value()})),
+            Ok(el) => ok_found_value(el.value()),
             Err(_) => ToolCallResult::error(format!("Element not found: '{query}'")),
         })
         .unwrap_or_else(ToolCallResult::error)

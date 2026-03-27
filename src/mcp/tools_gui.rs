@@ -20,6 +20,9 @@ use crate::mcp::annotations;
 use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::tools::AppRegistry;
+use crate::mcp::tools_response::{
+    ok_apps, ok_assertion, ok_found_attributes, ok_found_false, ok_found_tree,
+};
 
 // Re-export AX actions so handlers can reference them without the full path.
 use crate::accessibility::actions;
@@ -436,9 +439,9 @@ pub(crate) fn handle_get_attributes(args: &Value, registry: &Arc<AppRegistry>) -
                     "focused":     el.focused(),
                     "bounds":      bounds_val
                 });
-                ToolCallResult::ok_json(json!({"found": true, "attributes": attrs}))
+                ok_found_attributes(attrs)
             }
-            Err(_) => ToolCallResult::ok_json(json!({"found": false})),
+            Err(_) => ok_found_false(),
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -472,16 +475,16 @@ pub(crate) fn handle_get_tree<W: Write>(
                 match app.find_native(q, Some(100)) {
                     Ok(el) => {
                         let tree = build_element_tree(el.element, depth, &mut reporter);
-                        return ToolCallResult::ok_json(json!({"found": true, "tree": tree}));
+                        return ok_found_tree(tree);
                     }
-                    Err(_) => return ToolCallResult::ok_json(json!({"found": false})),
+                    Err(_) => return ok_found_false(),
                 }
             } else {
                 app.element
             };
 
             let tree = build_app_root_tree(root_element, depth, &mut reporter);
-            ToolCallResult::ok_json(json!({"found": true, "tree": tree}))
+            ok_found_tree(tree)
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -509,7 +512,7 @@ fn handle_get_tree_llm_format(app_name: &str, registry: &Arc<AppRegistry>) -> To
 
 pub(crate) fn handle_list_apps() -> ToolCallResult {
     let apps = list_running_apps();
-    ToolCallResult::ok_json(json!({ "apps": apps }))
+    ok_apps(apps)
 }
 
 pub(crate) fn handle_drag(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
@@ -559,33 +562,18 @@ pub(crate) fn handle_assert(args: &Value, registry: &Arc<AppRegistry>) -> ToolCa
                 let exists = app.find_native(&query, Some(100)).is_ok();
                 let actual = if exists { "true" } else { "false" }.to_string();
                 let passed = actual == expected;
-                return ToolCallResult::ok_json(json!({
-                    "passed":   passed,
-                    "actual":   actual,
-                    "expected": expected,
-                    "property": property
-                }));
+                return ok_assertion(passed, &actual, &expected, &property);
             }
 
             match app.find_native(&query, Some(100)) {
                 Ok(el) => {
                     let actual = read_element_property(&el, &property);
                     let passed = actual == expected;
-                    ToolCallResult::ok_json(json!({
-                        "passed":   passed,
-                        "actual":   actual,
-                        "expected": expected,
-                        "property": property
-                    }))
+                    ok_assertion(passed, &actual, &expected, &property)
                 }
                 Err(_) => {
                     // Element not found — assert fails with empty actual.
-                    ToolCallResult::ok_json(json!({
-                        "passed":   false,
-                        "actual":   "",
-                        "expected": expected,
-                        "property": property
-                    }))
+                    ok_assertion(false, "", &expected, &property)
                 }
             }
         })
