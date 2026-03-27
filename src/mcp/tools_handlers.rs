@@ -475,6 +475,10 @@ pub(crate) fn extract_bool_field_or(args: &Value, field: &str, default: bool) ->
     args[field].as_bool().unwrap_or(default)
 }
 
+pub(crate) fn extract_string_array_field<'a>(args: &'a Value, field: &str) -> Vec<&'a str> {
+    parse_json_string_array(&args[field])
+}
+
 pub(crate) fn extract_clamped_u64_field_or(
     args: &Value,
     field: &str,
@@ -512,6 +516,13 @@ where
     value
         .as_array()
         .map(|arr| arr.iter().filter_map(&mut parser).collect())
+        .unwrap_or_default()
+}
+
+pub(crate) fn parse_json_string_array<'a>(value: &'a Value) -> Vec<&'a str> {
+    value
+        .as_array()
+        .map(|arr| arr.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default()
 }
 
@@ -884,6 +895,16 @@ mod tests {
     }
 
     #[test]
+    fn extract_string_array_field_filters_non_strings_and_defaults_empty() {
+        let args = json!({"gestures": ["wave", 7, "pinch", null]});
+        assert_eq!(
+            extract_string_array_field(&args, "gestures"),
+            vec!["wave", "pinch"]
+        );
+        assert!(extract_string_array_field(&json!({}), "gestures").is_empty());
+    }
+
+    #[test]
     fn extract_clamped_u64_field_or_applies_default_and_bounds() {
         assert_eq!(
             extract_clamped_u64_field_or(&json!({"depth": 0}), "depth", 3, 1, 10),
@@ -983,6 +1004,15 @@ mod tests {
     fn parse_json_array_filters_out_invalid_items() {
         let values = parse_json_array(&json!([1, "two", 3, null]), Value::as_u64);
         assert_eq!(values, vec![1, 3]);
+    }
+
+    #[test]
+    fn parse_json_string_array_filters_non_strings() {
+        assert_eq!(
+            parse_json_string_array(&json!(["text", 9, "role", false])),
+            vec!["text", "role"]
+        );
+        assert!(parse_json_string_array(&json!({"not": "an array"})).is_empty());
     }
 
     #[test]

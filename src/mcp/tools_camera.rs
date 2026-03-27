@@ -17,7 +17,7 @@ use crate::mcp::annotations;
 #[cfg(feature = "camera")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "camera")]
-use crate::mcp::tools_handlers::extract_f64_field_or;
+use crate::mcp::tools_handlers::{extract_f64_field_or, extract_string_array_field};
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -232,10 +232,7 @@ pub(crate) fn handle_ax_gesture_listen(args: &Value) -> ToolCallResult {
     if let Err(e) = crate::camera::validate_duration(duration_secs) {
         return ToolCallResult::error(e.to_string());
     }
-    let gesture_names: Vec<&str> = match args["gestures"].as_array() {
-        Some(arr) => arr.iter().filter_map(|v| v.as_str()).collect(),
-        None => vec![],
-    };
+    let gesture_names = extract_string_array_field(args, "gestures");
     if !gesture_names.is_empty() {
         if let Err(e) = crate::camera::validate_gesture_names(&gesture_names) {
             return ToolCallResult::error(e.to_string());

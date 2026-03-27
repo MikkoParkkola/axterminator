@@ -2333,6 +2333,7 @@ mod tests {
     use serde_json::json;
 
     use crate::mcp::tools::AppRegistry;
+    use crate::mcp::tools_handlers::parse_json_string_array;
 
     // -----------------------------------------------------------------------
     // innovation_tools descriptor invariants
@@ -4443,8 +4444,7 @@ mod tests {
         // GIVEN: the tool descriptor
         let tool = super::tool_ax_visual_diff();
         // THEN: app and baseline are declared as required
-        let required = tool.input_schema["required"].as_array().unwrap();
-        let fields: Vec<&str> = required.iter().map(|v| v.as_str().unwrap()).collect();
+        let fields = parse_json_string_array(&tool.input_schema["required"]);
         assert!(fields.contains(&"app"));
         assert!(fields.contains(&"baseline"));
     }
@@ -4463,8 +4463,7 @@ mod tests {
         // GIVEN: the tool descriptor
         let tool = super::tool_ax_a11y_audit();
         // THEN: only app is required (scope has a default value)
-        let required = tool.input_schema["required"].as_array().unwrap();
-        let fields: Vec<&str> = required.iter().map(|v| v.as_str().unwrap()).collect();
+        let fields = parse_json_string_array(&tool.input_schema["required"]);
         assert!(fields.contains(&"app"));
         assert!(!fields.contains(&"scope"));
     }

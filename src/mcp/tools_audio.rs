@@ -383,6 +383,7 @@ pub(crate) fn handle_ax_audio_devices() -> ToolCallResult {
 #[cfg(all(test, feature = "audio"))]
 mod tests {
     use super::*;
+    use crate::mcp::tools_handlers::parse_json_string_array;
 
     #[test]
     fn audio_tools_returns_three_tools() {
@@ -425,8 +426,7 @@ mod tests {
     #[test]
     fn ax_speak_tool_requires_text_field() {
         let tool = tool_ax_speak();
-        let required = tool.input_schema["required"].as_array().unwrap();
-        let req_names: Vec<&str> = required.iter().map(|v| v.as_str().unwrap()).collect();
+        let req_names = parse_json_string_array(&tool.input_schema["required"]);
         assert!(req_names.contains(&"text"), "text must be required");
     }
 
@@ -554,8 +554,7 @@ mod tests {
             props["engine"].is_object(),
             "engine property missing from schema"
         );
-        let enum_vals = props["engine"]["enum"].as_array().unwrap();
-        let names: Vec<&str> = enum_vals.iter().map(|v| v.as_str().unwrap()).collect();
+        let names = parse_json_string_array(&props["engine"]["enum"]);
         assert!(names.contains(&"apple"), "apple missing from engine enum");
         assert!(
             names.contains(&"parakeet"),
