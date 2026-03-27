@@ -33,6 +33,8 @@ use crate::capture::{CaptureConfig, CaptureSession};
 use crate::mcp::annotations;
 #[cfg(feature = "audio")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
+#[cfg(feature = "audio")]
+use crate::mcp::tools_handlers::extract_bool_field_or;
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -429,9 +431,9 @@ pub(crate) fn handle_ax_capture_status() -> ToolCallResult {
 #[cfg(feature = "audio")]
 fn parse_capture_config(args: &Value) -> CaptureConfig {
     CaptureConfig {
-        audio: args["audio"].as_bool().unwrap_or(true),
-        screen: args["screen"].as_bool().unwrap_or(false),
-        transcribe: args["transcribe"].as_bool().unwrap_or(true),
+        audio: extract_bool_field_or(args, "audio", true),
+        screen: extract_bool_field_or(args, "screen", false),
+        transcribe: extract_bool_field_or(args, "transcribe", true),
         buffer_seconds: args["buffer_seconds"]
             .as_u64()
             .map_or(60, |v| v.clamp(5, 300) as u32),

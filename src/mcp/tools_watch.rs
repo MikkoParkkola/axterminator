@@ -14,7 +14,9 @@ use serde_json::{json, Value};
 
 use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
-use crate::mcp::tools_handlers::{extract_f64_field_or, extract_u64_field_or};
+use crate::mcp::tools_handlers::{
+    extract_bool_field_or, extract_f64_field_or, extract_u64_field_or,
+};
 
 // ---------------------------------------------------------------------------
 // Tool declarations
@@ -152,8 +154,8 @@ fn tool_ax_watch_status() -> Tool {
 /// from the channel to MCP notifications.
 #[cfg(feature = "watch")]
 pub(crate) fn handle_ax_watch_start(args: &Value, state: &WatchState) -> ToolCallResult {
-    let audio = args["audio"].as_bool().unwrap_or(false);
-    let camera = args["camera"].as_bool().unwrap_or(false);
+    let audio = extract_bool_field_or(args, "audio", false);
+    let camera = extract_bool_field_or(args, "camera", false);
 
     if !audio && !camera {
         return ToolCallResult::error("At least one of 'audio' or 'camera' must be true");

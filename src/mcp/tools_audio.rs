@@ -18,7 +18,7 @@ use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "audio")]
 use crate::mcp::tools_handlers::{
-    extract_f64_field_or, extract_or_return, extract_required_string_field,
+    extract_bool_field_or, extract_f64_field_or, extract_or_return, extract_required_string_field,
 };
 
 // ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ fn tool_ax_audio_devices() -> Tool {
 pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
     let duration = extract_f64_field_or(args, "duration", 5.0) as f32;
     let source = args["source"].as_str().unwrap_or("microphone");
-    let do_transcribe = args["transcribe"].as_bool().unwrap_or(false);
+    let do_transcribe = extract_bool_field_or(args, "transcribe", false);
     let language = args["language"].as_str();
     let max_chunk_secs = args["max_chunk_secs"].as_f64().map(|v| v as f32);
     let engine_str = args["engine"].as_str().unwrap_or("apple");
