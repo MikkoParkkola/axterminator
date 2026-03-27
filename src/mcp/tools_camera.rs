@@ -15,9 +15,9 @@ use serde_json::{json, Value};
 #[cfg(feature = "camera")]
 use crate::mcp::annotations;
 #[cfg(feature = "camera")]
-use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::args::{extract_f64_field_or, extract_string_array_field};
 #[cfg(feature = "camera")]
-use crate::mcp::tools_handlers::{extract_f64_field_or, extract_string_array_field};
+use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
 // Tool names

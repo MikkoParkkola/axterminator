@@ -25,9 +25,9 @@ use serde_json::json;
 #[cfg(feature = "docker")]
 use crate::mcp::annotations;
 #[cfg(feature = "docker")]
-use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::args::{extract_or_return, extract_required_string_field};
 #[cfg(feature = "docker")]
-use crate::mcp::tools_handlers::{extract_or_return, extract_required_string_field};
+use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
 // Tool names

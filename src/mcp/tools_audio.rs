@@ -15,11 +15,11 @@ use serde_json::{json, Value};
 #[cfg(feature = "audio")]
 use crate::mcp::annotations;
 #[cfg(feature = "audio")]
-use crate::mcp::protocol::{Tool, ToolCallResult};
-#[cfg(feature = "audio")]
-use crate::mcp::tools_handlers::{
+use crate::mcp::args::{
     extract_bool_field_or, extract_f64_field_or, extract_or_return, extract_required_string_field,
 };
+#[cfg(feature = "audio")]
+use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -383,7 +383,7 @@ pub(crate) fn handle_ax_audio_devices() -> ToolCallResult {
 #[cfg(all(test, feature = "audio"))]
 mod tests {
     use super::*;
-    use crate::mcp::tools_handlers::parse_json_string_array;
+    use crate::mcp::args::parse_json_string_array;
 
     #[test]
     fn audio_tools_returns_three_tools() {

@@ -33,6 +33,7 @@
 
 pub(crate) mod action_safety;
 pub mod annotations;
+pub(crate) mod args;
 pub mod auth;
 pub mod elicitation;
 pub mod logging;

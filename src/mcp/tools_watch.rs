@@ -13,10 +13,8 @@
 use serde_json::{json, Value};
 
 use crate::mcp::annotations;
+use crate::mcp::args::{extract_bool_field_or, extract_f64_field_or, extract_u64_field_or};
 use crate::mcp::protocol::{Tool, ToolCallResult};
-use crate::mcp::tools_handlers::{
-    extract_bool_field_or, extract_f64_field_or, extract_u64_field_or,
-};
 
 // ---------------------------------------------------------------------------
 // Tool declarations

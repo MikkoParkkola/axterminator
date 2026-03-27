@@ -675,14 +675,14 @@ fn element_center(el: &crate::element::AXElement) -> Option<(f64, f64)> {
 // `pub(crate) use` re-exports items so callers can address them as
 // `crate::mcp::tools_gui::*`; it also brings them into local scope.
 // GUI helper utilities are re-exported for use by sibling modules and tests.
-#[allow(unused_imports)]
-pub(crate) use crate::mcp::tools_gui_events::{
-    key_name_to_code, list_running_apps, read_element_property, scroll_deltas,
-};
-pub(crate) use crate::mcp::tools_handlers::{
+pub(crate) use crate::mcp::args::{
     extract_app_from_to_queries, extract_app_optional_query, extract_app_query,
     extract_clamped_u64_field_or, extract_or_return, extract_required_string_field,
     extract_string_field_or, format_bounds,
+};
+#[allow(unused_imports)]
+pub(crate) use crate::mcp::tools_gui_events::{
+    key_name_to_code, list_running_apps, read_element_property, scroll_deltas,
 };
 // Private helpers used only within this file.
 use crate::mcp::tools_gui_events::{parse_and_post_key_event, post_drag_event, post_scroll_event};

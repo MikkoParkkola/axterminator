@@ -20,11 +20,11 @@ use serde_json::{json, Value};
 #[cfg(feature = "spaces")]
 use crate::mcp::annotations;
 #[cfg(feature = "spaces")]
+use crate::mcp::args::{extract_or_return, extract_required_u64_field};
+#[cfg(feature = "spaces")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "spaces")]
 use crate::mcp::tools::AppRegistry;
-#[cfg(feature = "spaces")]
-use crate::mcp::tools_handlers::{extract_or_return, extract_required_u64_field};
 
 // ---------------------------------------------------------------------------
 // Tool names

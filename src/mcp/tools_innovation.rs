@@ -20,14 +20,15 @@ use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
 use crate::mcp::annotations;
+use crate::mcp::args::{
+    extract_app_query, extract_clamped_u64_field_or, extract_f64_field_or, extract_or_return,
+    extract_required_string_field, extract_string_field_or, parse_json_array,
+};
 use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::server::WorkflowState;
 use crate::mcp::tools::AppRegistry;
-use crate::mcp::tools_handlers::{
-    extract_app_query, extract_clamped_u64_field_or, extract_f64_field_or, extract_or_return,
-    extract_required_string_field, extract_string_field_or, parse_json_array, scan_scene_or_error,
-};
+use crate::mcp::tools_handlers::scan_scene_or_error;
 
 // ---------------------------------------------------------------------------
 // Global tracker for ax_track_workflow
@@ -2332,8 +2333,8 @@ mod tests {
 
     use serde_json::json;
 
+    use crate::mcp::args::parse_json_string_array;
     use crate::mcp::tools::AppRegistry;
-    use crate::mcp::tools_handlers::parse_json_string_array;
 
     // -----------------------------------------------------------------------
     // innovation_tools descriptor invariants

@@ -32,9 +32,9 @@ use crate::capture::{CaptureConfig, CaptureSession};
 #[cfg(feature = "audio")]
 use crate::mcp::annotations;
 #[cfg(feature = "audio")]
-use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::args::extract_bool_field_or;
 #[cfg(feature = "audio")]
-use crate::mcp::tools_handlers::extract_bool_field_or;
+use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
 // Tool names
