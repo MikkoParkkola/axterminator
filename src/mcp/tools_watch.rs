@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 
 use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::tools_handlers::{extract_f64_field_or, extract_u64_field_or};
 
 // ---------------------------------------------------------------------------
 // Tool declarations
@@ -158,8 +159,8 @@ pub(crate) fn handle_ax_watch_start(args: &Value, state: &WatchState) -> ToolCal
         return ToolCallResult::error("At least one of 'audio' or 'camera' must be true");
     }
 
-    let vad_threshold_db = args["vad_threshold_db"].as_f64().unwrap_or(-40.0) as f32;
-    let camera_interval_ms = args["camera_interval_ms"].as_u64().unwrap_or(2000);
+    let vad_threshold_db = extract_f64_field_or(args, "vad_threshold_db", -40.0) as f32;
+    let camera_interval_ms = extract_u64_field_or(args, "camera_interval_ms", 2000);
 
     let config = crate::watch::WatchConfig {
         audio_enabled: audio,

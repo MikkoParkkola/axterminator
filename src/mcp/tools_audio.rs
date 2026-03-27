@@ -16,6 +16,8 @@ use serde_json::{json, Value};
 use crate::mcp::annotations;
 #[cfg(feature = "audio")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
+#[cfg(feature = "audio")]
+use crate::mcp::tools_handlers::extract_f64_field_or;
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -242,7 +244,7 @@ fn tool_ax_audio_devices() -> Tool {
 /// Handle `ax_listen` — capture audio and optionally transcribe.
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
-    let duration = args["duration"].as_f64().unwrap_or(5.0) as f32;
+    let duration = extract_f64_field_or(args, "duration", 5.0) as f32;
     let source = args["source"].as_str().unwrap_or("microphone");
     let do_transcribe = args["transcribe"].as_bool().unwrap_or(false);
     let language = args["language"].as_str();

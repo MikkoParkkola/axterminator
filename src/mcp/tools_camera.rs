@@ -16,6 +16,8 @@ use serde_json::{json, Value};
 use crate::mcp::annotations;
 #[cfg(feature = "camera")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
+#[cfg(feature = "camera")]
+use crate::mcp::tools_handlers::extract_f64_field_or;
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -226,7 +228,7 @@ pub(crate) fn gesture_to_json(d: &crate::camera::GestureDetection) -> serde_json
 /// Handle `ax_gesture_listen`.
 #[cfg(feature = "camera")]
 pub(crate) fn handle_ax_gesture_listen(args: &Value) -> ToolCallResult {
-    let duration_secs = args["duration_seconds"].as_f64().unwrap_or(10.0);
+    let duration_secs = extract_f64_field_or(args, "duration_seconds", 10.0);
     if let Err(e) = crate::camera::validate_duration(duration_secs) {
         return ToolCallResult::error(e.to_string());
     }

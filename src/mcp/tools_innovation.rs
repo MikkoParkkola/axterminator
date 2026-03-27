@@ -25,8 +25,8 @@ use crate::mcp::protocol::{Tool, ToolCallResult};
 use crate::mcp::server::WorkflowState;
 use crate::mcp::tools::AppRegistry;
 use crate::mcp::tools_handlers::{
-    extract_app_query, extract_or_return, extract_required_string_field, extract_string_field_or,
-    parse_json_array, scan_scene_or_error,
+    extract_app_query, extract_clamped_u64_field_or, extract_f64_field_or, extract_or_return,
+    extract_required_string_field, extract_string_field_or, parse_json_array, scan_scene_or_error,
 };
 
 // ---------------------------------------------------------------------------
@@ -1978,7 +1978,7 @@ fn handle_ax_undo(args: &Value) -> ToolCallResult {
         Some(a) => a,
         None => return ToolCallResult::error("Missing required field: app"),
     };
-    let count = args["count"].as_u64().unwrap_or(1).clamp(1, 50) as usize;
+    let count = extract_clamped_u64_field_or(args, "count", 1, 1, 50) as usize;
 
     dispatch_ax_undo(app_name, count);
 
@@ -2125,7 +2125,7 @@ fn compute_diff(baseline: &[u8], current: &[u8]) -> f64 {
 fn handle_ax_visual_diff(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let baseline_b64 = extract_or_return!(extract_required_string_field(args, "baseline"));
-    let threshold = args["threshold"].as_f64().unwrap_or(0.01);
+    let threshold = extract_f64_field_or(args, "threshold", 0.01);
 
     let baseline = match decode_baseline_b64(&baseline_b64) {
         Ok(b) => b,

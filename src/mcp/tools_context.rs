@@ -10,6 +10,8 @@ use serde_json::{json, Value};
 
 use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
+#[cfg(feature = "context")]
+use crate::mcp::tools_handlers::extract_f64_field_or;
 
 // ---------------------------------------------------------------------------
 // Tool names
@@ -204,7 +206,7 @@ pub(crate) fn handle_ax_clipboard(args: &Value) -> ToolCallResult {
 /// Handle `ax_location` — request GPS location.
 #[cfg(feature = "context")]
 pub(crate) fn handle_ax_location(args: &Value) -> ToolCallResult {
-    let timeout_secs = args["timeout"].as_f64().unwrap_or(10.0).clamp(1.0, 30.0);
+    let timeout_secs = extract_f64_field_or(args, "timeout", 10.0).clamp(1.0, 30.0);
     let timeout = std::time::Duration::from_secs_f64(timeout_secs);
 
     match crate::context::location::request_location(timeout) {

@@ -313,12 +313,8 @@ pub(crate) fn handle_screenshot(args: &Value, registry: &Arc<AppRegistry>) -> To
 }
 
 pub(crate) fn handle_click_at(args: &Value) -> ToolCallResult {
-    let Some(x_raw) = args["x"].as_i64() else {
-        return ToolCallResult::error("Missing required field: x");
-    };
-    let Some(y_raw) = args["y"].as_i64() else {
-        return ToolCallResult::error("Missing required field: y");
-    };
+    let x_raw = extract_or_return!(extract_required_i64_field(args, "x"));
+    let y_raw = extract_or_return!(extract_required_i64_field(args, "y"));
     #[allow(clippy::cast_possible_truncation)]
     let x = x_raw as i32;
     #[allow(clippy::cast_possible_truncation)]
@@ -493,6 +489,20 @@ pub(crate) fn extract_clamped_u64_field_or(
     max: u64,
 ) -> u64 {
     extract_u64_field_or(args, field, default).clamp(min, max)
+}
+
+/// Extract a required `i64` field.  Returns `Err` with a human-readable
+/// message when the field is absent or not numeric.
+pub(crate) fn extract_required_i64_field(args: &Value, field: &str) -> Result<i64, String> {
+    args[field]
+        .as_i64()
+        .ok_or_else(|| format!("Missing required field: {field}"))
+}
+
+/// Extract an optional `f64` field, returning `default` when the field is
+/// absent or cannot be represented as a float.
+pub(crate) fn extract_f64_field_or(args: &Value, field: &str, default: f64) -> f64 {
+    args[field].as_f64().unwrap_or(default)
 }
 
 pub(crate) fn scan_scene_or_error(
@@ -835,6 +845,80 @@ mod tests {
             extract_clamped_u64_field_or(&json!({}), "depth", 3, 1, 10),
             3
         );
+    }
+
+    #[test]
+    fn extract_required_i64_field_returns_value_when_present() {
+        let args = json!({"x": -5, "y": 42});
+        assert_eq!(extract_required_i64_field(&args, "x").unwrap(), -5_i64);
+        assert_eq!(extract_required_i64_field(&args, "y").unwrap(), 42_i64);
+    }
+
+    #[test]
+    fn extract_required_i64_field_errors_when_absent() {
+        let err = extract_required_i64_field(&json!({}), "x").unwrap_err();
+        assert_eq!(err, "Missing required field: x");
+    }
+
+    #[test]
+    fn extract_required_i64_field_errors_when_wrong_type() {
+        let err = extract_required_i64_field(&json!({"x": "not-a-number"}), "x").unwrap_err();
+        assert_eq!(err, "Missing required field: x");
+    }
+
+    #[test]
+    fn extract_f64_field_or_uses_value_then_default() {
+        let args = json!({"timeout": 2.5});
+        assert!((extract_f64_field_or(&args, "timeout", 10.0) - 2.5).abs() < f64::EPSILON);
+        assert!((extract_f64_field_or(&json!({}), "timeout", 10.0) - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn extract_f64_field_or_accepts_integer_json_value() {
+        // JSON integers coerce to f64 via serde_json::Value::as_f64.
+        let args = json!({"n": 7});
+        assert!((extract_f64_field_or(&args, "n", 0.0) - 7.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn extract_f64_field_or_with_clamp_mimics_inline_pattern() {
+        // Mirrors the idiom used at call sites: extract_f64_field_or(...).clamp(min, max).
+        // Below minimum → clamped to min.
+        assert!(
+            (extract_f64_field_or(&json!({"t": 0.0}), "t", 5.0).clamp(1.0, 10.0) - 1.0).abs()
+                < f64::EPSILON
+        );
+        // Above maximum → clamped to max.
+        assert!(
+            (extract_f64_field_or(&json!({"t": 99.0}), "t", 5.0).clamp(1.0, 10.0) - 10.0).abs()
+                < f64::EPSILON
+        );
+        // In-range value preserved.
+        assert!(
+            (extract_f64_field_or(&json!({"t": 3.5}), "t", 5.0).clamp(1.0, 10.0) - 3.5).abs()
+                < f64::EPSILON
+        );
+        // Absent field → default (also clamped).
+        assert!(
+            (extract_f64_field_or(&json!({}), "t", 5.0).clamp(1.0, 10.0) - 5.0).abs()
+                < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn handle_click_at_returns_error_for_missing_x() {
+        let result = handle_click_at(&json!({"y": 100}));
+        assert!(result.is_error);
+        let msg = &result.content[0].text;
+        assert!(msg.contains("Missing required field: x"), "got: {msg}");
+    }
+
+    #[test]
+    fn handle_click_at_returns_error_for_missing_y() {
+        let result = handle_click_at(&json!({"x": 50}));
+        assert!(result.is_error);
+        let msg = &result.content[0].text;
+        assert!(msg.contains("Missing required field: y"), "got: {msg}");
     }
 
     #[test]
