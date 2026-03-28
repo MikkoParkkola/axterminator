@@ -651,6 +651,94 @@ fn tasks_result_for_completed_task_returns_tool_result() {
 }
 
 #[test]
+fn sandboxed_async_task_returns_blocked_tool_error() {
+    let _guard = crate::test_sync::security_mode_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+    }
+    let mut s = Server::new();
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+    }
+    initialize_server(&mut s);
+
+    let submit_v = send(
+        &mut s,
+        371,
+        "tools/call",
+        Some(json!({
+            "name": "ax_click",
+            "arguments": { "app": "Calculator", "query": "Save" },
+            "_meta": { "task": true }
+        })),
+    );
+    let task_id = submit_v["result"]["task"]["taskId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let result_v = send(
+        &mut s,
+        372,
+        "tasks/result",
+        Some(json!({ "taskId": task_id })),
+    );
+
+    assert_eq!(result_v["result"]["isError"], true);
+    assert_eq!(
+        result_v["result"]["content"][0]["text"],
+        "Tool 'ax_click' is blocked in sandboxed mode (read-only)"
+    );
+}
+
+#[cfg(feature = "watch")]
+#[test]
+fn async_watch_status_uses_watch_dispatch_path() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+
+    let submit_v = send(
+        &mut s,
+        373,
+        "tools/call",
+        Some(json!({
+            "name": "ax_watch_status",
+            "arguments": {},
+            "_meta": { "task": true }
+        })),
+    );
+    let task_id = submit_v["result"]["task"]["taskId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let result_v = send(
+        &mut s,
+        374,
+        "tasks/result",
+        Some(json!({ "taskId": task_id })),
+    );
+
+    assert_eq!(result_v["result"]["isError"], false);
+    let payload =
+        serde_json::from_str::<Value>(result_v["result"]["content"][0]["text"].as_str().unwrap())
+            .unwrap();
+    assert_eq!(
+        payload,
+        json!({
+            "audio_running": false,
+            "camera_running": false
+        })
+    );
+}
+
+#[test]
 fn tasks_result_unknown_task_id_returns_error() {
     // GIVEN: initialized server
     let mut s = Server::new();

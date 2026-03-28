@@ -117,7 +117,7 @@ pub(super) struct Server {
     /// can write results back without holding a reference to `Server`.
     pub(crate) tasks: Arc<Mutex<HashMap<String, TaskEntry>>>,
     /// §13 security model — mode, app policy, rate limiter, audit log.
-    pub(super) security: SecurityGuard,
+    pub(super) security: Arc<SecurityGuard>,
     /// Whether the connected client advertised `sampling` in its `initialize` capabilities.
     ///
     /// Set to `true` during `handle_initialize` when the client capabilities object
@@ -136,7 +136,7 @@ impl Server {
             workflows: Arc::new(Mutex::new(HashMap::new())),
             subscriptions: Arc::new(Mutex::new(HashSet::new())),
             tasks: Arc::new(Mutex::new(HashMap::new())),
-            security: SecurityGuard::new(),
+            security: Arc::new(SecurityGuard::new()),
             client_supports_sampling: false,
             #[cfg(feature = "watch")]
             watch_state: Arc::new(crate::mcp::tools_watch::WatchState::new()),

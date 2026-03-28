@@ -21,7 +21,7 @@ use crate::mcp::protocol::{
     TaskResultResponse, TasksCapability, TasksListResult, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
-use crate::mcp::security::SecurityMode;
+use crate::mcp::security::{SecurityGuard, SecurityMode};
 use crate::mcp::tools::call_tool;
 
 use super::server::{next_task_id, Phase, Server, TaskEntry};
@@ -163,6 +163,10 @@ impl Server {
         let registry = Arc::clone(&self.registry);
         let workflows = Arc::clone(&self.workflows);
         let subscriptions = Arc::clone(&self.subscriptions);
+        let security = Arc::clone(&self.security);
+        let client_supports_sampling = self.client_supports_sampling;
+        #[cfg(feature = "watch")]
+        let watch_state = Arc::clone(&self.watch_state);
         let name = tool_name.to_owned();
 
         std::thread::spawn(move || {
@@ -170,14 +174,16 @@ impl Server {
             // suppressed (dev/null sink) because the stdio loop is single-
             // threaded. Progress notifications require Phase 6 (SSE transport).
             let mut sink = std::io::sink();
-            let tool_result = execute_tool_background(
-                &name,
-                &args,
-                &registry,
-                &workflows,
-                &subscriptions,
-                &mut sink,
-            );
+            let shared = SharedToolDispatch {
+                registry: &registry,
+                workflows: &workflows,
+                subscriptions: &subscriptions,
+                security: &security,
+                client_supports_sampling,
+                #[cfg(feature = "watch")]
+                watch_state: &watch_state,
+            };
+            let tool_result = execute_tool_background(&name, &args, &shared, &mut sink);
 
             let (final_status, message) = if tool_result.is_error {
                 (task_status::FAILED, "Tool returned an error".to_owned())
@@ -512,111 +518,20 @@ impl Server {
         args: &Value,
         out: &mut W,
     ) -> crate::mcp::protocol::ToolCallResult {
-        // Gate 1 — rate limit.
-        if let Err(msg) = self.security.check_rate_limit() {
-            return crate::mcp::protocol::ToolCallResult::error(msg);
-        }
-
-        // Gate 2 — security mode.
-        if let Err(msg) = self.security.check_tool_allowed(name) {
-            return crate::mcp::protocol::ToolCallResult::error(msg);
-        }
-
-        // Gate 3 — app policy (applies to ax_connect only; the app_id is
-        // checked before we even attempt the AX connection).
-        if name == "ax_connect" {
-            if let Some(app_id) = args.get("app").and_then(Value::as_str) {
-                if let Err(msg) = self.security.check_app_allowed(app_id) {
-                    return crate::mcp::protocol::ToolCallResult::error(msg);
-                }
-            }
-        }
-
-        // Execute.
-        #[cfg(feature = "watch")]
-        {
-            let result = self.call_watch_tool(name, args);
-            if let Some(r) = result {
-                let outcome = if r.is_error { "error" } else { "ok" };
-                self.security.audit_tool_call(name, args, outcome);
-                return r;
-            }
-        }
-
-        // §14 Sampling — ax_find_visual gets a sampling context so it can
-        // include screenshot data and sampling availability in its response,
-        // enabling clients to perform VLM inference on the caller's behalf.
-        if name == "ax_find_visual" {
-            let sampling_ctx =
-                crate::mcp::sampling::SamplingContext::from(self.client_supports_sampling);
-            let result = crate::mcp::tools_handlers::handle_find_visual_with_sampling(
-                args,
-                &self.registry,
-                sampling_ctx,
-            );
-            let outcome = if result.is_error { "error" } else { "ok" };
-            self.security.audit_tool_call(name, args, outcome);
+        if let Some(result) = validate_tool_request(&self.security, name, args) {
             return result;
         }
 
-        let result = if let Some(r) =
-            crate::mcp::tools_innovation::call_workflow_tool(name, args, &self.workflows, out)
-        {
-            if !r.is_error {
-                self.notify_subscribed(name, args, out);
-            }
-            r
-        } else {
-            let r = call_tool(name, args, &self.registry, out);
-            if !r.is_error {
-                self.notify_subscribed(name, args, out);
-            }
-            r
+        let shared = SharedToolDispatch {
+            registry: &self.registry,
+            workflows: &self.workflows,
+            subscriptions: &self.subscriptions,
+            security: &self.security,
+            client_supports_sampling: self.client_supports_sampling,
+            #[cfg(feature = "watch")]
+            watch_state: &self.watch_state,
         };
-
-        // Gate 4 — audit log.
-        let outcome = if result.is_error { "error" } else { "ok" };
-        self.security.audit_tool_call(name, args, outcome);
-
-        result
-    }
-
-    /// Emit `notifications/resources/updated` for every subscribed URI that
-    /// `tool_name` is known to affect.
-    ///
-    /// This implements the §6.3 "notify after state change" pattern without
-    /// the full AX observer backend (which is Phase 5). Only URIs that the
-    /// client has actively subscribed to receive a notification.
-    fn notify_subscribed<W: Write>(&self, tool_name: &str, args: &Value, out: &mut W) {
-        let Ok(subs) = self.subscriptions.lock() else {
-            return;
-        };
-        if subs.is_empty() {
-            return;
-        }
-        for uri in affected_uris(tool_name, args) {
-            if subs.contains(*uri) {
-                crate::mcp::server::notify_resource_changed(out, uri);
-            }
-        }
-    }
-
-    /// Try to dispatch a watch tool by name; returns `None` for non-watch tools.
-    #[cfg(feature = "watch")]
-    fn call_watch_tool(
-        &self,
-        name: &str,
-        args: &Value,
-    ) -> Option<crate::mcp::protocol::ToolCallResult> {
-        use crate::mcp::tools_watch::{
-            handle_ax_watch_start, handle_ax_watch_status, handle_ax_watch_stop,
-        };
-        match name {
-            "ax_watch_start" => Some(handle_ax_watch_start(args, &self.watch_state)),
-            "ax_watch_stop" => Some(handle_ax_watch_stop(&self.watch_state)),
-            "ax_watch_status" => Some(handle_ax_watch_status(&self.watch_state)),
-            _ => None,
-        }
+        execute_tool_with_shared_state(name, args, &shared, out)
     }
 }
 
@@ -668,6 +583,111 @@ fn is_task_request(params: &Value) -> bool {
         .unwrap_or(false)
 }
 
+struct SharedToolDispatch<'a> {
+    registry: &'a std::sync::Arc<crate::mcp::tools::AppRegistry>,
+    workflows: &'a std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, super::server::WorkflowState>>,
+    >,
+    subscriptions: &'a std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    security: &'a SecurityGuard,
+    client_supports_sampling: bool,
+    #[cfg(feature = "watch")]
+    watch_state: &'a std::sync::Arc<crate::mcp::tools_watch::WatchState>,
+}
+
+/// Apply the same request-time policy gates used by synchronous tool dispatch.
+fn validate_tool_request(
+    security: &SecurityGuard,
+    name: &str,
+    args: &Value,
+) -> Option<crate::mcp::protocol::ToolCallResult> {
+    if let Err(msg) = security.check_rate_limit() {
+        return Some(crate::mcp::protocol::ToolCallResult::error(msg));
+    }
+
+    if let Err(msg) = security.check_tool_allowed(name) {
+        return Some(crate::mcp::protocol::ToolCallResult::error(msg));
+    }
+
+    if name == "ax_connect" {
+        if let Some(app_id) = args.get("app").and_then(Value::as_str) {
+            if let Err(msg) = security.check_app_allowed(app_id) {
+                return Some(crate::mcp::protocol::ToolCallResult::error(msg));
+            }
+        }
+    }
+
+    None
+}
+
+/// Shared execution core for sync and background tool dispatch.
+fn execute_tool_with_shared_state<W: Write>(
+    name: &str,
+    args: &Value,
+    shared: &SharedToolDispatch<'_>,
+    out: &mut W,
+) -> crate::mcp::protocol::ToolCallResult {
+    #[cfg(feature = "watch")]
+    {
+        if let Some(result) = call_watch_tool_with_state(name, args, shared.watch_state) {
+            let outcome = if result.is_error { "error" } else { "ok" };
+            shared.security.audit_tool_call(name, args, outcome);
+            return result;
+        }
+    }
+
+    if name == "ax_find_visual" {
+        let sampling_ctx =
+            crate::mcp::sampling::SamplingContext::from(shared.client_supports_sampling);
+        let result = crate::mcp::tools_handlers::handle_find_visual_with_sampling(
+            args,
+            shared.registry,
+            sampling_ctx,
+        );
+        let outcome = if result.is_error { "error" } else { "ok" };
+        shared.security.audit_tool_call(name, args, outcome);
+        return result;
+    }
+
+    let result = if let Some(workflow_result) =
+        crate::mcp::tools_innovation::call_workflow_tool(name, args, shared.workflows, out)
+    {
+        if !workflow_result.is_error {
+            notify_subscribed_bg(name, args, shared.subscriptions, out);
+        }
+        workflow_result
+    } else {
+        let tool_result = call_tool(name, args, shared.registry, out);
+        if !tool_result.is_error {
+            notify_subscribed_bg(name, args, shared.subscriptions, out);
+        }
+        tool_result
+    };
+
+    let outcome = if result.is_error { "error" } else { "ok" };
+    shared.security.audit_tool_call(name, args, outcome);
+    result
+}
+
+/// Shared watch-tool dispatcher for sync and background execution.
+#[cfg(feature = "watch")]
+fn call_watch_tool_with_state(
+    name: &str,
+    args: &Value,
+    watch_state: &std::sync::Arc<crate::mcp::tools_watch::WatchState>,
+) -> Option<crate::mcp::protocol::ToolCallResult> {
+    use crate::mcp::tools_watch::{
+        handle_ax_watch_start, handle_ax_watch_status, handle_ax_watch_stop,
+    };
+
+    match name {
+        "ax_watch_start" => Some(handle_ax_watch_start(args, watch_state)),
+        "ax_watch_stop" => Some(handle_ax_watch_stop(watch_state)),
+        "ax_watch_status" => Some(handle_ax_watch_status(watch_state)),
+        _ => None,
+    }
+}
+
 /// Execute a tool without holding a reference to `Server`.
 ///
 /// This is the function called from background threads spawned by
@@ -675,30 +695,17 @@ fn is_task_request(params: &Value) -> bool {
 /// [`Server::dispatch_tool`] but accepts the individual shared state pieces
 /// rather than `&self`, avoiding a lifetime dependency on the server.
 ///
-/// Watch tools are intentionally excluded: they manage `WatchState` which is
-/// not part of the task-dispatch path (they return immediately and are never
-/// long-running).
 fn execute_tool_background<W: Write>(
     name: &str,
     args: &Value,
-    registry: &std::sync::Arc<crate::mcp::tools::AppRegistry>,
-    workflows: &std::sync::Arc<
-        std::sync::Mutex<std::collections::HashMap<String, super::server::WorkflowState>>,
-    >,
-    subscriptions: &std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    shared: &SharedToolDispatch<'_>,
     out: &mut W,
 ) -> crate::mcp::protocol::ToolCallResult {
-    if let Some(result) =
-        crate::mcp::tools_innovation::call_workflow_tool(name, args, workflows, out)
-    {
-        notify_subscribed_bg(name, args, subscriptions, out);
+    if let Some(result) = validate_tool_request(shared.security, name, args) {
         return result;
     }
-    let result = call_tool(name, args, registry, out);
-    if !result.is_error {
-        notify_subscribed_bg(name, args, subscriptions, out);
-    }
-    result
+
+    execute_tool_with_shared_state(name, args, shared, out)
 }
 
 /// Background-thread variant of `Server::notify_subscribed`.
