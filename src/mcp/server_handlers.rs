@@ -95,32 +95,18 @@ impl Server {
         params: Option<&Value>,
         out: &mut W,
     ) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
+        let p = match parse_rpc_params::<ToolCallParams>(&id, params, "tools/call") {
+            Ok(p) => p,
+            Err(e) => return e,
         };
-
-        match serde_json::from_value::<ToolCallParams>(params_val.clone()) {
-            Ok(p) => {
-                let args = p
-                    .arguments
-                    .unwrap_or(Value::Object(serde_json::Map::default()));
-                if is_task_request(params_val) {
-                    self.dispatch_as_task(id, &p.name, args)
-                } else {
-                    let tool_result = self.dispatch_tool(&p.name, &args, out);
-                    JsonRpcResponse::ok(id, serde_json::to_value(tool_result).unwrap())
-                }
-            }
-            Err(e) => JsonRpcResponse::err(
-                id,
-                RpcError::new(
-                    RpcError::INVALID_PARAMS,
-                    format!("Invalid tools/call params: {e}"),
-                ),
-            ),
+        let args = p
+            .arguments
+            .unwrap_or(Value::Object(serde_json::Map::default()));
+        if params.map_or(false, is_task_request) {
+            self.dispatch_as_task(id, &p.name, args)
+        } else {
+            let tool_result = self.dispatch_tool(&p.name, &args, out);
+            JsonRpcResponse::ok(id, serde_json::to_value(tool_result).unwrap())
         }
     }
 
@@ -228,29 +214,17 @@ impl Server {
         id: RequestId,
         params: Option<&Value>,
     ) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
+        let p = match parse_rpc_params::<ResourceReadParams>(&id, params, "resources/read") {
+            Ok(p) => p,
+            Err(e) => return e,
         };
-
-        match serde_json::from_value::<ResourceReadParams>(params_val.clone()) {
-            Ok(p) => match crate::mcp::resources::read_resource(&p.uri, &self.registry) {
-                Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
-                Err(e) => JsonRpcResponse::err(
-                    id,
-                    RpcError::new(
-                        RpcError::INVALID_PARAMS,
-                        format!("Resource read failed: {e}"),
-                    ),
-                ),
-            },
+        match crate::mcp::resources::read_resource(&p.uri, &self.registry) {
+            Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
             Err(e) => JsonRpcResponse::err(
                 id,
                 RpcError::new(
                     RpcError::INVALID_PARAMS,
-                    format!("Invalid resources/read params: {e}"),
+                    format!("Resource read failed: {e}"),
                 ),
             ),
         }
@@ -271,33 +245,20 @@ impl Server {
         id: RequestId,
         params: Option<&Value>,
     ) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
-        };
-
-        match serde_json::from_value::<ResourceSubscribeParams>(params_val.clone()) {
-            Ok(p) => {
-                let uri = p.uri.clone();
-                if let Ok(mut subs) = self.subscriptions.lock() {
-                    subs.insert(uri.clone());
-                }
-                debug!(uri, "resource subscribed");
-                JsonRpcResponse::ok(
-                    id,
-                    serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
-                )
-            }
-            Err(e) => JsonRpcResponse::err(
-                id,
-                RpcError::new(
-                    RpcError::INVALID_PARAMS,
-                    format!("Invalid resources/subscribe params: {e}"),
-                ),
-            ),
+        let p =
+            match parse_rpc_params::<ResourceSubscribeParams>(&id, params, "resources/subscribe") {
+                Ok(p) => p,
+                Err(e) => return e,
+            };
+        let uri = p.uri.clone();
+        if let Ok(mut subs) = self.subscriptions.lock() {
+            subs.insert(uri.clone());
         }
+        debug!(uri, "resource subscribed");
+        JsonRpcResponse::ok(
+            id,
+            serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
+        )
     }
 
     /// Remove a client subscription, stopping update notifications for that URI.
@@ -306,33 +267,23 @@ impl Server {
         id: RequestId,
         params: Option<&Value>,
     ) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
+        let p = match parse_rpc_params::<ResourceUnsubscribeParams>(
+            &id,
+            params,
+            "resources/unsubscribe",
+        ) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
-
-        match serde_json::from_value::<ResourceUnsubscribeParams>(params_val.clone()) {
-            Ok(p) => {
-                let uri = p.uri.clone();
-                if let Ok(mut subs) = self.subscriptions.lock() {
-                    subs.remove(&uri);
-                }
-                debug!(uri, "resource unsubscribed");
-                JsonRpcResponse::ok(
-                    id,
-                    serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
-                )
-            }
-            Err(e) => JsonRpcResponse::err(
-                id,
-                RpcError::new(
-                    RpcError::INVALID_PARAMS,
-                    format!("Invalid resources/unsubscribe params: {e}"),
-                ),
-            ),
+        let uri = p.uri.clone();
+        if let Ok(mut subs) = self.subscriptions.lock() {
+            subs.remove(&uri);
         }
+        debug!(uri, "resource unsubscribed");
+        JsonRpcResponse::ok(
+            id,
+            serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -347,27 +298,15 @@ impl Server {
 
     /// Resolve a prompt by name, filling in caller-supplied arguments.
     pub(super) fn handle_prompts_get(id: RequestId, params: Option<&Value>) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
+        let p = match parse_rpc_params::<PromptGetParams>(&id, params, "prompts/get") {
+            Ok(p) => p,
+            Err(e) => return e,
         };
-
-        match serde_json::from_value::<PromptGetParams>(params_val.clone()) {
-            Ok(p) => match crate::mcp::prompts::get_prompt(&p) {
-                Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
-                Err(e) => JsonRpcResponse::err(
-                    id,
-                    RpcError::new(RpcError::INVALID_PARAMS, format!("Prompt error: {e}")),
-                ),
-            },
+        match crate::mcp::prompts::get_prompt(&p) {
+            Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
             Err(e) => JsonRpcResponse::err(
                 id,
-                RpcError::new(
-                    RpcError::INVALID_PARAMS,
-                    format!("Invalid prompts/get params: {e}"),
-                ),
+                RpcError::new(RpcError::INVALID_PARAMS, format!("Prompt error: {e}")),
             ),
         }
     }
@@ -399,25 +338,9 @@ impl Server {
         id: RequestId,
         params: Option<&Value>,
     ) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
-        };
-
-        let parsed = serde_json::from_value::<TaskResultParams>(params_val.clone());
-        let task_id = match parsed {
+        let task_id = match parse_rpc_params::<TaskResultParams>(&id, params, "tasks/result") {
             Ok(p) => p.task_id,
-            Err(e) => {
-                return JsonRpcResponse::err(
-                    id,
-                    RpcError::new(
-                        RpcError::INVALID_PARAMS,
-                        format!("Invalid tasks/result params: {e}"),
-                    ),
-                )
-            }
+            Err(e) => return e,
         };
 
         let store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -456,25 +379,9 @@ impl Server {
         id: RequestId,
         params: Option<&Value>,
     ) -> JsonRpcResponse {
-        let Some(params_val) = params else {
-            return JsonRpcResponse::err(
-                id,
-                RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-            );
-        };
-
-        let parsed = serde_json::from_value::<TaskCancelParams>(params_val.clone());
-        let task_id = match parsed {
+        let task_id = match parse_rpc_params::<TaskCancelParams>(&id, params, "tasks/cancel") {
             Ok(p) => p.task_id,
-            Err(e) => {
-                return JsonRpcResponse::err(
-                    id,
-                    RpcError::new(
-                        RpcError::INVALID_PARAMS,
-                        format!("Invalid tasks/cancel params: {e}"),
-                    ),
-                )
-            }
+            Err(e) => return e,
         };
 
         let mut store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -539,18 +446,58 @@ impl Server {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Deserialise JSON-RPC method params into a typed struct, or build an error
+/// response for immediate return.
+///
+/// Consolidates the `Option<&Value>` null-check plus `serde_json::from_value`
+/// call that every parameterised handler repeats.  `method` is used only for
+/// the error message (e.g. `"tools/call"` → `"Invalid tools/call params: …"`).
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// let p = match parse_rpc_params::<FooParams>(&id, params, "foo/bar") {
+///     Ok(p)  => p,
+///     Err(e) => return e,
+/// };
+/// ```
+fn parse_rpc_params<T: serde::de::DeserializeOwned>(
+    id: &RequestId,
+    params: Option<&Value>,
+    method: &str,
+) -> Result<T, JsonRpcResponse> {
+    let Some(params_val) = params else {
+        return Err(JsonRpcResponse::err(
+            id.clone(),
+            RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
+        ));
+    };
+    serde_json::from_value::<T>(params_val.clone()).map_err(|e| {
+        JsonRpcResponse::err(
+            id.clone(),
+            RpcError::new(
+                RpcError::INVALID_PARAMS,
+                format!("Invalid {method} params: {e}"),
+            ),
+        )
+    })
+}
+
 /// Map a tool call to the set of resource URIs it may have modified.
 ///
 /// Returns a static slice of URI strings so the subscription notifier can
 /// cheaply check which subscriptions to trigger without heap allocation.
 /// Only the most directly affected URIs are listed — callers iterate and check
 /// membership against the live subscription set.
-fn affected_uris(tool_name: &str, _args: &Value) -> &'static [&'static str] {
+fn affected_uris(tool_name: &str, args: &Value) -> &'static [&'static str] {
     match tool_name {
         // Connection tools change the apps list and system status.
         "ax_connect" | "ax_disconnect" => &["axterminator://apps", "axterminator://system/status"],
-        // Clipboard write changes the clipboard resource.
-        "ax_clipboard" => &["axterminator://clipboard"],
+        // Only clipboard writes change the clipboard resource; reads should not
+        // emit spurious resource-updated notifications.
+        "ax_clipboard" if args.get("action").and_then(Value::as_str) == Some("write") => {
+            &["axterminator://clipboard"]
+        }
         // Starting a capture session affects all three capture resources.
         "ax_start_capture" => &[
             "axterminator://capture/status",
@@ -801,5 +748,92 @@ Use prompts/get for detailed guidance:\n\
 - 'automate-workflow' — durable workflow guidance\n\
 - 'analyze-app' — comprehensive UI analysis\n\
 - 'test-app' / 'navigate-to' / 'extract-data' / 'accessibility-audit'",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+    use serde_json::json;
+
+    // -----------------------------------------------------------------------
+    // parse_rpc_params
+    // -----------------------------------------------------------------------
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct FooParams {
+        name: String,
+        count: u32,
+    }
+
+    #[test]
+    fn parse_rpc_params_ok() {
+        let id = RequestId::Number(1);
+        let params = json!({ "name": "hello", "count": 3 });
+        let result: Result<FooParams, _> = parse_rpc_params(&id, Some(&params), "foo/bar");
+        assert!(result.is_ok());
+        let p = result.unwrap();
+        assert_eq!(p.name, "hello");
+        assert_eq!(p.count, 3);
+    }
+
+    #[test]
+    fn parse_rpc_params_missing_params_returns_error_response() {
+        let id = RequestId::Number(42);
+        let result: Result<FooParams, JsonRpcResponse> = parse_rpc_params(&id, None, "foo/bar");
+        let err = result.unwrap_err();
+        let body = serde_json::to_value(&err).unwrap();
+        assert_eq!(body["id"], 42);
+        assert_eq!(body["error"]["code"], RpcError::INVALID_PARAMS);
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Missing params"));
+    }
+
+    #[test]
+    fn parse_rpc_params_malformed_returns_error_response() {
+        let id = RequestId::String("req-1".into());
+        // `count` is wrong type
+        let params = json!({ "name": "hello", "count": "not-a-number" });
+        let result: Result<FooParams, JsonRpcResponse> =
+            parse_rpc_params(&id, Some(&params), "foo/bar");
+        let err = result.unwrap_err();
+        let body = serde_json::to_value(&err).unwrap();
+        assert_eq!(body["id"], "req-1");
+        assert_eq!(body["error"]["code"], RpcError::INVALID_PARAMS);
+        let msg = body["error"]["message"].as_str().unwrap();
+        assert!(msg.contains("Invalid foo/bar params"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_rpc_params_error_preserves_id_clone() {
+        // Verify that id is correctly cloned for both error arms.
+        let id = RequestId::Number(99);
+        // Missing params arm
+        let r1: Result<FooParams, _> = parse_rpc_params(&id, None, "test");
+        assert!(r1.is_err());
+        // Malformed arm — id should still be usable after the call
+        let params = json!({ "name": 123 }); // name must be string
+        let r2: Result<FooParams, _> = parse_rpc_params(&id, Some(&params), "test");
+        assert!(r2.is_err());
+        // id is still valid (not moved)
+        let _ = id;
+    }
+
+    #[test]
+    fn affected_uris_ignores_clipboard_reads() {
+        let uris = affected_uris("ax_clipboard", &json!({ "action": "read" }));
+        assert!(
+            uris.is_empty(),
+            "clipboard read should not notify resources"
+        );
+    }
+
+    #[test]
+    fn affected_uris_includes_clipboard_on_write() {
+        let uris = affected_uris("ax_clipboard", &json!({ "action": "write" }));
+        assert_eq!(uris, &["axterminator://clipboard"]);
     }
 }

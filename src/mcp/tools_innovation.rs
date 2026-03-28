@@ -591,6 +591,61 @@ pub(crate) fn call_workflow_tool<W: Write>(
 }
 
 // ---------------------------------------------------------------------------
+// Handler helpers
+// ---------------------------------------------------------------------------
+
+/// Acquire a mutex, or return a [`ToolCallResult::error`] immediately.
+///
+/// Works in any function that returns `ToolCallResult`.  The error message is
+/// supplied by the caller so each site can provide a context-specific string.
+///
+/// ```text
+/// let Ok(mut guard) = SOME_MUTEX.lock() else {
+///     return ToolCallResult::error("context: mutex poisoned");
+/// };
+/// // becomes:
+/// let mut guard = lock_or_return_error!(SOME_MUTEX, "context: mutex poisoned");
+/// ```
+macro_rules! lock_or_return_error {
+    ($mutex:expr, $msg:expr) => {
+        match $mutex.lock() {
+            Ok(g) => g,
+            Err(_) => return ToolCallResult::error($msg),
+        }
+    };
+}
+
+/// Convert an optional `(x, y, width, height)` bounds tuple to a JSON array,
+/// or `null` when bounds are unavailable.
+///
+/// Used by query matches, audit issues, and any other JSON responses that
+/// expose element geometry.  Centralising this avoids three independent
+/// inline `map(|(x,y,w,h)| json!([x,y,w,h])).unwrap_or(Value::Null)` sites.
+#[inline]
+fn bounds_opt_to_json(bounds: Option<(f64, f64, f64, f64)>) -> Value {
+    bounds
+        .map(|(x, y, w, h)| json!([x, y, w, h]))
+        .unwrap_or(Value::Null)
+}
+
+/// Scan the live AX scene for `app_name` and pass it to `f`, propagating
+/// any connect or scan error as a `ToolCallResult::error`.
+///
+/// Consolidates the boilerplate shared by every scene-based handler:
+/// `registry.with_app` → `scan_scene_or_error` → `.unwrap_or_else(ToolCallResult::error)`.
+fn with_app_scene<F>(registry: &Arc<AppRegistry>, app_name: &str, f: F) -> ToolCallResult
+where
+    F: FnOnce(&crate::intent::SceneGraph) -> ToolCallResult,
+{
+    registry
+        .with_app(app_name, |app| {
+            let scene = extract_or_return!(scan_scene_or_error(app.element));
+            f(&scene)
+        })
+        .unwrap_or_else(ToolCallResult::error)
+}
+
+// ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
@@ -606,9 +661,7 @@ fn handle_ax_record(args: &Value) -> ToolCallResult {
     let app = extract_or_return!(extract_required_string_field(args, "app"));
     let action = extract_string_field_or(args, "action", "record");
 
-    let Ok(mut recorder) = WORKFLOW_RECORDER.lock() else {
-        return ToolCallResult::error("Recorder mutex poisoned");
-    };
+    let mut recorder = lock_or_return_error!(WORKFLOW_RECORDER, "Recorder mutex poisoned");
 
     match action {
         "start" => {
@@ -699,38 +752,34 @@ fn handle_ax_record(args: &Value) -> ToolCallResult {
 fn handle_ax_query(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     let (app_name, query) = extract_or_return!(extract_app_query(args));
 
-    registry
-        .with_app(&app_name, |app| {
-            let scene = extract_or_return!(scan_scene_or_error(app.element));
+    with_app_scene(registry, &app_name, |scene| {
+        let result = crate::scene::SceneEngine::new().query(&query, scene);
 
-            let result = crate::scene::SceneEngine::new().query(&query, &scene);
-
-            let matches_json: Vec<Value> = result
-                .matches
-                .iter()
-                .map(|m| {
-                    let bounds = m.bounds.map(|(x, y, w, h)| json!([x, y, w, h]));
-                    json!({
-                        "role":         m.element_role,
-                        "label":        m.element_label,
-                        "path":         m.element_path,
-                        "match_score":  m.match_score,
-                        "match_reason": m.match_reason,
-                        "bounds":       bounds
-                    })
-                })
-                .collect();
-
-            ToolCallResult::ok(
+        let matches_json: Vec<Value> = result
+            .matches
+            .iter()
+            .map(|m| {
+                let bounds = bounds_opt_to_json(m.bounds);
                 json!({
-                    "confidence":        result.confidence,
-                    "scene_description": result.scene_description,
-                    "matches":           matches_json
+                    "role":         m.element_role,
+                    "label":        m.element_label,
+                    "path":         m.element_path,
+                    "match_score":  m.match_score,
+                    "match_reason": m.match_reason,
+                    "bounds":       bounds
                 })
-                .to_string(),
-            )
-        })
-        .unwrap_or_else(ToolCallResult::error)
+            })
+            .collect();
+
+        ToolCallResult::ok(
+            json!({
+                "confidence":        result.confidence,
+                "scene_description": result.scene_description,
+                "matches":           matches_json
+            })
+            .to_string(),
+        )
+    })
 }
 
 /// Handle `ax_app_profile` — look up an Electron app profile by name.
@@ -930,9 +979,7 @@ fn handle_ax_track_workflow(args: &Value) -> ToolCallResult {
 fn handle_workflow_record(app_name: &str, args: &Value) -> ToolCallResult {
     let trigger = parse_transition_trigger(args["trigger"].as_str().unwrap_or("unknown"));
 
-    let Ok(mut tracker) = WORKFLOW_TRACKER.lock() else {
-        return ToolCallResult::error("Tracker mutex poisoned");
-    };
+    let mut tracker = lock_or_return_error!(WORKFLOW_TRACKER, "Tracker mutex poisoned");
     tracker.record_focus(app_name, trigger);
 
     ToolCallResult::ok(
@@ -949,9 +996,7 @@ fn handle_workflow_record(app_name: &str, args: &Value) -> ToolCallResult {
 fn handle_workflow_detect(args: &Value) -> ToolCallResult {
     let min_frequency = args["min_frequency"].as_u64().unwrap_or(2) as u32;
 
-    let Ok(tracker) = WORKFLOW_TRACKER.lock() else {
-        return ToolCallResult::error("Tracker mutex poisoned");
-    };
+    let tracker = lock_or_return_error!(WORKFLOW_TRACKER, "Tracker mutex poisoned");
     let workflows = tracker.detect_workflows(min_frequency);
 
     let workflows_json: Vec<Value> = workflows
@@ -988,9 +1033,7 @@ fn handle_workflow_detect(args: &Value) -> ToolCallResult {
 
 /// Return aggregate statistics from the global tracker.
 fn handle_workflow_stats() -> ToolCallResult {
-    let Ok(tracker) = WORKFLOW_TRACKER.lock() else {
-        return ToolCallResult::error("Tracker mutex poisoned");
-    };
+    let tracker = lock_or_return_error!(WORKFLOW_TRACKER, "Tracker mutex poisoned");
     let stats = tracker.stats();
 
     let top_transition = stats
@@ -1026,13 +1069,10 @@ fn handle_ax_analyze(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResul
     let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let focus = extract_string_field_or(args, "focus", "all");
 
-    registry
-        .with_app(&app_name, |app| {
-            let scene = extract_or_return!(scan_scene_or_error(app.element));
-            let payload = analyze_scene(&scene).focused_payload(focus);
-            ToolCallResult::ok(payload.to_string())
-        })
-        .unwrap_or_else(ToolCallResult::error)
+    with_app_scene(registry, &app_name, |scene| {
+        let payload = analyze_scene(scene).focused_payload(focus);
+        ToolCallResult::ok(payload.to_string())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1815,10 +1855,7 @@ fn audit_node(node: &crate::intent::SceneNode, issues: &mut Vec<Value>) {
     let role = node.role.as_deref().unwrap_or("");
     let has_label = node.title.is_some() || node.label.is_some() || node.description.is_some();
 
-    let bounds_json = node
-        .bounds
-        .map(|(x, y, w, h)| json!([x, y, w, h]))
-        .unwrap_or(Value::Null);
+    let bounds_json = bounds_opt_to_json(node.bounds);
 
     // WCAG 1.3.1 — interactive element with no accessible name.
     if INTERACTIVE_ROLES.contains(&role) && !has_label {
@@ -1877,28 +1914,24 @@ fn handle_ax_a11y_audit(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallRe
     // `scope` validated by schema; reserved for focused-window filtering.
     let _scope = extract_string_field_or(args, "scope", "full");
 
-    registry
-        .with_app(&app_name, |app| {
-            let scene = extract_or_return!(scan_scene_or_error(app.element));
+    with_app_scene(registry, &app_name, |scene| {
+        let issues = audit_accessibility(scene);
+        let issue_count = issues.len() as u64;
+        let critical = count_by_severity(&issues, "critical");
+        let warning = count_by_severity(&issues, "warning");
+        let info = count_by_severity(&issues, "info");
 
-            let issues = audit_accessibility(&scene);
-            let issue_count = issues.len() as u64;
-            let critical = count_by_severity(&issues, "critical");
-            let warning = count_by_severity(&issues, "warning");
-            let info = count_by_severity(&issues, "info");
-
-            ToolCallResult::ok(
-                json!({
-                    "issue_count": issue_count,
-                    "critical":    critical,
-                    "warning":     warning,
-                    "info":        info,
-                    "issues":      issues
-                })
-                .to_string(),
-            )
-        })
-        .unwrap_or_else(ToolCallResult::error)
+        ToolCallResult::ok(
+            json!({
+                "issue_count": issue_count,
+                "critical":    critical,
+                "warning":     warning,
+                "info":        info,
+                "issues":      issues
+            })
+            .to_string(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -1913,6 +1946,68 @@ mod tests {
 
     use crate::mcp::args::parse_json_string_array;
     use crate::mcp::tools::AppRegistry;
+
+    // -----------------------------------------------------------------------
+    // Handler-helper unit tests
+    // -----------------------------------------------------------------------
+
+    // --- bounds_opt_to_json -------------------------------------------------
+
+    #[test]
+    fn bounds_opt_to_json_none_gives_null() {
+        let v = super::bounds_opt_to_json(None);
+        assert!(v.is_null(), "expected null, got {v}");
+    }
+
+    #[test]
+    fn bounds_opt_to_json_some_gives_array() {
+        let v = super::bounds_opt_to_json(Some((10.0, 20.0, 100.0, 50.0)));
+        assert_eq!(v, json!([10.0, 20.0, 100.0, 50.0]));
+    }
+
+    #[test]
+    fn bounds_opt_to_json_zero_tuple() {
+        let v = super::bounds_opt_to_json(Some((0.0, 0.0, 0.0, 0.0)));
+        assert_eq!(v, json!([0.0, 0.0, 0.0, 0.0]));
+    }
+
+    // --- lock_or_return_error! (via recorder/tracker round-trip) -----------
+
+    /// Smoke-test: lock_or_return_error! compiles and works on a live mutex.
+    #[test]
+    fn lock_or_return_error_macro_on_healthy_mutex() {
+        use crate::mcp::protocol::ToolCallResult;
+        use std::sync::Mutex;
+        let m: Mutex<u32> = Mutex::new(0);
+        let result = (|| -> ToolCallResult {
+            let mut guard = lock_or_return_error!(m, "poisoned");
+            *guard = 42;
+            ToolCallResult::ok("ok".to_string())
+        })();
+        assert!(!result.is_error);
+        assert_eq!(m.lock().unwrap().clone(), 42);
+    }
+
+    // --- with_app_scene (not-connected error path) --------------------------
+
+    #[test]
+    fn with_app_scene_returns_error_when_app_not_connected() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = super::with_app_scene(&registry, "NotConnected", |_scene| {
+            // Should never reach here
+            crate::mcp::protocol::ToolCallResult::ok("should not see this".to_string())
+        });
+        assert!(result.is_error, "expected error for disconnected app");
+        let text = result
+            .content
+            .first()
+            .map(|c| c.text.as_str())
+            .unwrap_or("");
+        assert!(
+            text.contains("NotConnected"),
+            "error should mention app name, got: {text}"
+        );
+    }
 
     // -----------------------------------------------------------------------
     // innovation_tools descriptor invariants
