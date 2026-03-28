@@ -630,6 +630,106 @@ mod tests {
     }
 
     #[test]
+    fn handle_find_missing_query_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_find(&json!({"app": "Safari"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: query");
+    }
+
+    #[test]
+    fn handle_click_missing_query_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_click(&json!({"app": "Safari"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: query");
+    }
+
+    #[test]
+    fn handle_get_value_missing_query_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_get_value(&json!({"app": "Safari"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: query");
+    }
+
+    #[test]
+    fn handle_find_visual_missing_description_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_find_visual(&json!({"app": "Safari"}), &registry);
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Missing required field: description"
+        );
+    }
+
+    #[test]
+    fn handle_find_visual_with_sampling_missing_description_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_find_visual_with_sampling(
+            &json!({"app": "Safari"}),
+            &registry,
+            crate::mcp::sampling::SamplingContext::unavailable(),
+        );
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Missing required field: description"
+        );
+    }
+
+    #[test]
+    fn handle_wait_idle_missing_app_returns_exact_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_wait_idle(&json!({}), &registry);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Missing required field: app");
+    }
+
+    #[test]
+    fn handle_click_unknown_mode_and_click_type_still_uses_registry_path() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_click(
+            &json!({"app": "Ghost", "query": "Save", "mode": "sideways", "click_type": "triple"}),
+            &registry,
+        );
+        assert!(result.is_error);
+        assert!(
+            result.content[0].text.contains("not connected"),
+            "got: {}",
+            result.content[0].text
+        );
+    }
+
+    #[test]
+    fn handle_find_invalid_timeout_type_still_uses_registry_path() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_find(
+            &json!({"app": "Ghost", "query": "Save", "timeout_ms": "slow"}),
+            &registry,
+        );
+        assert!(result.is_error);
+        assert!(
+            result.content[0].text.contains("not connected"),
+            "got: {}",
+            result.content[0].text
+        );
+    }
+
+    #[test]
+    fn handle_wait_idle_invalid_timeout_type_still_uses_registry_path() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = handle_wait_idle(&json!({"app": "Ghost", "timeout_ms": "slow"}), &registry);
+        assert!(result.is_error);
+        assert!(
+            result.content[0].text.contains("not connected"),
+            "got: {}",
+            result.content[0].text
+        );
+    }
+
+    #[test]
     fn handle_click_at_returns_error_for_missing_x() {
         let result = handle_click_at(&json!({"y": 100}));
         assert!(result.is_error);

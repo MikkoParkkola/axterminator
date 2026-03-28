@@ -285,3 +285,18 @@ pub(crate) fn read_element_property(el: &crate::element::AXElement, property: &s
         _ => String::new(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{key_name_to_code, scroll_deltas};
+
+    #[test]
+    fn scroll_deltas_unknown_direction_defaults_to_right() {
+        assert_eq!(scroll_deltas("diagonal", 3), (3, 0));
+    }
+
+    #[test]
+    fn key_name_to_code_unknown_key_returns_none() {
+        assert_eq!(key_name_to_code("hyper"), None);
+    }
+}

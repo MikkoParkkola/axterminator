@@ -355,6 +355,21 @@ mod tests {
     }
 
     #[test]
+    fn call_tool_extended_scroll_invalid_direction_still_dispatches() {
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        let result = super::call_tool_extended(
+            "ax_scroll",
+            &json!({"app": "Ghost", "direction": "diagonal"}),
+            &registry,
+            &mut out,
+        )
+        .unwrap();
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("not connected"));
+    }
+
+    #[test]
     fn call_tool_extended_key_press_missing_app_returns_error() {
         let registry = Arc::new(AppRegistry::default());
         let mut out = Vec::<u8>::new();
