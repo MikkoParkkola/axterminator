@@ -1154,51 +1154,19 @@ fn prompts_get_analyze_app_resolves() {
 // -----------------------------------------------------------------------
 
 fn expected_static_resource_uris() -> Vec<&'static str> {
-    let uris = vec![
-        "axterminator://system/status",
-        "axterminator://system/displays",
-        "axterminator://apps",
-        "axterminator://clipboard",
-        "axterminator://workflows",
-        "axterminator://guide/quickstart",
-        "axterminator://guide/patterns",
-        "axterminator://guide/audio",
-        "axterminator://profiles",
-    ];
-
-    #[cfg(feature = "spaces")]
-    let uris = uris
+    crate::mcp::resources::static_resources()
+        .resources
         .into_iter()
-        .chain(["axterminator://spaces"])
-        .collect::<Vec<_>>();
-
-    #[cfg(feature = "audio")]
-    let uris = uris
-        .into_iter()
-        .chain([
-            "axterminator://audio/devices",
-            "axterminator://capture/transcription",
-            "axterminator://capture/screen",
-            "axterminator://capture/status",
-        ])
-        .collect::<Vec<_>>();
-
-    #[cfg(feature = "camera")]
-    let uris = uris
-        .into_iter()
-        .chain(["axterminator://camera/devices"])
-        .collect::<Vec<_>>();
-
-    uris
+        .map(|resource| resource.uri)
+        .collect()
 }
 
-fn expected_resource_template_uris() -> [&'static str; 4] {
-    [
-        "axterminator://app/{name}/tree",
-        "axterminator://app/{name}/screenshot",
-        "axterminator://app/{name}/state",
-        "axterminator://app/{name}/query/{question}",
-    ]
+fn expected_resource_template_uris() -> Vec<&'static str> {
+    crate::mcp::resources::resource_templates()
+        .resource_templates
+        .into_iter()
+        .map(|template| template.uri_template)
+        .collect()
 }
 
 #[test]

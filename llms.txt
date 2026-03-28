@@ -5,7 +5,7 @@
 
 ## What This Is
 
-AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. 19-34+ tools depending on features.
+AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. The exact MCP tool surface depends on enabled features; call `tools/list` after connecting for the live schema.
 
 ## Requirements
 
@@ -23,7 +23,7 @@ which axterminator 2>/dev/null || echo "NOT INSTALLED"
 
 # If installed, check version
 axterminator check 2>/dev/null
-# Look at the "Version:" line — current release is 0.8.0
+# Look at the "Version:" line — current release is 0.9.0
 ```
 
 If already installed at an older version, follow the Upgrade section below.
@@ -200,9 +200,9 @@ BINARY_PATH mcp serve --http 8741 --localhost-only
 BINARY_PATH mcp serve --http 8741 --token YOUR_SECRET_TOKEN
 ```
 
-## Available Tools (34+)
+## Available Tools (feature-gated runtime surface)
 
-After connecting, call `tools/list` to get the full schema. Core tools:
+After connecting, call `tools/list` to get the exact schema for this build. The base surface covers connect/find/interact/verify/workflow automation:
 
 - `ax_is_accessible` — check permissions
 - `ax_connect` — connect to an app by name, bundle ID, or PID
@@ -235,8 +235,15 @@ After connecting, call `tools/list` to get the full schema. Core tools:
 - `ax_track_workflow` — cross-app pattern detection
 - `ax_test_run` — black-box test execution
 - `ax_app_profile` — Electron app metadata
+- `ax_system_context` — ambient system state
 
-Optional feature tools: `ax_listen`, `ax_speak`, `ax_audio_devices` (audio), `ax_camera_capture`, `ax_gesture_detect` (camera), `ax_list_spaces`, `ax_create_space` (spaces).
+Optional feature families add:
+- audio: `ax_audio_devices`, `ax_listen`, `ax_speak`, `ax_start_capture`, `ax_stop_capture`, `ax_get_transcription`, `ax_capture_status`
+- camera: `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen`
+- watch: `ax_watch_start`, `ax_watch_stop`, `ax_watch_status`
+- spaces: `ax_list_spaces`, `ax_create_space`, `ax_move_to_space`, `ax_switch_space`, `ax_destroy_space`
+- docker: `ax_browser_launch`, `ax_browser_stop`
+- context: `ax_location`
 
 ## Query Syntax
 
@@ -270,22 +277,22 @@ ax_find query="description:equals"
 ## Feature Flags (build-time)
 
 ```bash
-# Core only (default — 27 tools)
+# Core only (default CLI surface)
 cargo build --release --features cli
 
-# With audio capture + TTS (30 tools)
+# With audio capture + TTS
 cargo build --release --features cli,audio
 
-# With camera + gesture detection (30 tools)
+# With camera + gesture detection
 cargo build --release --features cli,camera
 
-# With virtual desktop isolation (32 tools)
+# With virtual desktop isolation
 cargo build --release --features cli,spaces
 
-# Everything (34+ tools)
+# Everything feature-gated
 cargo build --release --features cli,audio,camera,watch,spaces,http-transport
 ```
 
 ## Version
 
-0.8.0
+0.9.0

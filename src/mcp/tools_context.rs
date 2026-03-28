@@ -237,9 +237,17 @@ mod tests {
     #[test]
     fn context_tools_return_expected_surface() {
         let actual: Vec<&str> = context_tools().iter().map(|tool| tool.name).collect();
-        let mut expected = vec![TOOL_AX_SYSTEM_CONTEXT];
-        #[cfg(feature = "context")]
-        expected.push(TOOL_AX_LOCATION);
+        let expected: Vec<&str> = {
+            let base = vec![TOOL_AX_SYSTEM_CONTEXT];
+            #[cfg(feature = "context")]
+            {
+                base.into_iter().chain(["ax_location"]).collect()
+            }
+            #[cfg(not(feature = "context"))]
+            {
+                base
+            }
+        };
         assert_eq!(actual, expected);
     }
 

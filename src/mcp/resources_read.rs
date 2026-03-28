@@ -750,9 +750,12 @@ fn list_running_apps() -> Vec<Value> {
 /// connect→find→act→verify workflow, and key accessibility concepts.
 /// Intended as ambient context for any LLM working with axterminator.
 pub(super) fn read_guide_quickstart(uri: &str) -> Result<ResourceReadResult, ResourceError> {
-    let content = include_str!("guide_quickstart.md");
     Ok(ResourceReadResult {
-        contents: vec![ResourceContents::text(uri, "text/markdown", content)],
+        contents: vec![ResourceContents::text(
+            uri,
+            "text/markdown",
+            crate::mcp::catalog::quickstart_markdown(),
+        )],
     })
 }
 

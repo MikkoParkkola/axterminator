@@ -791,6 +791,9 @@ Advanced tools:\n\
 - ax_session_info: server state\n\
 - ax_undo: undo last actions\n\
 \n\
+Optional feature flags may also add audio, camera, watch, spaces, docker, and context tools.\n\
+Call tools/list for the exact runtime surface on this build.\n\
+\n\
 Use prompts/get for detailed guidance:\n\
 - 'troubleshooting' — when something fails\n\
 - 'app-guide' with app arg — per-app playbook\n\

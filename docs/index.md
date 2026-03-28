@@ -11,9 +11,9 @@
 
 </div>
 
-Up to 34+ MCP tools (27 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
+Feature-gated MCP tool surface for macOS accessibility automation, with optional audio, camera, watch, spaces, docker browser, and context capabilities. Background interaction via the macOS Accessibility API. 379us per element access. Your AI agent connects and your Mac becomes an extension of it.
 
-**Current version: 0.8.0** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
+**Current version: 0.9.0** --- Rust binary with MCP server, CLI, and optional audio/camera/watch/spaces/docker/context features.
 
 ## Deploy
 
@@ -64,23 +64,28 @@ args = ["mcp", "serve"]
 
 Replace `/path/to/axterminator` with the actual binary path.
 
-Done. Your agent has 27 core tools (up to 34+ with all feature flags) to control any macOS app.
+Done. Your agent can call `tools/list` to discover the exact runtime tool surface for this build.
 
 ## MCP Tools
 
 | Category | Tools | What the agent can do |
 |----------|-------|----------------------|
-| **GUI** | `ax_connect`, `ax_find`, `ax_click`, `ax_click_at`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_scroll`, `ax_drag`, `ax_key_press` | Connect to apps, find elements, interact |
-| **Observe** | `ax_is_accessible`, `ax_screenshot`, `ax_get_tree`, `ax_get_attributes`, `ax_list_windows`, `ax_list_apps`, `ax_wait_idle` | Check permissions, see UI state, screenshots |
-| **Verify** | `ax_assert`, `ax_find_visual`, `ax_visual_diff`, `ax_a11y_audit` | Assert element state, AI vision fallback, visual regression, WCAG audit |
-| **System** | `ax_clipboard`, `ax_run_script`, `ax_undo`, `ax_session_info`, `ax_analyze` | Clipboard, AppleScript/JXA, undo actions, session state, UI analysis |
-| **Audio** | `ax_listen`, `ax_speak`, `ax_audio_devices` | Capture mic/system audio (48kHz native), text-to-speech |
-| **Camera** | `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen` | Camera frames, gesture recognition |
+| **Discover** | `ax_is_accessible`, `ax_connect`, `ax_find`, `ax_list_windows`, `ax_list_apps`, `ax_get_tree`, `ax_find_visual` | Check permissions, connect to apps, inspect UI state |
+| **Interact** | `ax_click`, `ax_click_at`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_get_attributes`, `ax_scroll`, `ax_drag`, `ax_key_press`, `ax_screenshot`, `ax_wait_idle` | Act on UI elements and capture app state |
+| **Verify & analyze** | `ax_assert`, `ax_analyze`, `ax_visual_diff`, `ax_a11y_audit`, `ax_test_run` | Assertions, semantic analysis, visual regression, accessibility audits |
+| **Workflow & system** | `ax_query`, `ax_workflow_create`, `ax_workflow_step`, `ax_workflow_status`, `ax_track_workflow`, `ax_record`, `ax_undo`, `ax_run_script`, `ax_clipboard`, `ax_session_info`, `ax_app_profile`, `ax_system_context` | Higher-level automation, scripting, workflow state, and system context |
+| **Audio** | `ax_audio_devices`, `ax_listen`, `ax_speak`, `ax_start_capture`, `ax_stop_capture`, `ax_get_transcription`, `ax_capture_status` | Audio capture, transcription, and text-to-speech |
+| **Camera** | `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen` | Camera frames and gesture recognition |
+| **Watch** | `ax_watch_start`, `ax_watch_stop`, `ax_watch_status` | Continuous background audio/camera monitoring |
+| **Browser** | `ax_browser_launch`, `ax_browser_stop` | Disposable browser containers via Docker |
+| **Context** | `ax_location` | Location lookup when the optional context feature is enabled |
 | **Spaces** | `ax_list_spaces`, `ax_create_space`, `ax_move_to_space`, `ax_switch_space`, `ax_destroy_space` | Virtual desktop isolation |
+
+The exact set depends on enabled feature flags; always call `tools/list` for the live schema.
 
 ### Resources
 
-Agents can browse app state without tool calls:
+Representative resources (call `resources/list` for the exact build surface):
 
 | Resource | What |
 |----------|------|
@@ -89,6 +94,9 @@ Agents can browse app state without tool calls:
 | `axterminator://app/{name}/screenshot` | Current screenshot |
 | `axterminator://app/{name}/state` | Focused element, window title |
 | `axterminator://system/displays` | Monitor layout |
+| `axterminator://clipboard` | Clipboard text |
+| `axterminator://workflows` | Detected cross-app workflow patterns |
+| `axterminator://profiles` | Built-in Electron app profiles |
 
 ### Security
 
@@ -109,6 +117,8 @@ cargo build --release --features "cli,audio,camera,spaces"
 | `camera` | Camera capture, gesture detection (88.8% thumbs_up verified) |
 | `watch` | Continuous background monitoring (implies audio + camera) |
 | `spaces` | Virtual desktop management (CGSSpace private API) |
+| `docker` | Disposable browser containers for isolated testing |
+| `context` | Location lookup via CoreLocation |
 | `http-transport` | Streamable HTTP MCP transport with bearer token auth |
 
 ## CLI

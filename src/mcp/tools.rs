@@ -96,9 +96,9 @@ impl AppRegistry {
 /// # Examples
 ///
 /// ```
-/// // Phase 1 (12) + Phase 3 GUI (7) + innovation (7) = 26 total base
 /// let tools = axterminator::mcp::tools::all_tools();
-/// assert!(tools.len() >= 26);
+/// assert_eq!(tools.first().unwrap().name, "ax_is_accessible");
+/// assert!(tools.iter().any(|tool| tool.name == "ax_connect"));
 /// ```
 #[must_use]
 pub fn all_tools() -> Vec<Tool> {

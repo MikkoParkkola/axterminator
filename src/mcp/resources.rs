@@ -219,7 +219,7 @@ pub fn static_resources() -> ResourceListResult {
         uri: "axterminator://guide/quickstart",
         name: "guide-quickstart",
         title: "Quickstart Guide",
-        description: "Overview of axterminator: all 42 tools organised by category, \
+        description: "Overview of the currently enabled tool surface organised by category, \
             the connect→find→act→verify workflow pattern, and key accessibility concepts \
             (accessibility tree, roles, attributes, AXUIElement).",
         mime_type: "text/markdown",

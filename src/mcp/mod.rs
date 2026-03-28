@@ -3,14 +3,15 @@
 //! ## Phase 1 (tools)
 //!
 //! - `initialize` / `initialized` handshake
-//! - `tools/list` — 12 Phase 1 tools with annotations and output schemas
+//! - `tools/list` — core accessibility tools with annotations and output schemas
 //! - `tools/call` — dispatches to Rust core functions
 //! - `ping`
 //!
 //! ## Phase 2 (resources + prompts)
 //!
-//! - `resources/list` — 2 static resources
-//! - `resources/templates/list` — 3 URI templates
+//! - `resources/list` — static resources for system state, guides, and enabled
+//!   optional subsystems
+//! - `resources/templates/list` — dynamic app-scoped URI templates
 //! - `resources/read` — reads system status, running apps, app tree,
 //!   app screenshot, and app UI state
 //! - `prompts/list` — 4 guided workflow prompts
@@ -18,8 +19,8 @@
 //!
 //! ## Phase 3 (extended tools + observability)
 //!
-//! - `tools/list` — 7 additional tools (`ax_scroll`, `ax_key_press`,
-//!   `ax_get_attributes`, `ax_get_tree`, `ax_list_apps`, `ax_drag`, `ax_assert`)
+//! - `tools/list` — extended GUI, workflow, analysis, and feature-gated tool
+//!   families (`audio`, `camera`, `watch`, `spaces`, `docker`, `context`)
 //! - `notifications/message` — structured per-tool-call log notifications
 //! - `notifications/progress` — incremental progress for long-running tools
 //!
@@ -36,6 +37,7 @@ pub(crate) mod analysis_engine;
 pub mod annotations;
 pub(crate) mod args;
 pub mod auth;
+pub(crate) mod catalog;
 pub mod elicitation;
 pub mod logging;
 pub mod observer;

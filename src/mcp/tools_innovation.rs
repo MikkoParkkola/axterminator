@@ -1522,8 +1522,7 @@ fn handle_ax_session_info(_args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
     use crate::mcp::security::SecurityMode;
 
     let connected_apps = registry.connected_names();
-    let tool_count =
-        crate::mcp::tools::all_tools().len() + crate::mcp::tools_extended::extended_tools().len();
+    let tool_count = crate::mcp::catalog::tool_count();
     let security_mode = match SecurityMode::from_env() {
         SecurityMode::Normal => "normal",
         SecurityMode::Safe => "safe",
@@ -3527,6 +3526,17 @@ mod tests {
         assert!(v["tool_count"].is_number());
         assert!(v["security_mode"].is_string());
         assert!(v["version"].is_string());
+    }
+
+    #[test]
+    fn ax_session_info_tool_count_matches_runtime_surface() {
+        let registry = Arc::new(AppRegistry::default());
+        let result = super::handle_ax_session_info(&json!({}), &registry);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(
+            v["tool_count"].as_u64().unwrap() as usize,
+            crate::mcp::tools::all_tools().len()
+        );
     }
 
     #[test]
