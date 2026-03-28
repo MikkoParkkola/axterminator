@@ -74,16 +74,10 @@ pub(super) enum Phase {
 }
 
 /// Tracks the in-progress state of a single durable workflow across MCP calls.
-pub(crate) struct WorkflowState {
-    /// The ordered steps that make up this workflow.
-    pub steps: Vec<crate::durable_steps::DurableStep>,
-    /// Zero-based index of the next step to execute.
-    pub current_step: usize,
-    /// Results accumulated from already-executed steps.
-    pub results: Vec<crate::durable_steps::WorkflowResult>,
-    /// Whether all steps have been executed successfully.
-    pub completed: bool,
-}
+///
+/// Defined in [`crate::mcp::tools_workflow`]; re-exported here so that
+/// `server_handlers` can reference it via `super::server::WorkflowState`.
+pub(crate) use crate::mcp::tools_workflow::WorkflowState;
 
 /// One entry in the task store.
 ///

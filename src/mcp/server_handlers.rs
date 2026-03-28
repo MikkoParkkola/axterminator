@@ -533,7 +533,7 @@ fn is_task_request(params: &Value) -> bool {
 struct SharedToolDispatch<'a> {
     registry: &'a std::sync::Arc<crate::mcp::tools::AppRegistry>,
     workflows: &'a std::sync::Arc<
-        std::sync::Mutex<std::collections::HashMap<String, super::server::WorkflowState>>,
+        std::sync::Mutex<std::collections::HashMap<String, super::tools_workflow::WorkflowState>>,
     >,
     subscriptions: &'a std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     security: &'a SecurityGuard,
@@ -597,7 +597,7 @@ fn execute_tool_with_shared_state<W: Write>(
     }
 
     let result = if let Some(workflow_result) =
-        crate::mcp::tools_innovation::call_workflow_tool(name, args, shared.workflows, out)
+        crate::mcp::tools_workflow::call_workflow_tool(name, args, shared.workflows, out)
     {
         if !workflow_result.is_error {
             notify_subscribed_bg(name, args, shared.subscriptions, out);

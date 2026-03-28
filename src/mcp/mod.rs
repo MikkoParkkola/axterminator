@@ -67,6 +67,7 @@ pub(crate) mod tools_response;
 pub mod tools_spaces;
 #[cfg(feature = "watch")]
 pub mod tools_watch;
+pub(crate) mod tools_workflow;
 pub mod transport;
 #[cfg(feature = "watch")]
 pub(crate) mod watch_channel;

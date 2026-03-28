@@ -78,6 +78,7 @@ pub fn extended_tools() -> Vec<Tool> {
     #[cfg(feature = "docker")]
     tools.extend(docker_tools());
     tools.extend(crate::mcp::tools_context::context_tools());
+    tools.extend(crate::mcp::tools_workflow::workflow_tools());
     tools.extend(crate::mcp::tools_innovation::innovation_tools());
     tools
 }
@@ -279,14 +280,14 @@ mod tests {
         expected.push(crate::mcp::tools_context::TOOL_AX_SYSTEM_CONTEXT);
         #[cfg(feature = "context")]
         expected.push(crate::mcp::tools_context::TOOL_AX_LOCATION);
+        // Durable workflow tools (from tools_workflow, registered before innovation)
+        expected.extend(["ax_workflow_create", "ax_workflow_step", "ax_workflow_status"]);
+        // Stateless innovation tools
         expected.extend([
             "ax_query",
             "ax_app_profile",
             "ax_test_run",
             "ax_track_workflow",
-            "ax_workflow_create",
-            "ax_workflow_step",
-            "ax_workflow_status",
             "ax_record",
             "ax_analyze",
             "ax_run_script",
