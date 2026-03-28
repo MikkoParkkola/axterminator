@@ -114,7 +114,7 @@ where
 }
 
 #[cfg(any(test, feature = "audio", feature = "camera"))]
-pub(crate) fn parse_json_string_array<'a>(value: &'a Value) -> Vec<&'a str> {
+pub(crate) fn parse_json_string_array(value: &Value) -> Vec<&str> {
     value
         .as_array()
         .map(|arr| arr.iter().filter_map(Value::as_str).collect())

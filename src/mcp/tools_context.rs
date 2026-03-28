@@ -9,9 +9,9 @@
 use serde_json::{json, Value};
 
 use crate::mcp::annotations;
-use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "context")]
-use crate::mcp::tools_handlers::extract_f64_field_or;
+use crate::mcp::args::extract_f64_field_or;
+use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
 // Tool names
