@@ -588,33 +588,28 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn all_tools_count_matches_feature_set() {
-        // GIVEN: Phase 1 (12) + Phase 3 GUI (7) + innovation (9, incl. ax_run_script) = 28 base
-        //        +3 camera = 31; +5 spaces = 32/34; +3 audio = 32/35/37/40
-        //        +3 watch (watch implies audio+camera, so net +3 over camera+audio)
-        // WHEN: requesting all tools
-        let tools = all_tools();
-        // THEN: count is a deterministic function of active features
-        let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
-        let context_base = 1usize; // system_context (always on); clipboard is in innovation
-        let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
-        let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-        // `watch` implies `audio` and `camera`, so these are additive.
-        // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
-        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
-        let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
-        let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
-        let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
-        assert_eq!(
-            tools.len(),
-            base + context_base
-                + extra_context_location
-                + extra_spaces
-                + extra_audio
-                + extra_camera
-                + extra_watch
-                + extra_docker
+    fn all_tools_return_phase1_then_extended_surface() {
+        let actual: Vec<&str> = all_tools().iter().map(|tool| tool.name).collect();
+        let mut expected = vec![
+            "ax_is_accessible",
+            "ax_connect",
+            "ax_find",
+            "ax_click",
+            "ax_type",
+            "ax_set_value",
+            "ax_get_value",
+            "ax_list_windows",
+            "ax_screenshot",
+            "ax_click_at",
+            "ax_find_visual",
+            "ax_wait_idle",
+        ];
+        expected.extend(
+            crate::mcp::tools_extended::extended_tools()
+                .into_iter()
+                .map(|tool| tool.name),
         );
+        assert_eq!(actual, expected);
     }
 
     #[test]

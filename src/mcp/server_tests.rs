@@ -109,35 +109,26 @@ fn ping_returns_empty_object() {
 }
 
 #[test]
-fn tools_list_returns_correct_count_for_feature_set() {
-    // GIVEN: initialized server (base 29; +5 with spaces, +3 audio, +3 camera)
+fn tools_list_returns_expected_tool_surface_for_feature_set() {
+    // GIVEN: initialized server
     let mut s = Server::new();
     initialize_server(&mut s);
     // WHEN: tools/list
     let req = make_request(3, "tools/list", None);
     let resp = s.handle(&req, &mut Vec::<u8>::new()).unwrap();
     let v: Value = serde_json::to_value(&resp).unwrap();
-    // THEN: count is a deterministic function of active features
-    let count = v["result"]["tools"].as_array().unwrap().len();
-    let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
-    let context_base = 1usize; // system_context (always on); clipboard is in innovation
-    let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
-    let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-    // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
-    let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
-    let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
-    let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
-    let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
-    assert_eq!(
-        count,
-        base + context_base
-            + extra_context_location
-            + extra_spaces
-            + extra_audio
-            + extra_camera
-            + extra_watch
-            + extra_docker
-    );
+    // THEN: exported tool names exactly match the registry surface
+    let actual: Vec<&str> = v["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    let expected: Vec<&str> = crate::mcp::tools::all_tools()
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -892,43 +883,6 @@ fn sampling_create_message_is_method_not_found_from_server_side() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     // THEN: METHOD_NOT_FOUND — the server sends these requests, not receives them
     assert_eq!(v["error"]["code"], RpcError::METHOD_NOT_FOUND);
-}
-
-// -----------------------------------------------------------------------
-// Exact 34-tool count (default features, no extras)
-// -----------------------------------------------------------------------
-
-#[test]
-fn tools_list_returns_exactly_34_base_tools_with_default_features() {
-    // GIVEN: initialized server with no optional feature flags active
-    let mut s = Server::new();
-    initialize_server(&mut s);
-    // WHEN: tools/list
-    let v = send(&mut s, 100, "tools/list", None);
-    // THEN: base tools (Phase 1 × 12 + Phase 3 GUI × 7 + innovation × 15 + context × 2) + features
-    let tools = v["result"]["tools"].as_array().unwrap();
-    let base: usize = 35; // 34 original + 1 context (system_context); clipboard is in innovation
-    let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
-    let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-    // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
-    let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
-    let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
-    let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
-    let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
-    let expected = base
-        + extra_context_location
-        + extra_spaces
-        + extra_audio
-        + extra_camera
-        + extra_watch
-        + extra_docker;
-    assert_eq!(
-        tools.len(),
-        expected,
-        "expected {expected} tools but got {}; base=36 + context_loc={extra_context_location} + spaces={extra_spaces} + \
-         audio={extra_audio} + camera={extra_camera} + watch={extra_watch} + docker={extra_docker}",
-        tools.len()
-    );
 }
 
 // -----------------------------------------------------------------------

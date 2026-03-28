@@ -231,30 +231,72 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn extended_tools_count_matches_feature_set() {
-        // GIVEN: Phase 3 GUI base (7) + context (2-3) + innovation (15) = 24-25 + optional feature extensions
-        // WHEN: requesting extended tools
-        let tools = super::extended_tools();
-        // THEN: count is deterministic per feature set
-        let base = 22usize; // Phase 3 GUI (7) + innovation (15)
-        let context_base = 1usize; // system_context (always on); clipboard is in innovation
-        let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
-        let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-        // audio feature: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
-        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
-        let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
-        let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
-        let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
-        assert_eq!(
-            tools.len(),
-            base + context_base
-                + extra_context_location
-                + extra_spaces
-                + extra_audio
-                + extra_camera
-                + extra_watch
-                + extra_docker
-        );
+    fn extended_tools_return_expected_surface() {
+        let actual: Vec<&str> = super::extended_tools()
+            .iter()
+            .map(|tool| tool.name)
+            .collect();
+        let mut expected = vec![
+            crate::mcp::tools_gui::TOOL_AX_SCROLL,
+            crate::mcp::tools_gui::TOOL_AX_KEY_PRESS,
+            crate::mcp::tools_gui::TOOL_AX_GET_ATTRIBUTES,
+            crate::mcp::tools_gui::TOOL_AX_GET_TREE,
+            crate::mcp::tools_gui::TOOL_AX_LIST_APPS,
+            crate::mcp::tools_gui::TOOL_AX_DRAG,
+            crate::mcp::tools_gui::TOOL_AX_ASSERT,
+        ];
+        #[cfg(feature = "spaces")]
+        expected.extend([
+            crate::mcp::tools_spaces::TOOL_AX_LIST_SPACES,
+            crate::mcp::tools_spaces::TOOL_AX_CREATE_SPACE,
+            crate::mcp::tools_spaces::TOOL_AX_MOVE_TO_SPACE,
+            crate::mcp::tools_spaces::TOOL_AX_SWITCH_SPACE,
+            crate::mcp::tools_spaces::TOOL_AX_DESTROY_SPACE,
+        ]);
+        #[cfg(feature = "audio")]
+        expected.extend([
+            crate::mcp::tools_audio::TOOL_AX_LISTEN,
+            crate::mcp::tools_audio::TOOL_AX_SPEAK,
+            crate::mcp::tools_audio::TOOL_AX_AUDIO_DEVICES,
+            crate::mcp::tools_capture::TOOL_AX_START_CAPTURE,
+            crate::mcp::tools_capture::TOOL_AX_STOP_CAPTURE,
+            crate::mcp::tools_capture::TOOL_AX_GET_TRANSCRIPTION,
+            crate::mcp::tools_capture::TOOL_AX_CAPTURE_STATUS,
+        ]);
+        #[cfg(feature = "camera")]
+        expected.extend([
+            crate::mcp::tools_camera::TOOL_AX_CAMERA_CAPTURE,
+            crate::mcp::tools_camera::TOOL_AX_GESTURE_DETECT,
+            crate::mcp::tools_camera::TOOL_AX_GESTURE_LISTEN,
+        ]);
+        #[cfg(feature = "watch")]
+        expected.extend(["ax_watch_start", "ax_watch_stop", "ax_watch_status"]);
+        #[cfg(feature = "docker")]
+        expected.extend([
+            crate::mcp::tools_docker::TOOL_AX_BROWSER_LAUNCH,
+            crate::mcp::tools_docker::TOOL_AX_BROWSER_STOP,
+        ]);
+        expected.push(crate::mcp::tools_context::TOOL_AX_SYSTEM_CONTEXT);
+        #[cfg(feature = "context")]
+        expected.push(crate::mcp::tools_context::TOOL_AX_LOCATION);
+        expected.extend([
+            "ax_query",
+            "ax_app_profile",
+            "ax_test_run",
+            "ax_track_workflow",
+            "ax_workflow_create",
+            "ax_workflow_step",
+            "ax_workflow_status",
+            "ax_record",
+            "ax_analyze",
+            "ax_run_script",
+            "ax_clipboard",
+            "ax_session_info",
+            "ax_undo",
+            "ax_visual_diff",
+            "ax_a11y_audit",
+        ]);
+        assert_eq!(actual, expected);
     }
 
     #[test]

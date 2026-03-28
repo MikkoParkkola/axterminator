@@ -235,11 +235,12 @@ mod tests {
     }
 
     #[test]
-    fn context_tools_returns_expected_count() {
-        let tools = context_tools();
-        let base = 1; // system_context (clipboard is in innovation tools)
-        let extra_location = if cfg!(feature = "context") { 1 } else { 0 };
-        assert_eq!(tools.len(), base + extra_location);
+    fn context_tools_return_expected_surface() {
+        let actual: Vec<&str> = context_tools().iter().map(|tool| tool.name).collect();
+        let mut expected = vec![TOOL_AX_SYSTEM_CONTEXT];
+        #[cfg(feature = "context")]
+        expected.push(TOOL_AX_LOCATION);
+        assert_eq!(actual, expected);
     }
 
     #[test]
