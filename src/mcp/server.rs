@@ -73,7 +73,7 @@ pub(super) enum Phase {
     Running,
 }
 
-/// Tracks the in-progress state of a single durable workflow across MCP calls.
+/// Tracks the in-progress state of a single session-scoped workflow across MCP calls.
 ///
 /// Defined in [`crate::mcp::tools_workflow`]; re-exported here so that
 /// `server_handlers` can reference it via `super::server::WorkflowState`.
@@ -95,7 +95,7 @@ pub(crate) struct TaskEntry {
 pub(super) struct Server {
     pub(super) registry: Arc<AppRegistry>,
     pub(super) phase: Phase,
-    /// Active durable workflows, keyed by workflow name.
+    /// Active session-scoped workflows, keyed by workflow name.
     pub(super) workflows: Arc<Mutex<HashMap<String, WorkflowState>>>,
     /// Resource URIs the client has subscribed to via `resources/subscribe`.
     ///

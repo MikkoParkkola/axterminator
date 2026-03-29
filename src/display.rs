@@ -299,6 +299,12 @@ fn compute_scale_factor(cg: CGDisplay, logical_bounds: &Rect) -> f64 {
 mod tests {
     use super::*;
 
+    fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_sync::appkit_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     // -- Rect ----------------------------------------------------------------
 
     #[test]
@@ -544,12 +550,14 @@ mod tests {
     #[test]
     fn list_displays_returns_at_least_one() {
         // Integration: must have at least the built-in display on any Mac.
+        let _guard = appkit_test_guard();
         let displays = list_displays().expect("CGGetActiveDisplayList must succeed");
         assert!(!displays.is_empty(), "at least one display must be active");
     }
 
     #[test]
     fn list_displays_has_exactly_one_primary() {
+        let _guard = appkit_test_guard();
         let displays = list_displays().expect("must enumerate displays");
         let primaries: Vec<_> = displays.iter().filter(|d| d.is_primary).collect();
         assert_eq!(primaries.len(), 1, "exactly one primary display");
@@ -557,6 +565,7 @@ mod tests {
 
     #[test]
     fn list_displays_scale_factor_at_least_one() {
+        let _guard = appkit_test_guard();
         let displays = list_displays().expect("must enumerate displays");
         for d in &displays {
             assert!(d.scale_factor >= 1.0, "scale factor must be >= 1.0");
@@ -565,6 +574,7 @@ mod tests {
 
     #[test]
     fn list_displays_primary_bounds_width_positive() {
+        let _guard = appkit_test_guard();
         let displays = list_displays().expect("must enumerate displays");
         let primary = displays.iter().find(|d| d.is_primary).unwrap();
         assert!(primary.bounds.width > 0.0);

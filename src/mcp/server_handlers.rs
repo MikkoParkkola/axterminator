@@ -97,12 +97,12 @@ impl Server {
     ) -> JsonRpcResponse {
         let p = match parse_rpc_params::<ToolCallParams>(&id, params, "tools/call") {
             Ok(p) => p,
-            Err(e) => return e,
+            Err(e) => return *e,
         };
         let args = p
             .arguments
             .unwrap_or(Value::Object(serde_json::Map::default()));
-        if params.map_or(false, is_task_request) {
+        if params.is_some_and(is_task_request) {
             self.dispatch_as_task(id, &p.name, args)
         } else {
             let tool_result = self.dispatch_tool(&p.name, &args, out);
@@ -216,7 +216,7 @@ impl Server {
     ) -> JsonRpcResponse {
         let p = match parse_rpc_params::<ResourceReadParams>(&id, params, "resources/read") {
             Ok(p) => p,
-            Err(e) => return e,
+            Err(e) => return *e,
         };
         match crate::mcp::resources::read_resource(&p.uri, &self.registry) {
             Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
@@ -248,7 +248,7 @@ impl Server {
         let p =
             match parse_rpc_params::<ResourceSubscribeParams>(&id, params, "resources/subscribe") {
                 Ok(p) => p,
-                Err(e) => return e,
+                Err(e) => return *e,
             };
         let uri = p.uri.clone();
         if let Ok(mut subs) = self.subscriptions.lock() {
@@ -273,7 +273,7 @@ impl Server {
             "resources/unsubscribe",
         ) {
             Ok(p) => p,
-            Err(e) => return e,
+            Err(e) => return *e,
         };
         let uri = p.uri.clone();
         if let Ok(mut subs) = self.subscriptions.lock() {
@@ -300,7 +300,7 @@ impl Server {
     pub(super) fn handle_prompts_get(id: RequestId, params: Option<&Value>) -> JsonRpcResponse {
         let p = match parse_rpc_params::<PromptGetParams>(&id, params, "prompts/get") {
             Ok(p) => p,
-            Err(e) => return e,
+            Err(e) => return *e,
         };
         match crate::mcp::prompts::get_prompt(&p) {
             Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
@@ -340,7 +340,7 @@ impl Server {
     ) -> JsonRpcResponse {
         let task_id = match parse_rpc_params::<TaskResultParams>(&id, params, "tasks/result") {
             Ok(p) => p.task_id,
-            Err(e) => return e,
+            Err(e) => return *e,
         };
 
         let store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -381,7 +381,7 @@ impl Server {
     ) -> JsonRpcResponse {
         let task_id = match parse_rpc_params::<TaskCancelParams>(&id, params, "tasks/cancel") {
             Ok(p) => p.task_id,
-            Err(e) => return e,
+            Err(e) => return *e,
         };
 
         let mut store = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -458,28 +458,28 @@ impl Server {
 /// ```rust,ignore
 /// let p = match parse_rpc_params::<FooParams>(&id, params, "foo/bar") {
 ///     Ok(p)  => p,
-///     Err(e) => return e,
+///     Err(e) => return *e,
 /// };
 /// ```
 fn parse_rpc_params<T: serde::de::DeserializeOwned>(
     id: &RequestId,
     params: Option<&Value>,
     method: &str,
-) -> Result<T, JsonRpcResponse> {
+) -> Result<T, Box<JsonRpcResponse>> {
     let Some(params_val) = params else {
-        return Err(JsonRpcResponse::err(
+        return Err(Box::new(JsonRpcResponse::err(
             id.clone(),
             RpcError::new(RpcError::INVALID_PARAMS, "Missing params"),
-        ));
+        )));
     };
     serde_json::from_value::<T>(params_val.clone()).map_err(|e| {
-        JsonRpcResponse::err(
+        Box::new(JsonRpcResponse::err(
             id.clone(),
             RpcError::new(
                 RpcError::INVALID_PARAMS,
                 format!("Invalid {method} params: {e}"),
             ),
-        )
+        ))
     })
 }
 
@@ -596,9 +596,13 @@ fn execute_tool_with_shared_state<W: Write>(
         return result;
     }
 
-    let result = if let Some(workflow_result) =
-        crate::mcp::tools_workflow::call_workflow_tool(name, args, shared.workflows, out)
-    {
+    let result = if let Some(workflow_result) = crate::mcp::tools_workflow::call_workflow_tool(
+        name,
+        args,
+        shared.registry,
+        shared.workflows,
+        out,
+    ) {
         if !workflow_result.is_error {
             notify_subscribed_bg(name, args, shared.subscriptions, out);
         }
@@ -726,7 +730,7 @@ Key rules:\n\
 Advanced tools:\n\
 - ax_query: natural language UI questions\n\
 - ax_analyze: detect UI patterns, infer app state, suggest actions\n\
-- ax_workflow_create/step/status: durable multi-step automation\n\
+- ax_workflow_create/step/status: session-scoped multi-step automation with retry reporting\n\
 - ax_test_run: black-box testing\n\
 - ax_app_profile: Electron app metadata\n\
 - ax_track_workflow: cross-app pattern detection\n\
@@ -745,7 +749,7 @@ Use prompts/get for detailed guidance:\n\
 - 'troubleshooting' — when something fails\n\
 - 'app-guide' with app arg — per-app playbook\n\
 - 'debug-ui' — debug element-not-found issues\n\
-- 'automate-workflow' — durable workflow guidance\n\
+- 'automate-workflow' — workflow creation guidance\n\
 - 'analyze-app' — comprehensive UI analysis\n\
 - 'test-app' / 'navigate-to' / 'extract-data' / 'accessibility-audit'",
     }
@@ -781,7 +785,8 @@ mod tests {
     #[test]
     fn parse_rpc_params_missing_params_returns_error_response() {
         let id = RequestId::Number(42);
-        let result: Result<FooParams, JsonRpcResponse> = parse_rpc_params(&id, None, "foo/bar");
+        let result: Result<FooParams, Box<JsonRpcResponse>> =
+            parse_rpc_params(&id, None, "foo/bar");
         let err = result.unwrap_err();
         let body = serde_json::to_value(&err).unwrap();
         assert_eq!(body["id"], 42);
@@ -797,7 +802,7 @@ mod tests {
         let id = RequestId::String("req-1".into());
         // `count` is wrong type
         let params = json!({ "name": "hello", "count": "not-a-number" });
-        let result: Result<FooParams, JsonRpcResponse> =
+        let result: Result<FooParams, Box<JsonRpcResponse>> =
             parse_rpc_params(&id, Some(&params), "foo/bar");
         let err = result.unwrap_err();
         let body = serde_json::to_value(&err).unwrap();

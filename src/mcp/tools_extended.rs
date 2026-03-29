@@ -281,7 +281,11 @@ mod tests {
         #[cfg(feature = "context")]
         expected.push(crate::mcp::tools_context::TOOL_AX_LOCATION);
         // Durable workflow tools (from tools_workflow, registered before innovation)
-        expected.extend(["ax_workflow_create", "ax_workflow_step", "ax_workflow_status"]);
+        expected.extend([
+            "ax_workflow_create",
+            "ax_workflow_step",
+            "ax_workflow_status",
+        ]);
         // Stateless innovation tools
         expected.extend([
             "ax_query",

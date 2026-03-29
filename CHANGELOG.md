@@ -5,6 +5,12 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `ax_workflow_create/step/status` now execute real per-step automation with retry reporting and checkpoint tracking inside the current MCP session instead of reporting synthetic success.
+- Workflow prompts and runtime guidance now describe the session-scoped workflow contract honestly (including the explicit `ax_workflow_create` + `ax_workflow_step` flow).
+
 ## [0.8.0] - 2026-03-22
 
 ### Breaking

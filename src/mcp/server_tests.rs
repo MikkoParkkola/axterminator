@@ -47,6 +47,12 @@ fn send(s: &mut Server, id: i64, method: &str, params: Option<Value>) -> Value {
     serde_json::to_value(&resp).unwrap()
 }
 
+fn appkit_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    crate::test_sync::appkit_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn server_starts_uninitialized() {
     let s = Server::new();
@@ -1251,6 +1257,7 @@ fn resources_templates_list_contains_all_four_template_uris() {
 
 #[test]
 fn resources_read_system_displays_returns_contents() {
+    let _guard = appkit_test_guard();
     // GIVEN: initialized server
     let mut s = Server::new();
     initialize_server(&mut s);

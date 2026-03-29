@@ -13,7 +13,7 @@
 //! | `navigate-to` | Navigate to a specific screen or dialog |
 //! | `extract-data` | Extract structured data from the app's UI |
 //! | `accessibility-audit` | WCAG compliance audit |
-//! | `automate-workflow` | Create a multi-step durable workflow with retry/checkpoint |
+//! | `automate-workflow` | Create a session-scoped workflow with retry/reporting |
 //! | `debug-ui` | Debug why an element cannot be found |
 //! | `cross-app-copy` | Copy data between two macOS applications |
 //! | `analyze-app` | Comprehensive UI analysis: patterns, state, actions, accessibility |
@@ -213,8 +213,9 @@ fn prompt_automate_workflow() -> Prompt {
     Prompt {
         name: "automate-workflow",
         title: "Automate a Workflow",
-        description: "Create a multi-step durable workflow. Guides the agent through defining \
-            steps, setting retry policies, and executing the workflow with checkpoint/resume.",
+        description: "Create a session-scoped multi-step workflow. Guides the agent through \
+            defining steps, setting retry policies, and executing them with \
+            ax_workflow_create + ax_workflow_step.",
         arguments: vec![
             PromptArgument {
                 name: "app_name",
@@ -622,17 +623,20 @@ fn build_automate_workflow(params: &PromptGetParams) -> Result<PromptGetResult, 
         1. Call ax_connect with app=\"{app}\" to connect (if not already connected).\n\
         2. Call ax_screenshot to see the current state.\n\
         3. Decompose the goal into atomic steps (click, type, wait, assert).\n\
-        4. For each step decide: which ax_* tool to use, what retry count to set,\n\
-           and whether failure should rollback or abort.\n\
-        5. Call ax_workflow with the composed steps and name=\"{goal}\".\n\
-        6. Monitor progress notifications — each step reports its result.\n\
-        7. If the workflow fails, inspect the error, adjust the step list, and retry.\n\
-        8. Take a final ax_screenshot and call ax_assert to verify the goal was reached."
+        4. For each step decide: which ax_* tool semantics it maps to, what retry count to set,\n\
+           and whether a checkpoint marker would help status reporting.\n\
+        5. Call ax_workflow_create with name=\"{goal}\", app=\"{app}\", and the composed steps.\n\
+        6. Call ax_workflow_step repeatedly until completed=true, inspecting retries_used,\n\
+           last_checkpoint_step, and any error payloads between calls.\n\
+        7. If a step fails, inspect the error, adjust the workflow definition or UI state,\n\
+           then re-run ax_workflow_step or recreate the workflow.\n\
+        8. Call ax_workflow_status for progress snapshots and finish with ax_assert or ax_screenshot\n\
+           to verify the goal was reached."
     );
 
     let assistant_msg = format!(
-        "I will automate \"{goal}\" in {app} using ax_workflow for atomic, \
-        rollback-safe execution. Starting by connecting and capturing the current state."
+        "I will automate \"{goal}\" in {app} by defining a session-scoped workflow, \
+        executing each step through ax_workflow_step, and checking the reported status."
     );
 
     Ok(PromptGetResult {

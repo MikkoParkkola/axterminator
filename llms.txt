@@ -231,7 +231,7 @@ After connecting, call `tools/list` to get the exact schema for this build. The 
 - `ax_analyze` — detect UI patterns, infer app state, suggest actions
 - `ax_query` — natural language UI questions
 - `ax_record` — interaction recording for test generation
-- `ax_workflow_create` / `ax_workflow_step` / `ax_workflow_status` — durable multi-step workflows
+- `ax_workflow_create` / `ax_workflow_step` / `ax_workflow_status` — session-scoped multi-step workflows with retry reporting
 - `ax_track_workflow` — cross-app pattern detection
 - `ax_test_run` — black-box test execution
 - `ax_app_profile` — Electron app metadata
