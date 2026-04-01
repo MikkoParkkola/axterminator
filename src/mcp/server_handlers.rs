@@ -21,7 +21,7 @@ use crate::mcp::protocol::{
     TaskResultResponse, TasksCapability, TasksListResult, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
-use crate::mcp::security::{SecurityGuard, SecurityMode};
+use crate::mcp::security::SecurityGuard;
 use crate::mcp::tools::call_tool;
 
 use super::server::{next_task_id, Phase, Server, TaskEntry};
@@ -77,14 +77,11 @@ impl Server {
     // -----------------------------------------------------------------------
 
     pub(super) fn handle_tools_list(&self, id: RequestId) -> JsonRpcResponse {
-        let all = crate::mcp::tools::all_tools();
-        let tools = if self.security.mode() == SecurityMode::Sandboxed {
-            all.into_iter()
-                .filter(|t| self.security.mode().is_tool_allowed(t.name))
-                .collect()
-        } else {
-            all
-        };
+        let mode = self.security.mode();
+        let tools = crate::mcp::tools::all_tools()
+            .into_iter()
+            .filter(|tool| mode.allows_tool_descriptor(tool))
+            .collect();
         let result = ToolListResult { tools };
         JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
     }

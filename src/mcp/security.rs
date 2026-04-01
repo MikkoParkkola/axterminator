@@ -6,7 +6,7 @@
 //! |------|-----------|
 //! | `normal` (default) | All tools allowed; mutating calls logged. |
 //! | `safe` | Scripting tools blocked; `tools/list` reflects the restriction. |
-//! | `sandboxed` | Read-only tools only; all writes return a policy error. |
+//! | `sandboxed` | Read-only tools plus `ax_connect`; UI-mutating calls return a policy error. |
 //!
 //! ## App policy (~/.config/axterminator/security.toml)
 //!
@@ -41,6 +41,8 @@ use std::time::Instant;
 use serde_json::Value;
 use tracing::warn;
 
+use crate::mcp::protocol::Tool;
+
 // ---------------------------------------------------------------------------
 // Security mode
 // ---------------------------------------------------------------------------
@@ -52,7 +54,7 @@ pub enum SecurityMode {
     Normal,
     /// Scripting tools blocked; destructive actions require confirmation.
     Safe,
-    /// Read-only tools only — observe and inspect, never mutate.
+    /// Observe-only tool surface plus idempotent session setup via `ax_connect`.
     Sandboxed,
 }
 
@@ -87,7 +89,20 @@ impl SecurityMode {
         match self {
             Self::Normal => true,
             Self::Safe => !is_script_tool(tool_name),
-            Self::Sandboxed => is_read_only_tool(tool_name),
+            Self::Sandboxed => match find_registered_tool(tool_name) {
+                Some(tool) => self.allows_tool_descriptor(&tool),
+                None => true,
+            },
+        }
+    }
+
+    /// Return `true` when the declared `tool` is permitted in this mode.
+    #[must_use]
+    pub(crate) fn allows_tool_descriptor(&self, tool: &Tool) -> bool {
+        match self {
+            Self::Normal => true,
+            Self::Safe => !is_script_tool(tool.name),
+            Self::Sandboxed => is_sandbox_tool(tool),
         }
     }
 
@@ -100,7 +115,9 @@ impl SecurityMode {
                 format!("Tool '{tool_name}' is blocked in safe mode (scripting disabled)")
             }
             Self::Sandboxed => {
-                format!("Tool '{tool_name}' is blocked in sandboxed mode (read-only)")
+                format!(
+                    "Tool '{tool_name}' is blocked in sandboxed mode (read-only tools plus ax_connect only)"
+                )
             }
         }
     }
@@ -114,29 +131,18 @@ fn is_script_tool(name: &str) -> bool {
     )
 }
 
-/// Tools permitted in sandboxed (read-only) mode.
-fn is_read_only_tool(name: &str) -> bool {
-    matches!(
-        name,
-        "ax_is_accessible"
-            | "ax_connect"
-            | "ax_list_apps"
-            | "ax_find"
-            | "ax_find_visual"
-            | "ax_get_tree"
-            | "ax_get_attributes"
-            | "ax_screenshot"
-            | "ax_get_value"
-            | "ax_list_windows"
-            | "ax_assert"
-            | "ax_wait_idle"
-            | "ax_query"
-            | "ax_analyze"
-            | "ax_app_profile"
-            | "ax_watch_start"
-            | "ax_watch_stop"
-            | "ax_watch_status"
-    )
+fn find_registered_tool(tool_name: &str) -> Option<Tool> {
+    crate::mcp::tools::all_tools()
+        .into_iter()
+        .find(|tool| tool.name == tool_name)
+}
+
+/// Tools permitted in sandboxed mode.
+///
+/// Sandboxed mode exposes all tool descriptors that advertise `readOnlyHint`,
+/// plus `ax_connect` as the single idempotent session-setup exception.
+fn is_sandbox_tool(tool: &Tool) -> bool {
+    tool.annotations.read_only || tool.name == "ax_connect"
 }
 
 /// Return `true` for tools that mutate state and should be audit-logged.
@@ -592,11 +598,16 @@ mod tests {
         let mode = SecurityMode::Sandboxed;
         // WHEN: checking read-only tools
         // THEN: all permitted
+        assert!(mode.is_tool_allowed("ax_connect"));
         assert!(mode.is_tool_allowed("ax_screenshot"));
         assert!(mode.is_tool_allowed("ax_find"));
         assert!(mode.is_tool_allowed("ax_get_tree"));
         assert!(mode.is_tool_allowed("ax_list_apps"));
         assert!(mode.is_tool_allowed("ax_get_value"));
+        assert!(mode.is_tool_allowed("ax_session_info"));
+        assert!(mode.is_tool_allowed("ax_a11y_audit"));
+        #[cfg(feature = "watch")]
+        assert!(mode.is_tool_allowed("ax_watch_status"));
     }
 
     #[test]
@@ -605,6 +616,12 @@ mod tests {
         assert!(!mode.is_tool_allowed("ax_click"));
         assert!(!mode.is_tool_allowed("ax_type"));
         assert!(!mode.is_tool_allowed("ax_set_value"));
+        assert!(!mode.is_tool_allowed("ax_clipboard"));
+        #[cfg(feature = "watch")]
+        {
+            assert!(!mode.is_tool_allowed("ax_watch_start"));
+            assert!(!mode.is_tool_allowed("ax_watch_stop"));
+        }
     }
 
     #[test]

@@ -698,7 +698,7 @@ fn sandboxed_async_task_returns_blocked_tool_error() {
     assert_eq!(result_v["result"]["isError"], true);
     assert_eq!(
         result_v["result"]["content"][0]["text"],
-        "Tool 'ax_click' is blocked in sandboxed mode (read-only)"
+        "Tool 'ax_click' is blocked in sandboxed mode (read-only tools plus ax_connect only)"
     );
 }
 
@@ -1397,11 +1397,11 @@ fn resources_subscribe_missing_params_returns_error() {
 }
 
 // -----------------------------------------------------------------------
-// Security mode — sandboxed tools/list filters to read-only set
+// Security mode — tools/list reflects the active policy surface
 // -----------------------------------------------------------------------
 
 #[test]
-fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
+fn security_mode_sandboxed_filters_tools_list_to_policy_surface() {
     let _guard = crate::test_sync::security_mode_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -1430,49 +1430,48 @@ fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
     // WHEN: tools/list in sandboxed mode
     let v = send(&mut s, 130, "tools/list", None);
     let tools = v["result"]["tools"].as_array().unwrap();
+    let actual_names: std::collections::BTreeSet<&str> = tools
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    let expected_names: std::collections::BTreeSet<&str> = crate::mcp::tools::all_tools()
+        .into_iter()
+        .filter(|tool| crate::mcp::security::SecurityMode::Sandboxed.allows_tool_descriptor(tool))
+        .map(|tool| tool.name)
+        .collect();
 
-    // THEN: count is strictly less than the full 34-tool set
-    let full_count = 34usize
-        + if cfg!(feature = "spaces") { 5 } else { 0 }
-        + if cfg!(feature = "audio") { 3 } else { 0 }
-        + if cfg!(feature = "camera") { 3 } else { 0 }
-        + if cfg!(feature = "watch") { 3 } else { 0 }
-        + if cfg!(feature = "docker") { 2 } else { 0 };
-    assert!(
-        tools.len() < full_count,
-        "sandboxed mode should expose fewer tools than the full set ({full_count}), \
-         but got {}",
-        tools.len()
-    );
+    assert_eq!(actual_names, expected_names);
+}
 
-    // THEN: every listed tool is a known read-only tool
-    let read_only_names = [
-        "ax_is_accessible",
-        "ax_connect",
-        "ax_list_apps",
-        "ax_find",
-        "ax_find_visual",
-        "ax_get_tree",
-        "ax_get_attributes",
-        "ax_screenshot",
-        "ax_get_value",
-        "ax_list_windows",
-        "ax_assert",
-        "ax_wait_idle",
-        "ax_query",
-        "ax_analyze",
-        "ax_app_profile",
-        "ax_watch_start",
-        "ax_watch_stop",
-        "ax_watch_status",
-    ];
-    for tool in tools {
-        let name = tool["name"].as_str().unwrap();
-        assert!(
-            read_only_names.contains(&name),
-            "sandboxed tools/list contains non-read-only tool '{name}'"
-        );
+#[test]
+fn security_mode_safe_filters_tools_list_to_non_script_surface() {
+    let _guard = crate::test_sync::security_mode_lock()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "safe");
     }
+    let mut s = Server::new();
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+    }
+    initialize_server(&mut s);
+
+    let v = send(&mut s, 131, "tools/list", None);
+    let tools = v["result"]["tools"].as_array().unwrap();
+    let actual_names: std::collections::BTreeSet<&str> = tools
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    let expected_names: std::collections::BTreeSet<&str> = crate::mcp::tools::all_tools()
+        .into_iter()
+        .filter(|tool| crate::mcp::security::SecurityMode::Safe.allows_tool_descriptor(tool))
+        .map(|tool| tool.name)
+        .collect();
+
+    assert_eq!(actual_names, expected_names);
 }
 
 // -----------------------------------------------------------------------

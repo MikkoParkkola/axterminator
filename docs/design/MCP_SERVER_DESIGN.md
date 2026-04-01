@@ -2479,7 +2479,7 @@ The server operates in one of three security modes, configured via `AXTERMINATOR
 |------|-------------|
 | `normal` | All tools available, destructive actions logged, elicitation for high-risk |
 | `safe` | `ax_run_script` blocked, destructive actions require elicitation confirmation, VLM calls logged |
-| `sandboxed` | Read-only: only observe/find/screenshot/tree tools available. No actions, no scripts, no clipboard write. Agent can see but not touch. |
+| `sandboxed` | Observe-only: tools with `readOnlyHint: true`, plus `ax_connect` for idempotent session setup. No actions, no scripts, no clipboard write. Agent can see but not touch the UI. |
 
 ### 13.3 App Allowlist / Denylist
 
@@ -2542,16 +2542,18 @@ When a limit is exceeded:
 
 ### 13.6 Sandboxed Mode (Read-Only)
 
-In sandboxed mode, the server only lists these tools:
-- `ax_is_accessible`, `ax_connect`, `ax_list_apps` (connection)
-- `ax_find`, `ax_find_visual`, `ax_get_tree`, `ax_get_attributes` (find)
-- `ax_screenshot`, `ax_get_value`, `ax_list_windows` (observe)
-- `ax_assert`, `ax_a11y_audit` (assert -- read-only)
-- `ax_session_info` (context)
+In sandboxed mode, the `tools/list` surface is derived from the live tool descriptors
+for the current build:
+- every tool whose annotations advertise `readOnlyHint: true`
+- plus `ax_connect` as the single idempotent session-setup exception
 
-All action tools, compose tools, clipboard write, and scripting tools are excluded from
-the `tools/list` response. The `tools.listChanged` notification fires when security
-mode changes.
+This keeps sandbox behavior aligned with runtime tool metadata instead of a stale
+hand-maintained list. Clients should treat `tools/list` as the exact source of truth
+for the enabled sandbox surface on the running build.
+
+All action tools, clipboard-write paths, and scripting tools are excluded from the
+`tools/list` response. The `tools.listChanged` notification fires when security mode
+changes.
 
 ### 13.7 Credential Protection
 
