@@ -94,6 +94,10 @@ Representative resources (call `resources/list` for the exact build surface):
 
 Destructive actions require confirmation via elicitation. HTTP transport requires bearer token auth. The AI has hands, not root.
 
+Continuous integration now also checks RustSec advisories and dependency-source policy on every PR/push, with weekly Dependabot updates for both Cargo crates and GitHub Actions.
+
+Privileged accessibility flows are validated separately from hosted CI: GitHub-hosted runners cannot grant macOS Accessibility/TCC permissions, so CI covers non-privileged logic and dependency security, while permissioned background-control paths still require manual validation on a real macOS host.
+
 ## CLI
 
 ```bash
