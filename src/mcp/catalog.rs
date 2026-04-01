@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::mcp::protocol::Tool;
+use crate::mcp::{protocol::Tool, security::SecurityMode};
 
 const SECTION_CONNECTION: &str = "Connection";
 const SECTION_FINDING: &str = "Finding Elements";
@@ -82,8 +82,16 @@ returned by `ax_find` and pass them to interaction tools
 "#;
 
 #[must_use]
-pub(crate) fn tool_count() -> usize {
-    crate::mcp::tools::all_tools().len()
+pub(crate) fn runtime_tools_for_mode(mode: SecurityMode) -> Vec<Tool> {
+    crate::mcp::tools::all_tools()
+        .into_iter()
+        .filter(|tool| mode.allows_tool_descriptor(tool))
+        .collect()
+}
+
+#[must_use]
+pub(crate) fn tool_count_for_mode(mode: SecurityMode) -> usize {
+    runtime_tools_for_mode(mode).len()
 }
 
 fn quickstart_section(tool_name: &str) -> &'static str {
@@ -211,15 +219,27 @@ pub(crate) fn quickstart_markdown() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{quickstart_markdown, quickstart_section, tool_count, SECTION_OTHER};
+    use super::{
+        quickstart_markdown, quickstart_section, runtime_tools_for_mode, tool_count_for_mode,
+        SECTION_OTHER,
+    };
+    use crate::mcp::security::SecurityMode;
 
     #[test]
     fn quickstart_reports_runtime_tool_count() {
         let markdown = quickstart_markdown();
         assert!(markdown.contains(&format!(
             "**This build currently exposes {} MCP tools.**",
-            tool_count()
+            crate::mcp::tools::all_tools().len()
         )));
+    }
+
+    #[test]
+    fn filtered_tool_count_matches_filtered_runtime_tools() {
+        assert_eq!(
+            tool_count_for_mode(SecurityMode::Sandboxed),
+            runtime_tools_for_mode(SecurityMode::Sandboxed).len()
+        );
     }
 
     #[test]

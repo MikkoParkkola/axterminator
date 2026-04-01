@@ -78,10 +78,7 @@ impl Server {
 
     pub(super) fn handle_tools_list(&self, id: RequestId) -> JsonRpcResponse {
         let mode = self.security.mode();
-        let tools = crate::mcp::tools::all_tools()
-            .into_iter()
-            .filter(|tool| mode.allows_tool_descriptor(tool))
-            .collect();
+        let tools = crate::mcp::catalog::runtime_tools_for_mode(mode);
         let result = ToolListResult { tools };
         JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
     }

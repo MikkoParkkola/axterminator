@@ -1218,8 +1218,9 @@ fn handle_ax_session_info(_args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
     use crate::mcp::security::SecurityMode;
 
     let connected_apps = registry.connected_names();
-    let tool_count = crate::mcp::catalog::tool_count();
-    let security_mode = match SecurityMode::from_env() {
+    let mode = SecurityMode::from_env();
+    let tool_count = crate::mcp::catalog::tool_count_for_mode(mode);
+    let security_mode = match mode {
         SecurityMode::Normal => "normal",
         SecurityMode::Safe => "safe",
         SecurityMode::Sandboxed => "sandboxed",
@@ -3002,8 +3003,27 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(
             v["tool_count"].as_u64().unwrap() as usize,
-            crate::mcp::tools::all_tools().len()
+            crate::mcp::catalog::tool_count_for_mode(crate::mcp::security::SecurityMode::Normal)
         );
+    }
+
+    #[test]
+    fn ax_session_info_tool_count_respects_security_mode_filtering() {
+        let _guard = crate::test_sync::security_mode_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+        let registry = Arc::new(AppRegistry::default());
+
+        let result = super::handle_ax_session_info(&json!({}), &registry);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+
+        assert_eq!(
+            v["tool_count"].as_u64().unwrap() as usize,
+            crate::mcp::catalog::tool_count_for_mode(crate::mcp::security::SecurityMode::Sandboxed)
+        );
+
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
     }
 
     #[test]
