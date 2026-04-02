@@ -441,7 +441,6 @@ fn run_tdt_greedy_decode(
     use ort::value::Tensor;
 
     let session = get_cached_session(&DECODER_SESSION, onnx_path, "Decoder")?;
-    let mut session = lock_cached_session(session, "Decoder")?;
 
     let mut tokens: Vec<i32> = Vec::new();
     let mut last_token = BLANK_TOKEN;
@@ -505,28 +504,59 @@ fn run_tdt_greedy_decode(
                 AudioError::Transcription(format!("Failed to create state2 tensor: {e}"))
             })?;
 
-            let outputs = session
-                .run(ort::inputs![
-                    enc_frame,
-                    targets,
-                    target_length,
-                    state1_tensor,
-                    state2_tensor
-                ])
-                .map_err(|e| AudioError::Transcription(format!("Decoder inference failed: {e}")))?;
+            let (token_id, dur_id, next_state1, next_state2) = {
+                let mut session = lock_cached_session(session, "Decoder")?;
+                let outputs = session
+                    .run(ort::inputs![
+                        enc_frame,
+                        targets,
+                        target_length,
+                        state1_tensor,
+                        state2_tensor
+                    ])
+                    .map_err(|e| {
+                        AudioError::Transcription(format!("Decoder inference failed: {e}"))
+                    })?;
 
-            // Output 0: logits [1, 1, 1, 8198]
-            let logits_val = &outputs[0];
-            let (_shape, logits) = logits_val.try_extract_tensor::<f32>().map_err(|e| {
-                AudioError::Transcription(format!("Failed to extract decoder logits: {e}"))
-            })?;
+                // Output 0: logits [1, 1, 1, 8198]
+                let logits_val = &outputs[0];
+                let (_shape, logits) = logits_val.try_extract_tensor::<f32>().map_err(|e| {
+                    AudioError::Transcription(format!("Failed to extract decoder logits: {e}"))
+                })?;
 
-            // Split logits into token scores and duration scores
-            let token_logits = &logits[..VOCAB_SIZE];
-            let dur_logits = &logits[VOCAB_SIZE..VOCAB_SIZE + NUM_DURATIONS];
+                // Split logits into token scores and duration scores
+                let token_logits = &logits[..VOCAB_SIZE];
+                let dur_logits = &logits[VOCAB_SIZE..VOCAB_SIZE + NUM_DURATIONS];
 
-            let token_id = argmax_f32(token_logits) as i32;
-            let dur_id = argmax_f32(dur_logits);
+                let token_id = argmax_f32(token_logits) as i32;
+                let dur_id = argmax_f32(dur_logits);
+
+                let next_state1 = outputs
+                    .get("output_states_1")
+                    .or_else(|| {
+                        if outputs.len() > 2 {
+                            Some(&outputs[2])
+                        } else {
+                            None
+                        }
+                    })
+                    .and_then(|state| state.try_extract_tensor::<f32>().ok())
+                    .map(|(_, data)| data.to_vec());
+
+                let next_state2 = outputs
+                    .get("output_states_2")
+                    .or_else(|| {
+                        if outputs.len() > 3 {
+                            Some(&outputs[3])
+                        } else {
+                            None
+                        }
+                    })
+                    .and_then(|state| state.try_extract_tensor::<f32>().ok())
+                    .map(|(_, data)| data.to_vec());
+
+                (token_id, dur_id, next_state1, next_state2)
+            };
 
             if token_id == BLANK_TOKEN {
                 // Blank: advance encoder by at least 1 frame
@@ -541,27 +571,11 @@ fn run_tdt_greedy_decode(
             symbols_this_step += 1;
 
             // Update LSTM states from decoder output
-            if let Some(s1_val) = outputs.get("output_states_1").or_else(|| {
-                if outputs.len() > 2 {
-                    Some(&outputs[2])
-                } else {
-                    None
-                }
-            }) {
-                if let Ok((_, s1_data)) = s1_val.try_extract_tensor::<f32>() {
-                    state1 = s1_data.to_vec();
-                }
+            if let Some(updated_state1) = next_state1 {
+                state1 = updated_state1;
             }
-            if let Some(s2_val) = outputs.get("output_states_2").or_else(|| {
-                if outputs.len() > 3 {
-                    Some(&outputs[3])
-                } else {
-                    None
-                }
-            }) {
-                if let Ok((_, s2_data)) = s2_val.try_extract_tensor::<f32>() {
-                    state2 = s2_data.to_vec();
-                }
+            if let Some(updated_state2) = next_state2 {
+                state2 = updated_state2;
             }
 
             if dur_id > 0 {
