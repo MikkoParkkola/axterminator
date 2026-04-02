@@ -1,12 +1,13 @@
-//! Context MCP tools: system state, clipboard, and geolocation.
+//! Context MCP tools: system state and geolocation.
 //!
 //! | Tool | Purpose | Permission |
 //! |------|---------|------------|
 //! | `ax_system_context` | Full environmental snapshot | None |
-//! | `ax_clipboard`      | Read/write clipboard       | None |
 //! | `ax_location`       | GPS coordinates            | Location Services (feature `context`) |
 
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(any(test, feature = "context"))]
+use serde_json::Value;
 
 use crate::mcp::annotations;
 #[cfg(feature = "context")]
@@ -27,8 +28,6 @@ pub(crate) const TOOL_AX_LOCATION: &str = "ax_location";
 
 /// Context tools. `ax_system_context` is always available; `ax_location`
 /// requires the `context` feature flag and Location Services permission.
-///
-/// Note: `ax_clipboard` is already provided by the innovation tools module.
 pub(crate) fn context_tools() -> Vec<Tool> {
     #[allow(unused_mut)]
     let mut tools = vec![tool_ax_system_context()];
@@ -79,47 +78,6 @@ fn tool_ax_system_context() -> Tool {
             }
         }),
         annotations: annotations::READ_ONLY,
-    }
-}
-
-#[allow(dead_code)]
-fn tool_ax_clipboard() -> Tool {
-    Tool {
-        name: "ax_clipboard",
-        title: "Read or write the system clipboard",
-        description: "Read or write the macOS system clipboard (NSPasteboard).\n\
-            \n\
-            **Read mode** (default): Returns clipboard text, available types, item count, \
-            and change count.\n\
-            \n\
-            **Write mode**: Set `text` to write to the clipboard, replacing existing contents.\n\
-            \n\
-            No special permissions required.\n\
-            \n\
-            Example read: `{}`\n\
-            Example write: `{\"text\": \"Hello from AXTerminator\"}`",
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "text": {
-                    "type": "string",
-                    "description": "When provided, writes this text to the clipboard. \
-                        When omitted, reads the current clipboard contents."
-                }
-            },
-            "additionalProperties": false
-        }),
-        output_schema: json!({
-            "type": "object",
-            "properties": {
-                "text":         { "type": ["string", "null"] },
-                "types":        { "type": "array", "items": { "type": "string" } },
-                "item_count":   { "type": "integer" },
-                "change_count": { "type": "integer" },
-                "written":      { "type": "boolean" }
-            }
-        }),
-        annotations: annotations::READ_ONLY, // Read is read-only; write is action.
     }
 }
 
@@ -176,30 +134,6 @@ pub(crate) fn handle_ax_system_context() -> ToolCallResult {
     match serde_json::to_value(&ctx) {
         Ok(v) => ToolCallResult::ok(v.to_string()),
         Err(e) => ToolCallResult::error(format!("Serialization failed: {e}")),
-    }
-}
-
-/// Handle `ax_clipboard` — read or write clipboard.
-///
-/// Note: this handler is available for direct use but not registered in
-/// `context_tools()` because `ax_clipboard` is already in innovation tools.
-#[allow(dead_code)]
-pub(crate) fn handle_ax_clipboard(args: &Value) -> ToolCallResult {
-    if let Some(text) = args["text"].as_str() {
-        // Write mode.
-        match crate::context::clipboard::write_clipboard(text) {
-            Ok(count) => {
-                ToolCallResult::ok(json!({ "written": true, "change_count": count }).to_string())
-            }
-            Err(e) => ToolCallResult::error(json!({ "error": e, "written": false }).to_string()),
-        }
-    } else {
-        // Read mode.
-        let content = crate::context::clipboard::read_clipboard();
-        match serde_json::to_value(&content) {
-            Ok(v) => ToolCallResult::ok(v.to_string()),
-            Err(e) => ToolCallResult::error(format!("Serialization failed: {e}")),
-        }
     }
 }
 
@@ -274,32 +208,5 @@ mod tests {
         let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["macos_version"].is_string());
         assert!(v["dark_mode"].is_boolean());
-    }
-
-    #[test]
-    fn handle_clipboard_read_returns_valid_json() {
-        let _guard = appkit_test_guard();
-        let result = handle_ax_clipboard(&json!({}));
-        assert!(
-            !result.is_error,
-            "unexpected error: {}",
-            result.content[0].text
-        );
-        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
-        assert!(v["change_count"].is_number());
-    }
-
-    #[test]
-    fn handle_clipboard_write_then_read() {
-        let _guard = appkit_test_guard();
-        let test_text = "ax_context_test_67890";
-        let write_result = handle_ax_clipboard(&json!({ "text": test_text }));
-        assert!(!write_result.is_error);
-        let wv: Value = serde_json::from_str(&write_result.content[0].text).unwrap();
-        assert_eq!(wv["written"], true);
-
-        let read_result = handle_ax_clipboard(&json!({}));
-        let rv: Value = serde_json::from_str(&read_result.content[0].text).unwrap();
-        assert_eq!(rv["text"].as_str(), Some(test_text));
     }
 }
