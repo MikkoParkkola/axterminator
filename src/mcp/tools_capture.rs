@@ -32,7 +32,7 @@ use crate::capture::{CaptureConfig, CaptureSession};
 #[cfg(feature = "audio")]
 use crate::mcp::annotations;
 #[cfg(feature = "audio")]
-use crate::mcp::args::extract_bool_field_or;
+use crate::mcp::args::{extract_bool_field_or, extract_clamped_u64_field_or};
 #[cfg(feature = "audio")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
@@ -357,7 +357,7 @@ pub(crate) fn handle_ax_stop_capture(args: &Value) -> ToolCallResult {
 /// Handle `ax_get_transcription` — snapshot transcript segments from the buffer.
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_get_transcription(args: &Value) -> ToolCallResult {
-    let since_seconds = args["since_seconds"].as_u64().unwrap_or(30).min(300);
+    let since_seconds = extract_clamped_u64_field_or(args, "since_seconds", 30, 0, 300);
 
     match global_session().lock() {
         Ok(guard) => match guard.as_ref() {

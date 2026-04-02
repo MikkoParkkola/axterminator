@@ -25,7 +25,9 @@ use serde_json::json;
 #[cfg(feature = "docker")]
 use crate::mcp::annotations;
 #[cfg(feature = "docker")]
-use crate::mcp::args::{extract_or_return, extract_required_string_field};
+use crate::mcp::args::{
+    extract_or_return, extract_required_string_field, extract_string_field_or, extract_u64_field_or,
+};
 #[cfg(feature = "docker")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
@@ -148,7 +150,7 @@ fn tool_ax_browser_stop() -> Tool {
 pub fn handle_ax_browser_launch(args: &serde_json::Value) -> ToolCallResult {
     use crate::docker_browser::{BrowserType, DockerManager, NekoConfig};
 
-    let browser_str = args["browser"].as_str().unwrap_or("chromium");
+    let browser_str = extract_string_field_or(args, "browser", "chromium");
     let browser = match browser_str {
         "firefox" => BrowserType::Firefox,
         "brave" => BrowserType::Brave,
@@ -157,13 +159,13 @@ pub fn handle_ax_browser_launch(args: &serde_json::Value) -> ToolCallResult {
     };
 
     #[allow(clippy::cast_possible_truncation)]
-    let cdp_port = args["cdp_port"].as_u64().unwrap_or(9222) as u16;
+    let cdp_port = extract_u64_field_or(args, "cdp_port", 9222) as u16;
     #[allow(clippy::cast_possible_truncation)]
-    let vnc_port = args["vnc_port"].as_u64().unwrap_or(5900) as u16;
+    let vnc_port = extract_u64_field_or(args, "vnc_port", 5900) as u16;
     #[allow(clippy::cast_possible_truncation)]
-    let width = args["width"].as_u64().unwrap_or(1920) as u32;
+    let width = extract_u64_field_or(args, "width", 1920) as u32;
     #[allow(clippy::cast_possible_truncation)]
-    let height = args["height"].as_u64().unwrap_or(1080) as u32;
+    let height = extract_u64_field_or(args, "height", 1080) as u32;
 
     let config = NekoConfig::builder()
         .browser(browser)

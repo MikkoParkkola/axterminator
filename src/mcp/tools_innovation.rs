@@ -22,7 +22,7 @@ use crate::mcp::analysis_engine::analyze_scene;
 use crate::mcp::annotations;
 use crate::mcp::args::{
     extract_app_query, extract_clamped_u64_field_or, extract_f64_field_or, extract_or_return,
-    extract_required_string_field, extract_string_field_or, parse_json_array,
+    extract_required_string_field, extract_string_field_or, extract_u64_field_or, parse_json_array,
 };
 use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
@@ -828,7 +828,7 @@ fn handle_ax_track_workflow(args: &Value) -> ToolCallResult {
     let Some(app_name) = args["app"].as_str() else {
         return ToolCallResult::error("Missing required field: app");
     };
-    let action = args["action"].as_str().unwrap_or("record");
+    let action = extract_string_field_or(args, "action", "record");
 
     match action {
         "record" => handle_workflow_record(app_name, args),
@@ -842,7 +842,7 @@ fn handle_ax_track_workflow(args: &Value) -> ToolCallResult {
 
 /// Record a focus transition into the global tracker.
 fn handle_workflow_record(app_name: &str, args: &Value) -> ToolCallResult {
-    let trigger = parse_transition_trigger(args["trigger"].as_str().unwrap_or("unknown"));
+    let trigger = parse_transition_trigger(extract_string_field_or(args, "trigger", "unknown"));
 
     let mut tracker = lock_or_return_error!(WORKFLOW_TRACKER, "Tracker mutex poisoned");
     tracker.record_focus(app_name, trigger);
@@ -859,7 +859,7 @@ fn handle_workflow_record(app_name: &str, args: &Value) -> ToolCallResult {
 
 /// Detect repeated workflow patterns from the accumulated transition log.
 fn handle_workflow_detect(args: &Value) -> ToolCallResult {
-    let min_frequency = args["min_frequency"].as_u64().unwrap_or(2) as u32;
+    let min_frequency = extract_u64_field_or(args, "min_frequency", 2) as u32;
 
     let tracker = lock_or_return_error!(WORKFLOW_TRACKER, "Tracker mutex poisoned");
     let workflows = tracker.detect_workflows(min_frequency);
