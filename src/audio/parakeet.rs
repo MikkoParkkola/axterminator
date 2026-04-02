@@ -47,8 +47,12 @@
 //! - If token is non-blank: emit token, update decoder state.
 //!   If duration > 0, also advance encoder position.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Mutex, MutexGuard, OnceLock},
+};
 
+use ort::session::Session;
 use tracing::{debug, info, warn};
 
 use super::{AudioData, AudioError};
@@ -74,6 +78,10 @@ const ENCODER_DIM: usize = 1024;
 
 /// Maximum symbols emitted per encoder frame (prevents infinite loops).
 const MAX_SYMBOLS_PER_STEP: usize = 10;
+
+static PREPROCESSOR_SESSION: OnceLock<Mutex<Session>> = OnceLock::new();
+static ENCODER_SESSION: OnceLock<Mutex<Session>> = OnceLock::new();
+static DECODER_SESSION: OnceLock<Mutex<Session>> = OnceLock::new();
 
 // ---------------------------------------------------------------------------
 // Model directory layout
@@ -253,6 +261,37 @@ fn validate_model_files(
     Ok(())
 }
 
+fn get_cached_session(
+    cache: &'static OnceLock<Mutex<Session>>,
+    onnx_path: &Path,
+    stage: &'static str,
+) -> Result<&'static Mutex<Session>, AudioError> {
+    if let Some(session) = cache.get() {
+        return Ok(session);
+    }
+
+    debug!(path = %onnx_path.display(), "loading {stage} ONNX session");
+    let mut builder = Session::builder()
+        .map_err(|e| AudioError::Transcription(format!("{stage} session builder failed: {e}")))?;
+    let session = builder.commit_from_file(onnx_path).map_err(|e| {
+        AudioError::Transcription(format!("Failed to load {stage} from {onnx_path:?}: {e}"))
+    })?;
+
+    let _ = cache.set(Mutex::new(session));
+    Ok(cache
+        .get()
+        .expect("session cache should contain initialized ONNX session"))
+}
+
+fn lock_cached_session(
+    session: &'static Mutex<Session>,
+    stage: &'static str,
+) -> Result<MutexGuard<'static, Session>, AudioError> {
+    session
+        .lock()
+        .map_err(|e| AudioError::Transcription(format!("{stage} session cache poisoned: {e}")))
+}
+
 // ---------------------------------------------------------------------------
 // ONNX Runtime — Preprocessor (nemo128.onnx)
 // ---------------------------------------------------------------------------
@@ -262,19 +301,10 @@ fn validate_model_files(
 /// Takes f32 samples at 16 kHz and returns 128-dim features with shape
 /// `[1, 128, T]` as a flat `Vec<f32>` plus the number of time frames `T`.
 fn run_preprocessor(samples: &[f32], onnx_path: &Path) -> Result<(Vec<f32>, usize), AudioError> {
-    use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
-        .map_err(|e| {
-            AudioError::Transcription(format!("Preprocessor session builder failed: {e}"))
-        })?
-        .commit_from_file(onnx_path)
-        .map_err(|e| {
-            AudioError::Transcription(format!(
-                "Failed to load preprocessor from {onnx_path:?}: {e}"
-            ))
-        })?;
+    let session = get_cached_session(&PREPROCESSOR_SESSION, onnx_path, "Preprocessor")?;
+    let mut session = lock_cached_session(session, "Preprocessor")?;
 
     let n_samples = samples.len();
     let waveform = Tensor::<f32>::from_array(([1, n_samples], samples.to_vec().into_boxed_slice()))
@@ -327,15 +357,10 @@ fn run_encoder(
     feature_len: usize,
     onnx_path: &Path,
 ) -> Result<(Vec<f32>, usize), AudioError> {
-    use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
-        .map_err(|e| AudioError::Transcription(format!("Encoder session builder failed: {e}")))?
-        .commit_from_file(onnx_path)
-        .map_err(|e| {
-            AudioError::Transcription(format!("Failed to load encoder from {onnx_path:?}: {e}"))
-        })?;
+    let session = get_cached_session(&ENCODER_SESSION, onnx_path, "Encoder")?;
+    let mut session = lock_cached_session(session, "Encoder")?;
 
     let shape: [usize; 3] = [1, 128, feature_len];
     let input_tensor = Tensor::<f32>::from_array((shape, features.to_vec().into_boxed_slice()))
@@ -413,15 +438,10 @@ fn run_tdt_greedy_decode(
     enc_len: usize,
     onnx_path: &Path,
 ) -> Result<Vec<i32>, AudioError> {
-    use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
-        .map_err(|e| AudioError::Transcription(format!("Decoder session builder failed: {e}")))?
-        .commit_from_file(onnx_path)
-        .map_err(|e| {
-            AudioError::Transcription(format!("Failed to load decoder from {onnx_path:?}: {e}"))
-        })?;
+    let session = get_cached_session(&DECODER_SESSION, onnx_path, "Decoder")?;
+    let mut session = lock_cached_session(session, "Decoder")?;
 
     let mut tokens: Vec<i32> = Vec::new();
     let mut last_token = BLANK_TOKEN;
