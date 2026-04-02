@@ -307,8 +307,7 @@ mod tests {
     #[test]
     fn all_extended_tool_names_are_unique() {
         let tools = super::extended_tools();
-        let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name).collect();
-        assert_eq!(names.len(), tools.len(), "duplicate tool names in Phase 3");
+        crate::mcp::test_support::assert_tool_names_unique(&tools, "extended tools");
     }
 
     #[test]

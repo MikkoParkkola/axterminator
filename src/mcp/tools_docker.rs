@@ -241,10 +241,7 @@ mod tests {
     fn docker_tool_names_are_unique() {
         // GIVEN: tool list
         let tools = super::docker_tools();
-        // WHEN: collecting names
-        let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name).collect();
-        // THEN: no duplicates
-        assert_eq!(names.len(), tools.len());
+        crate::mcp::test_support::assert_tool_names_unique(&tools, "docker tools");
     }
 
     #[test]

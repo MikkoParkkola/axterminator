@@ -50,6 +50,8 @@ pub mod sampling;
 pub mod security;
 pub mod server;
 pub(super) mod server_handlers;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod tools;
 pub mod tools_audio;
 pub mod tools_camera;

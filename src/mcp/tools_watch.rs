@@ -346,8 +346,7 @@ mod tests {
     #[test]
     fn watch_tools_names_are_unique() {
         let tools = watch_tools();
-        let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name).collect();
-        assert_eq!(names.len(), tools.len(), "duplicate tool names");
+        crate::mcp::test_support::assert_tool_names_unique(&tools, "watch tools");
     }
 
     #[test]

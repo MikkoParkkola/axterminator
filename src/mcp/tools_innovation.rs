@@ -1690,14 +1690,7 @@ mod tests {
     fn innovation_tool_names_are_unique() {
         // GIVEN: tool list
         let tools = super::innovation_tools();
-        // WHEN: collecting names
-        let names: std::collections::HashSet<&str> = tools.iter().map(|t| t.name).collect();
-        // THEN: no duplicates
-        assert_eq!(
-            names.len(),
-            tools.len(),
-            "duplicate tool names in innovation set"
-        );
+        crate::mcp::test_support::assert_tool_names_unique(&tools, "innovation tools");
     }
 
     #[test]

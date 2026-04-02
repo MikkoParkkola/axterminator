@@ -365,8 +365,7 @@ mod tests {
     #[test]
     fn camera_tools_names_are_unique() {
         let tools = camera_tools();
-        let names: std::collections::HashSet<_> = tools.iter().map(|t| t.name).collect();
-        assert_eq!(names.len(), tools.len(), "tool names must be unique");
+        crate::mcp::test_support::assert_tool_names_unique(&tools, "camera tools");
     }
 
     #[test]
