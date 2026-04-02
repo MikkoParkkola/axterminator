@@ -59,6 +59,23 @@ pub struct ResourceError {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DynamicResourceUri<'a> {
+    Tree {
+        app_name: &'a str,
+    },
+    Screenshot {
+        app_name: &'a str,
+    },
+    State {
+        app_name: &'a str,
+    },
+    Query {
+        app_name: &'a str,
+        question: &'a str,
+    },
+}
+
 impl ResourceError {
     pub(crate) fn not_connected(app: &str) -> Self {
         Self {
@@ -366,10 +383,14 @@ pub fn read_resource(
 
 /// Extract the `{name}` segment from a dynamic resource URI.
 ///
-/// Expected form: `axterminator://app/{name}/...`
+/// Expected forms:
+/// - `axterminator://app/{name}/tree`
+/// - `axterminator://app/{name}/screenshot`
+/// - `axterminator://app/{name}/state`
+/// - `axterminator://app/{name}/query/{question}`
 ///
 /// Returns `Err(ResourceError::invalid_uri)` when the URI does not match
-/// the expected pattern or the name segment is empty.
+/// one of the expected dynamic templates or the name segment is empty.
 ///
 /// # Examples
 ///
@@ -381,17 +402,50 @@ pub fn read_resource(
 /// assert!(parse_app_name("axterminator://system/status").is_err());
 /// ```
 pub fn parse_app_name(uri: &str) -> Result<&str, ResourceError> {
+    match parse_dynamic_resource_uri(uri)? {
+        DynamicResourceUri::Tree { app_name }
+        | DynamicResourceUri::Screenshot { app_name }
+        | DynamicResourceUri::State { app_name }
+        | DynamicResourceUri::Query { app_name, .. } => Ok(app_name),
+    }
+}
+
+pub(crate) fn parse_dynamic_resource_uri(
+    uri: &str,
+) -> Result<DynamicResourceUri<'_>, ResourceError> {
     let path = uri
         .strip_prefix("axterminator://app/")
         .ok_or_else(|| ResourceError::invalid_uri(uri))?;
 
-    let name = path
-        .split('/')
+    let mut segments = path.split('/');
+    let app_name = segments
         .next()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| ResourceError::invalid_uri(uri))?;
 
-    Ok(name)
+    let resource = segments
+        .next()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ResourceError::invalid_uri(uri))?;
+
+    match resource {
+        "tree" if segments.next().is_none() => Ok(DynamicResourceUri::Tree { app_name }),
+        "screenshot" if segments.next().is_none() => {
+            Ok(DynamicResourceUri::Screenshot { app_name })
+        }
+        "state" if segments.next().is_none() => Ok(DynamicResourceUri::State { app_name }),
+        "query" => {
+            let question = segments
+                .next()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| ResourceError::invalid_uri(uri))?;
+            if segments.next().is_some() {
+                return Err(ResourceError::invalid_uri(uri));
+            }
+            Ok(DynamicResourceUri::Query { app_name, question })
+        }
+        _ => Err(ResourceError::invalid_uri(uri)),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -447,6 +501,27 @@ mod tests {
     #[test]
     fn parse_app_name_rejects_wrong_scheme() {
         let result = parse_app_name("https://example.com/app/Safari/tree");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code, "invalid_uri");
+    }
+
+    #[test]
+    fn parse_app_name_rejects_missing_resource_segment() {
+        let result = parse_app_name("axterminator://app/Safari");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code, "invalid_uri");
+    }
+
+    #[test]
+    fn parse_app_name_rejects_extra_path_after_static_dynamic_resource() {
+        let result = parse_app_name("axterminator://app/Safari/tree/extra");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code, "invalid_uri");
+    }
+
+    #[test]
+    fn parse_app_name_rejects_query_without_question_segment() {
+        let result = parse_app_name("axterminator://app/Safari/query/");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code, "invalid_uri");
     }
@@ -622,6 +697,51 @@ mod tests {
         let registry = Arc::new(AppRegistry::default());
         let err = read_resource("axterminator://app/NonExistent/state", &registry).unwrap_err();
         assert_eq!(err.code, "not_connected");
+    }
+
+    #[test]
+    fn read_query_for_unconnected_app_returns_not_connected() {
+        let registry = Arc::new(AppRegistry::default());
+        let err = read_resource(
+            "axterminator://app/NonExistent/query/where%20is%20save",
+            &registry,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "not_connected");
+    }
+
+    #[test]
+    fn read_query_without_question_returns_invalid_uri_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let err = read_resource("axterminator://app/Safari/query/", &registry).unwrap_err();
+        assert_eq!(err.code, "invalid_uri");
+    }
+
+    #[test]
+    fn read_state_with_extra_suffix_returns_invalid_uri_error() {
+        let registry = Arc::new(AppRegistry::default());
+        let err = read_resource("axterminator://app/Safari/state/extra", &registry).unwrap_err();
+        assert_eq!(err.code, "invalid_uri");
+    }
+
+    #[test]
+    fn read_malformed_query_path_does_not_dispatch_by_suffix() {
+        let registry = Arc::new(AppRegistry::default());
+        let err = read_resource(
+            "axterminator://app/Safari/query/where%20is%20save/state",
+            &registry,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "invalid_uri");
+    }
+
+    #[test]
+    fn read_percent_encoded_app_name_reports_decoded_not_connected_name() {
+        let registry = Arc::new(AppRegistry::default());
+        let err = read_resource("axterminator://app/Google%20Chrome/tree", &registry).unwrap_err();
+        assert_eq!(err.code, "not_connected");
+        assert!(err.message.contains("Google Chrome"));
+        assert!(!err.message.contains("%20"));
     }
 
     #[test]

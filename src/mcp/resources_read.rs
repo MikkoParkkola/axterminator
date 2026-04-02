@@ -14,7 +14,7 @@ use crate::display;
 use crate::mcp::protocol::{ResourceContents, ResourceReadResult};
 use crate::mcp::tools::AppRegistry;
 
-use super::resources::ResourceError;
+use super::resources::{DynamicResourceUri, ResourceError};
 
 // ---------------------------------------------------------------------------
 // Static resource handlers
@@ -425,34 +425,23 @@ pub(super) fn read_dynamic(
     uri: &str,
     registry: &Arc<AppRegistry>,
 ) -> Result<ResourceReadResult, ResourceError> {
-    // Expected pattern: axterminator://app/{name}/{resource}
-    let name = super::resources::parse_app_name(uri)?;
-
-    if uri.ends_with("/tree") {
-        read_app_tree(uri, name, registry)
-    } else if uri.ends_with("/screenshot") {
-        read_app_screenshot(uri, name, registry)
-    } else if uri.ends_with("/state") {
-        read_app_state(uri, name, registry)
-    } else if let Some(question) = parse_query_question(uri, name) {
-        read_app_query(uri, name, question, registry)
-    } else {
-        Err(ResourceError::invalid_uri(uri))
-    }
-}
-
-/// Extract the `{question}` segment from a `query` template URI.
-///
-/// Expected form: `axterminator://app/{name}/query/{question}`.
-/// Returns `None` when the URI does not match this pattern or the question
-/// segment is empty.
-fn parse_query_question<'a>(uri: &'a str, app_name: &str) -> Option<&'a str> {
-    let prefix = format!("axterminator://app/{app_name}/query/");
-    let question = uri.strip_prefix(prefix.as_str())?;
-    if question.is_empty() {
-        None
-    } else {
-        Some(question)
+    match super::resources::parse_dynamic_resource_uri(uri)? {
+        DynamicResourceUri::Tree { app_name } => {
+            let app_name = percent_decode(app_name);
+            read_app_tree(uri, &app_name, registry)
+        }
+        DynamicResourceUri::Screenshot { app_name } => {
+            let app_name = percent_decode(app_name);
+            read_app_screenshot(uri, &app_name, registry)
+        }
+        DynamicResourceUri::State { app_name } => {
+            let app_name = percent_decode(app_name);
+            read_app_state(uri, &app_name, registry)
+        }
+        DynamicResourceUri::Query { app_name, question } => {
+            let app_name = percent_decode(app_name);
+            read_app_query(uri, &app_name, question, registry)
+        }
     }
 }
 
