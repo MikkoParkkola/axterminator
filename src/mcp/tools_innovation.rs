@@ -567,13 +567,12 @@ fn handle_ax_record(args: &Value) -> ToolCallResult {
             .to_string(),
         ),
         "record" => {
-            let Some(action_type) = args["action_type"].as_str() else {
-                return ToolCallResult::error(
-                    "Missing required field: action_type (click|type|assert)",
-                );
-            };
+            let action_type =
+                extract_or_return!(extract_required_string_field(args, "action_type").map_err(
+                    |_| { "Missing required field: action_type (click|type|assert)".to_string() }
+                ));
             let label = extract_string_field_or(args, "query", "");
-            let recorded_action = match action_type {
+            let recorded_action = match action_type.as_str() {
                 "click" => crate::recording::RecordedAction::Click { x: 0.0, y: 0.0 },
                 "type" => crate::recording::RecordedAction::Type {
                     text: extract_string_field_or(args, "text", "").to_owned(),
@@ -649,13 +648,11 @@ fn handle_ax_query(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult 
 
 /// Handle `ax_app_profile` — look up an Electron app profile by name.
 fn handle_ax_app_profile(args: &Value) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str() else {
-        return ToolCallResult::error("Missing required field: app");
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
 
     let registry = crate::electron_profiles::ProfileRegistry::with_builtins();
 
-    match registry.detect(app_name) {
+    match registry.detect(&app_name) {
         Some(profile) => {
             let capabilities: Vec<String> = profile
                 .capabilities
@@ -825,13 +822,11 @@ fn parse_single_assertion(a: &Value) -> Option<crate::blackbox::TestAssertion> {
 
 /// Handle `ax_track_workflow` — record a focus event or query the tracker.
 fn handle_ax_track_workflow(args: &Value) -> ToolCallResult {
-    let Some(app_name) = args["app"].as_str() else {
-        return ToolCallResult::error("Missing required field: app");
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let action = extract_string_field_or(args, "action", "record");
 
     match action {
-        "record" => handle_workflow_record(app_name, args),
+        "record" => handle_workflow_record(&app_name, args),
         "detect" => handle_workflow_detect(args),
         "stats" => handle_workflow_stats(),
         other => ToolCallResult::error(format!(
@@ -1162,11 +1157,12 @@ fn tool_ax_undo() -> Tool {
 ///
 /// Writes are blocked when running in [`SecurityMode::Sandboxed`].
 fn handle_ax_clipboard(args: &Value) -> ToolCallResult {
-    match args["action"].as_str() {
-        Some("read") => clipboard_read(),
-        Some("write") => clipboard_write(args),
-        Some(other) => ToolCallResult::error(format!("Unknown clipboard action: '{other}'")),
-        None => ToolCallResult::error("Missing required field: action"),
+    let action = extract_or_return!(extract_required_string_field(args, "action"));
+
+    match action.as_str() {
+        "read" => clipboard_read(),
+        "write" => clipboard_write(args),
+        other => ToolCallResult::error(format!("Unknown clipboard action: '{other}'")),
     }
 }
 
@@ -1190,10 +1186,8 @@ fn clipboard_write(args: &Value) -> ToolCallResult {
         return ToolCallResult::error("ax_clipboard write is blocked in sandboxed security mode");
     }
 
-    let text = match args["text"].as_str() {
-        Some(t) => t,
-        None => return ToolCallResult::error("Missing field: text (required for action=write)"),
-    };
+    let text = extract_or_return!(extract_required_string_field(args, "text")
+        .map_err(|_| { "Missing field: text (required for action=write)".to_string() }));
 
     let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
     let script = format!("set the clipboard to \"{escaped}\"");
@@ -1246,13 +1240,10 @@ fn handle_ax_session_info(_args: &Value, registry: &Arc<AppRegistry>) -> ToolCal
 /// Each iteration activates the target app first so the keystroke lands in
 /// the correct window, then sends the undo keystroke via `osascript`.
 fn handle_ax_undo(args: &Value) -> ToolCallResult {
-    let app_name = match args["app"].as_str() {
-        Some(a) => a,
-        None => return ToolCallResult::error("Missing required field: app"),
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let count = extract_clamped_u64_field_or(args, "count", 1, 1, 50) as usize;
 
-    dispatch_ax_undo(app_name, count);
+    dispatch_ax_undo(&app_name, count);
 
     ToolCallResult::ok(
         json!({

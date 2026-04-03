@@ -20,7 +20,9 @@ use serde_json::{json, Value};
 #[cfg(feature = "spaces")]
 use crate::mcp::annotations;
 #[cfg(feature = "spaces")]
-use crate::mcp::args::{extract_or_return, extract_required_u64_field};
+use crate::mcp::args::{
+    extract_or_return, extract_required_string_field, extract_required_u64_field,
+};
 #[cfg(feature = "spaces")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 #[cfg(feature = "spaces")]
@@ -277,12 +279,10 @@ pub(crate) fn handle_ax_create_space() -> ToolCallResult {
 pub(crate) fn handle_ax_move_to_space(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
     use crate::spaces::SpaceManager;
 
-    let Some(app_name) = args["app"].as_str() else {
-        return ToolCallResult::error("Missing required field: app");
-    };
+    let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let space_id = extract_or_return!(extract_required_u64_field(args, "space_id"));
 
-    let window_ids = match collect_window_ids(app_name, registry) {
+    let window_ids = match collect_window_ids(&app_name, registry) {
         Ok(ids) => ids,
         Err(e) => return ToolCallResult::error(e),
     };
