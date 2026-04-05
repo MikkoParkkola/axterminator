@@ -8,7 +8,6 @@
 [![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
 [![Rust](https://img.shields.io/badge/rust-stable-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/axterminator?style=for-the-badge)](LICENSE-MIT)
-[![dependency status](https://deps.rs/repo/github/MikkoParkkola/axterminator/status.svg?style=for-the-badge)](https://deps.rs/repo/github/MikkoParkkola/axterminator)
 [![Discussions](https://img.shields.io/github/discussions/MikkoParkkola/axterminator?style=for-the-badge&color=blue)](https://github.com/MikkoParkkola/axterminator/discussions)
 
 **MCP server that gives AI agents the ability to see and control macOS applications.**
