@@ -1,5 +1,6 @@
 # Rust
 /target/
+site/
 
 # IDE
 .idea/
@@ -21,6 +22,8 @@ EspressoMacSDK/Package.resolved
 *.tmp
 *.bak
 *.log
+*.pyc
+__pycache__/
 
 # Accidental home directory
 ~/
