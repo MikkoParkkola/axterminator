@@ -16,10 +16,6 @@ of macOS applications. The agent can see (screenshots, element trees), understan
 (accessibility attributes, semantic UI patterns), and control (click, type, drag, scroll)
 any macOS application -- all without stealing window focus.
 
-**Positioning**: The definitive MCP server for macOS GUI interaction. Where
-mediar-ai/terminator owns Windows and browser-use owns Chrome, axterminator owns
-macOS.
-
 ### Design Principles
 
 1. **Background-first**: Every operation defaults to background mode. The user's
@@ -2858,20 +2854,6 @@ Every error includes a suggestion for the agent:
 | GUI approach | Accessibility API + VLM | Mixed (a11y + vision) |
 | Composition | ax_workflow + rollback | None |
 | Security | 3 modes + audit + rate limiting | Basic |
-
-### 19.4 Competitive Moat
-
-1. **Only** background GUI testing tool for macOS
-2. **Only** MCP server with full spec coverage (resources, prompts, sampling, tasks, elicitation) for GUI
-3. **Fastest** element access (379us vs 10-500ms for competitors)
-4. **Most strategies** for element location (7 + VLM)
-5. **Broadest** VLM support (5 backends)
-6. **Only** MCP server with reactive UI subscriptions via AX observer
-7. **Only** MCP server with transaction-based workflow composition and rollback
-8. **Only** MCP server with built-in accessibility auditing
-9. **Only** MCP server with 3-tier security model (normal/safe/sandboxed)
-
----
 
 ## 20. Implementation Plan
 
