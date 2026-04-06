@@ -99,6 +99,18 @@ impl JsonRpcResponse {
         }
     }
 
+    /// Build a successful response from any serializable payload.
+    #[must_use]
+    pub fn ok_serialized<T>(id: RequestId, result: T) -> Self
+    where
+        T: Serialize,
+    {
+        Self::ok(
+            id,
+            serde_json::to_value(result).expect("MCP JSON-RPC success response should serialize"),
+        )
+    }
+
     /// Build an error response.
     #[must_use]
     pub fn err(id: RequestId, error: RpcError) -> Self {
@@ -726,6 +738,14 @@ mod tests {
         // THEN: no result key
         assert!(v.get("result").is_none());
         assert_eq!(v["error"]["code"], RpcError::METHOD_NOT_FOUND);
+    }
+
+    #[test]
+    fn rpc_response_ok_serialized_converts_payload() {
+        let resp = JsonRpcResponse::ok_serialized(RequestId::Number(1), PingResult {});
+        let v: Value = serde_json::to_value(&resp).unwrap();
+        assert_eq!(v["result"], json!({}));
+        assert!(v.get("error").is_none());
     }
 
     #[test]

@@ -56,7 +56,7 @@ impl Server {
                 self.phase = Phase::Initializing;
                 self.client_supports_sampling = supports_sampling;
                 let result = build_initialize_result();
-                JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+                JsonRpcResponse::ok_serialized(id, result)
             }
             Err(e) => JsonRpcResponse::err(
                 id,
@@ -69,7 +69,7 @@ impl Server {
     }
 
     pub(super) fn handle_ping(id: RequestId) -> JsonRpcResponse {
-        JsonRpcResponse::ok(id, serde_json::to_value(PingResult {}).unwrap())
+        JsonRpcResponse::ok_serialized(id, PingResult {})
     }
 
     // -----------------------------------------------------------------------
@@ -80,7 +80,7 @@ impl Server {
         let mode = self.security.mode();
         let tools = crate::mcp::catalog::runtime_tools_for_mode(mode);
         let result = ToolListResult { tools };
-        JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+        JsonRpcResponse::ok_serialized(id, result)
     }
 
     pub(super) fn handle_tools_call<W: Write>(
@@ -100,7 +100,7 @@ impl Server {
             self.dispatch_as_task(id, &p.name, args)
         } else {
             let tool_result = self.dispatch_tool(&p.name, &args, out);
-            JsonRpcResponse::ok(id, serde_json::to_value(tool_result).unwrap())
+            JsonRpcResponse::ok_serialized(id, tool_result)
         }
     }
 
@@ -193,13 +193,13 @@ impl Server {
     /// Return the list of static (concrete URI) resources.
     pub(super) fn handle_resources_list(id: RequestId) -> JsonRpcResponse {
         let result = crate::mcp::resources::static_resources();
-        JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+        JsonRpcResponse::ok_serialized(id, result)
     }
 
     /// Return the list of dynamic URI template resources.
     pub(super) fn handle_resources_templates_list(id: RequestId) -> JsonRpcResponse {
         let result = crate::mcp::resources::resource_templates();
-        JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+        JsonRpcResponse::ok_serialized(id, result)
     }
 
     /// Read a resource by URI, dispatching to the appropriate handler.
@@ -213,7 +213,7 @@ impl Server {
             Err(e) => return *e,
         };
         match crate::mcp::resources::read_resource(&p.uri, &self.registry) {
-            Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
+            Ok(result) => JsonRpcResponse::ok_serialized(id, result),
             Err(e) => JsonRpcResponse::err(
                 id,
                 RpcError::new(
@@ -249,10 +249,7 @@ impl Server {
             subs.insert(uri.clone());
         }
         debug!(uri, "resource subscribed");
-        JsonRpcResponse::ok(
-            id,
-            serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
-        )
+        JsonRpcResponse::ok_serialized(id, ResourceSubscribeResult {})
     }
 
     /// Remove a client subscription, stopping update notifications for that URI.
@@ -274,10 +271,7 @@ impl Server {
             subs.remove(&uri);
         }
         debug!(uri, "resource unsubscribed");
-        JsonRpcResponse::ok(
-            id,
-            serde_json::to_value(ResourceSubscribeResult {}).unwrap(),
-        )
+        JsonRpcResponse::ok_serialized(id, ResourceSubscribeResult {})
     }
 
     // -----------------------------------------------------------------------
@@ -287,7 +281,7 @@ impl Server {
     /// Return all registered prompt descriptors.
     pub(super) fn handle_prompts_list(id: RequestId) -> JsonRpcResponse {
         let result = crate::mcp::prompts::all_prompts();
-        JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+        JsonRpcResponse::ok_serialized(id, result)
     }
 
     /// Resolve a prompt by name, filling in caller-supplied arguments.
@@ -297,7 +291,7 @@ impl Server {
             Err(e) => return *e,
         };
         match crate::mcp::prompts::get_prompt(&p) {
-            Ok(result) => JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap()),
+            Ok(result) => JsonRpcResponse::ok_serialized(id, result),
             Err(e) => JsonRpcResponse::err(
                 id,
                 RpcError::new(RpcError::INVALID_PARAMS, format!("Prompt error: {e}")),
@@ -320,7 +314,7 @@ impl Server {
         // Sort by task_id so the list is deterministic (IDs are zero-padded).
         tasks.sort_by(|a, b| a.task_id.cmp(&b.task_id));
         let result = TasksListResult { tasks };
-        JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
+        JsonRpcResponse::ok_serialized(id, result)
     }
 
     /// `tasks/result` — retrieve the result of a completed task, or its
@@ -353,7 +347,7 @@ impl Server {
                         task: entry.info.clone(),
                     },
                 };
-                JsonRpcResponse::ok(id, serde_json::to_value(response).unwrap())
+                JsonRpcResponse::ok_serialized(id, response)
             }
         }
     }
@@ -393,7 +387,7 @@ impl Server {
                     entry.info.status_message = Some("Cancelled by client".to_owned());
                 }
                 debug!(task_id, "task cancelled");
-                JsonRpcResponse::ok(id, serde_json::to_value(TaskCancelResult {}).unwrap())
+                JsonRpcResponse::ok_serialized(id, TaskCancelResult {})
             }
         }
     }
