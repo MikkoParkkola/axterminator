@@ -88,11 +88,13 @@ fn tool_ax_start_capture() -> Tool {
     Tool {
         name: TOOL_AX_START_CAPTURE,
         title: "Start background screen + audio capture",
-        description: "Begin a continuous background capture session that records system audio \
+        description: "Begin a continuous background capture session that targets system audio \
             into a ring buffer and optionally transcribes it on-device via SFSpeechRecognizer. \
             Screen snapshots can also be captured at a configurable interval.\n\
             \n\
-            Audio uses ScreenCaptureKit (macOS 14+, no Screen Recording permission needed). \
+            Audio prefers ScreenCaptureKit (macOS 14+, no Screen Recording permission needed). \
+            If true loopback is unavailable, the session may fall back to AVAudioEngine input; \
+            inspect `audio_source_used` and `audio_capture_backend` in `ax_capture_status`. \
             Transcription is on-device only — no cloud, no network.\n\
             \n\
             At most one session is active at a time.  Calling ax_start_capture while a \
@@ -107,7 +109,7 @@ fn tool_ax_start_capture() -> Tool {
             "properties": {
                 "audio": {
                     "type": "boolean",
-                    "description": "Enable continuous system audio capture (default true)",
+                    "description": "Enable continuous audio capture targeting system output (default true)",
                     "default": true
                 },
                 "screen": {
@@ -248,6 +250,11 @@ fn tool_ax_capture_status() -> Tool {
             \n\
             `audio_buffer_seconds` is the number of seconds of audio currently in the \
             ring buffer (≤ `buffer_seconds` from ax_start_capture).\n\
+            `audio_requested_source` is the session's intended audio source (`system` when audio \
+            capture is enabled).\n\
+            `audio_source_used` and `audio_capture_backend` report what the latest successful \
+            audio window actually captured, so fallback from system loopback to microphone input \
+            stays explicit.\n\
             `transcript_segments` is the total number of recognised speech segments \
             accumulated since the session started.\n\
             `frames_captured` is the count of screen frames stored (passed diff threshold).\n\
@@ -262,6 +269,9 @@ fn tool_ax_capture_status() -> Tool {
                 "session_id":            { "type": "string" },
                 "duration_ms":           { "type": "integer" },
                 "audio_buffer_seconds":  { "type": "number" },
+                "audio_requested_source": { "type": ["string", "null"] },
+                "audio_source_used":     { "type": ["string", "null"] },
+                "audio_capture_backend": { "type": ["string", "null"] },
                 "transcript_segments":   { "type": "integer" },
                 "frames_captured":       { "type": "integer" },
                 "frames_skipped":        { "type": "integer" }
@@ -270,6 +280,22 @@ fn tool_ax_capture_status() -> Tool {
         }),
         annotations: annotations::READ_ONLY,
     }
+}
+
+#[cfg(feature = "audio")]
+pub(crate) fn capture_status_payload(session: &CaptureSession) -> Value {
+    json!({
+        "running":                session.is_running(),
+        "session_id":             session.session_id,
+        "duration_ms":            session.duration_ms(),
+        "audio_buffer_seconds":   session.audio_buffer_seconds(),
+        "audio_requested_source": session.audio_requested_source().map(|value| value.as_str()),
+        "audio_source_used":      session.audio_source_used().map(|value| value.as_str()),
+        "audio_capture_backend":  session.audio_capture_backend().map(|value| value.as_str()),
+        "transcript_segments":    session.transcript_segment_count(),
+        "frames_captured":        session.frames_captured(),
+        "frames_skipped":         session.frames_skipped(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -406,18 +432,7 @@ pub(crate) fn handle_ax_capture_status() -> ToolCallResult {
     match global_session().lock() {
         Ok(guard) => match guard.as_ref() {
             None => ToolCallResult::ok(json!({ "running": false }).to_string()),
-            Some(session) => ToolCallResult::ok(
-                json!({
-                    "running":              session.is_running(),
-                    "session_id":           session.session_id,
-                    "duration_ms":          session.duration_ms(),
-                    "audio_buffer_seconds": session.audio_buffer_seconds(),
-                    "transcript_segments":  session.transcript_segment_count(),
-                    "frames_captured":      session.frames_captured(),
-                    "frames_skipped":       session.frames_skipped(),
-                })
-                .to_string(),
-            ),
+            Some(session) => ToolCallResult::ok(capture_status_payload(session).to_string()),
         },
         Err(e) => ToolCallResult::error(format!("session store lock poisoned: {e}")),
     }
@@ -657,6 +672,18 @@ mod tests {
             props.get("frames_skipped").is_some(),
             "frames_skipped missing from output schema"
         );
+        assert!(
+            props.get("audio_requested_source").is_some(),
+            "audio_requested_source missing from output schema"
+        );
+        assert!(
+            props.get("audio_source_used").is_some(),
+            "audio_source_used missing from output schema"
+        );
+        assert!(
+            props.get("audio_capture_backend").is_some(),
+            "audio_capture_backend missing from output schema"
+        );
     }
 
     #[test]
@@ -692,6 +719,9 @@ mod tests {
         // THEN: diff counters are present and zero (no screen capture occurred)
         assert_eq!(v["frames_captured"], 0, "frames_captured should be 0");
         assert_eq!(v["frames_skipped"], 0, "frames_skipped should be 0");
+        assert!(v["audio_requested_source"].is_null());
+        assert!(v["audio_source_used"].is_null());
+        assert!(v["audio_capture_backend"].is_null());
 
         let _ = handle_ax_stop_capture(&json!({}));
     }

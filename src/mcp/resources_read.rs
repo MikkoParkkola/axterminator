@@ -399,13 +399,7 @@ pub(super) fn read_capture_status(uri: &str) -> Result<ResourceReadResult, Resou
 
     let payload = match guard.as_ref() {
         None => json!({ "running": false }),
-        Some(session) => json!({
-            "running":              session.is_running(),
-            "session_id":           session.session_id,
-            "duration_ms":          session.duration_ms(),
-            "audio_buffer_seconds": session.audio_buffer_seconds(),
-            "transcript_segments":  session.transcript_segment_count(),
-        }),
+        Some(session) => crate::mcp::tools_capture::capture_status_payload(session),
     };
 
     Ok(ResourceReadResult {

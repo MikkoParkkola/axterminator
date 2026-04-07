@@ -216,8 +216,9 @@ pub fn static_resources() -> ResourceListResult {
             name: "capture-status",
             title: "Capture Session Status",
             description: "Health and fill-level snapshot of the active capture session: \
-                running flag, session_id, duration_ms, audio_buffer_seconds, and \
-                transcript_segment count. Subscribe to track session lifecycle events.",
+            running flag, session_id, duration_ms, audio_buffer_seconds, and \
+            transcript_segment count, plus audio source/backend metadata for the latest \
+            successful capture window. Subscribe to track session lifecycle events.",
             mime_type: "application/json",
         });
     }
@@ -1099,6 +1100,9 @@ mod tests {
         // THEN: running=true, session_id present
         assert_eq!(v["running"], true, "session must report running");
         assert!(v["session_id"].is_string(), "session_id must be present");
+        assert!(v["audio_requested_source"].is_null());
+        assert!(v["audio_source_used"].is_null());
+        assert!(v["audio_capture_backend"].is_null());
         // Cleanup
         let _ = crate::mcp::tools_capture::handle_ax_stop_capture(&serde_json::json!({}));
     }

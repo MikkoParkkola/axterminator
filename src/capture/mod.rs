@@ -61,7 +61,10 @@ use std::time::{Duration, Instant};
 
 use tracing::{debug, warn};
 
-use crate::audio::{capture_system_audio, transcribe, AudioData};
+use crate::audio::{
+    capture_system_audio_with_metadata, transcribe, AudioCaptureBackend, AudioCaptureSource,
+    AudioData,
+};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -248,6 +251,8 @@ impl Default for CaptureConfig {
 pub(crate) struct CaptureState {
     pub(crate) transcript_segments: Vec<TranscriptSegment>,
     pub(crate) latest_frame: Option<ScreenFrame>,
+    pub(crate) latest_audio_source_used: Option<AudioCaptureSource>,
+    pub(crate) latest_audio_capture_backend: Option<AudioCaptureBackend>,
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +418,30 @@ impl CaptureSession {
             .unwrap_or_default()
     }
 
+    /// Requested audio source for this session, if audio capture is enabled.
+    #[must_use]
+    pub fn audio_requested_source(&self) -> Option<AudioCaptureSource> {
+        self.config.audio.then_some(AudioCaptureSource::System)
+    }
+
+    /// Most recently successful audio source actually captured by the session.
+    #[must_use]
+    pub fn audio_source_used(&self) -> Option<AudioCaptureSource> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|g| g.latest_audio_source_used)
+    }
+
+    /// Concrete backend used by the most recent successful audio capture window.
+    #[must_use]
+    pub fn audio_capture_backend(&self) -> Option<AudioCaptureBackend> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|g| g.latest_audio_capture_backend)
+    }
+
     /// Clone the most recently captured screen frame, if any.
     #[must_use]
     pub fn latest_frame(&self) -> Option<ScreenFrame> {
@@ -547,7 +576,7 @@ fn capture_audio_window(
         return;
     }
 
-    let audio_data = match capture_system_audio(AUDIO_WINDOW_SECS) {
+    let captured = match capture_system_audio_with_metadata(AUDIO_WINDOW_SECS) {
         Ok(d) => d,
         Err(e) => {
             warn!(error = %e, "audio capture window failed");
@@ -555,6 +584,9 @@ fn capture_audio_window(
             return;
         }
     };
+
+    store_audio_capture_metadata(state, captured.source_used, captured.capture_backend);
+    let audio_data = captured.audio;
 
     #[allow(clippy::cast_possible_truncation)]
     let window_end_ms = started.elapsed().as_millis() as u64;
@@ -567,6 +599,20 @@ fn capture_audio_window(
     }
 
     *segment_offset_ms = window_end_ms;
+}
+
+fn store_audio_capture_metadata(
+    state: &Arc<Mutex<CaptureState>>,
+    source_used: AudioCaptureSource,
+    capture_backend: AudioCaptureBackend,
+) {
+    match state.lock() {
+        Ok(mut guard) => {
+            guard.latest_audio_source_used = Some(source_used);
+            guard.latest_audio_capture_backend = Some(capture_backend);
+        }
+        Err(e) => warn!("capture state lock poisoned: {e}"),
+    }
 }
 
 fn append_audio_samples(audio_buffer: &Arc<Mutex<AudioRingBuffer>>, data: &AudioData) {
@@ -707,6 +753,21 @@ fn capture_primary_display_png() -> Result<(String, u32, u32, Vec<u8>), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn synthetic_session(config: CaptureConfig, state: CaptureState) -> CaptureSession {
+        CaptureSession {
+            session_id: "test-session".to_string(),
+            audio_buffer: Arc::new(Mutex::new(AudioRingBuffer::new(1))),
+            state: Arc::new(Mutex::new(state)),
+            running: Arc::new(AtomicBool::new(false)),
+            sample_rate: crate::audio::SAMPLE_RATE,
+            handle: None,
+            config,
+            started_at: Instant::now(),
+            frames_captured: Arc::new(AtomicU64::new(0)),
+            frames_skipped: Arc::new(AtomicU64::new(0)),
+        }
+    }
 
     // -----------------------------------------------------------------------
     // AudioRingBuffer
@@ -945,6 +1006,54 @@ mod tests {
     fn capture_session_transcript_segment_count_initially_zero() {
         let session = CaptureSession::start(idle_config(1));
         assert_eq!(session.transcript_segment_count(), 0);
+    }
+
+    #[test]
+    fn capture_session_audio_requested_source_is_none_when_audio_disabled() {
+        let session = CaptureSession::start(idle_config(1));
+        assert_eq!(session.audio_requested_source(), None);
+    }
+
+    #[test]
+    fn capture_session_audio_requested_source_is_system_when_audio_enabled() {
+        let session = synthetic_session(
+            CaptureConfig {
+                audio: true,
+                ..idle_config(1)
+            },
+            CaptureState::default(),
+        );
+        assert_eq!(
+            session.audio_requested_source(),
+            Some(AudioCaptureSource::System)
+        );
+    }
+
+    #[test]
+    fn capture_session_audio_metadata_defaults_to_none_before_capture() {
+        let session = CaptureSession::start(idle_config(1));
+        assert_eq!(session.audio_source_used(), None);
+        assert_eq!(session.audio_capture_backend(), None);
+    }
+
+    #[test]
+    fn capture_session_audio_metadata_reads_latest_successful_window() {
+        let session = synthetic_session(
+            idle_config(1),
+            CaptureState {
+                latest_audio_source_used: Some(AudioCaptureSource::Microphone),
+                latest_audio_capture_backend: Some(AudioCaptureBackend::AvAudioEngineInputFallback),
+                ..CaptureState::default()
+            },
+        );
+        assert_eq!(
+            session.audio_source_used(),
+            Some(AudioCaptureSource::Microphone)
+        );
+        assert_eq!(
+            session.audio_capture_backend(),
+            Some(AudioCaptureBackend::AvAudioEngineInputFallback)
+        );
     }
 
     #[test]
