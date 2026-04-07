@@ -34,6 +34,20 @@ pub(crate) use extract_or_return;
 // Scalar field extractors
 // ---------------------------------------------------------------------------
 
+pub(crate) fn reject_unknown_fields(args: &Value, allowed: &[&str]) -> Result<(), String> {
+    let Some(obj) = args.as_object() else {
+        return Ok(());
+    };
+
+    for field in obj.keys() {
+        if !allowed.contains(&field.as_str()) {
+            return Err(format!("unknown field: {field}"));
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn extract_required_string_field(args: &Value, field: &str) -> Result<String, String> {
     args[field]
         .as_str()
@@ -327,6 +341,19 @@ mod tests {
         let args = json!({"timeout_ms": 123});
         assert_eq!(extract_u64_field_or(&args, "timeout_ms", 5000), 123);
         assert_eq!(extract_u64_field_or(&json!({}), "timeout_ms", 5000), 5000);
+    }
+
+    #[test]
+    fn reject_unknown_fields_accepts_subset_of_known_fields() {
+        let args = json!({"app": "Notes", "query": "Save"});
+        assert!(reject_unknown_fields(&args, &["app", "query", "timeout_ms"]).is_ok());
+    }
+
+    #[test]
+    fn reject_unknown_fields_rejects_unexpected_keys() {
+        let err =
+            reject_unknown_fields(&json!({"app": "Notes", "extra": true}), &["app"]).unwrap_err();
+        assert_eq!(err, "unknown field: extra");
     }
 
     #[test]

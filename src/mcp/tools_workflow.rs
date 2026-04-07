@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use crate::durable_steps::{DurableRunner, DurableStep, StepAction, StepExecutor, WorkflowResult};
 use crate::mcp::action_safety::{is_element_destructive, require_destructive_confirmation};
 use crate::mcp::annotations;
-use crate::mcp::args::{extract_or_return, extract_required_string_field};
+use crate::mcp::args::{extract_or_return, extract_required_string_field, reject_unknown_fields};
 use crate::mcp::protocol::{ContentItem, Tool, ToolCallResult};
 use crate::mcp::tools::AppRegistry;
 
@@ -646,20 +646,6 @@ fn parse_optional_workflow_app(args: &Value) -> Result<Option<String>, String> {
         Some(Value::String(app)) => Ok(Some(app.clone())),
         Some(_) => Err("Field 'app' must be a string".to_owned()),
     }
-}
-
-fn reject_unknown_fields(args: &Value, allowed: &[&str]) -> Result<(), String> {
-    let Some(obj) = args.as_object() else {
-        return Ok(());
-    };
-
-    for field in obj.keys() {
-        if !allowed.contains(&field.as_str()) {
-            return Err(format!("unknown field: {field}"));
-        }
-    }
-
-    Ok(())
 }
 
 /// Parse one step JSON object into a [`DurableStep`].

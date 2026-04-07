@@ -20,14 +20,12 @@
 //! ```
 
 #[cfg(feature = "docker")]
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[cfg(feature = "docker")]
 use crate::mcp::annotations;
 #[cfg(feature = "docker")]
-use crate::mcp::args::{
-    extract_or_return, extract_required_string_field, extract_string_field_or, extract_u64_field_or,
-};
+use crate::mcp::args::{extract_or_return, extract_required_string_field, reject_unknown_fields};
 #[cfg(feature = "docker")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
@@ -75,21 +73,29 @@ fn tool_ax_browser_launch() -> Tool {
                 },
                 "cdp_port": {
                     "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535,
                     "description": "Host port to expose for CDP (default: 9222)",
                     "default": 9222
                 },
                 "vnc_port": {
                     "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535,
                     "description": "Host port to expose for VNC (default: 5900)",
                     "default": 5900
                 },
                 "width": {
                     "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295u64,
                     "description": "Virtual desktop width in pixels (default: 1920)",
                     "default": 1920
                 },
                 "height": {
                     "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295u64,
                     "description": "Virtual desktop height in pixels (default: 1080)",
                     "default": 1080
                 }
@@ -148,24 +154,17 @@ fn tool_ax_browser_stop() -> Tool {
 /// Handle `ax_browser_launch` — start a Neko container from the given config.
 #[cfg(feature = "docker")]
 pub fn handle_ax_browser_launch(args: &serde_json::Value) -> ToolCallResult {
-    use crate::docker_browser::{BrowserType, DockerManager, NekoConfig};
+    use crate::docker_browser::{DockerManager, NekoConfig};
 
-    let browser_str = extract_string_field_or(args, "browser", "chromium");
-    let browser = match browser_str {
-        "firefox" => BrowserType::Firefox,
-        "brave" => BrowserType::Brave,
-        "edge" => BrowserType::Edge,
-        _ => BrowserType::Chromium,
-    };
-
-    #[allow(clippy::cast_possible_truncation)]
-    let cdp_port = extract_u64_field_or(args, "cdp_port", 9222) as u16;
-    #[allow(clippy::cast_possible_truncation)]
-    let vnc_port = extract_u64_field_or(args, "vnc_port", 5900) as u16;
-    #[allow(clippy::cast_possible_truncation)]
-    let width = extract_u64_field_or(args, "width", 1920) as u32;
-    #[allow(clippy::cast_possible_truncation)]
-    let height = extract_u64_field_or(args, "height", 1080) as u32;
+    extract_or_return!(reject_unknown_fields(
+        args,
+        &["browser", "cdp_port", "vnc_port", "width", "height"]
+    ));
+    let (browser, browser_str) = extract_or_return!(parse_browser_type(args));
+    let cdp_port = extract_or_return!(parse_optional_u16_field(args, "cdp_port", 9222));
+    let vnc_port = extract_or_return!(parse_optional_u16_field(args, "vnc_port", 5900));
+    let width = extract_or_return!(parse_optional_u32_field(args, "width", 1920));
+    let height = extract_or_return!(parse_optional_u32_field(args, "height", 1080));
 
     let config = NekoConfig::builder()
         .browser(browser)
@@ -196,6 +195,7 @@ pub fn handle_ax_browser_stop(args: &serde_json::Value) -> ToolCallResult {
     use crate::docker_browser::{BrowserType, DockerManager, NekoBrowser};
 
     let container_id = extract_or_return!(extract_required_string_field(args, "container_id"));
+    extract_or_return!(reject_unknown_fields(args, &["container_id"]));
 
     // Construct a minimal handle — DockerManager::stop only needs the container_id.
     let browser = NekoBrowser {
@@ -216,6 +216,59 @@ pub fn handle_ax_browser_stop(args: &serde_json::Value) -> ToolCallResult {
         ),
         Err(e) => ToolCallResult::error(format!("Failed to stop container '{container_id}': {e}")),
     }
+}
+
+#[cfg(feature = "docker")]
+fn parse_browser_type(
+    args: &Value,
+) -> Result<(crate::docker_browser::BrowserType, String), String> {
+    use crate::docker_browser::BrowserType;
+
+    let Some(value) = args.get("browser") else {
+        return Ok((BrowserType::Chromium, "chromium".to_owned()));
+    };
+
+    let browser = value.as_str().ok_or_else(|| {
+        "Field 'browser' must be one of: chromium, firefox, brave, edge".to_owned()
+    })?;
+
+    match browser {
+        "chromium" => Ok((BrowserType::Chromium, browser.to_owned())),
+        "firefox" => Ok((BrowserType::Firefox, browser.to_owned())),
+        "brave" => Ok((BrowserType::Brave, browser.to_owned())),
+        "edge" => Ok((BrowserType::Edge, browser.to_owned())),
+        _ => Err("Field 'browser' must be one of: chromium, firefox, brave, edge".to_owned()),
+    }
+}
+
+#[cfg(feature = "docker")]
+fn parse_optional_u16_field(args: &Value, field: &str, default: u16) -> Result<u16, String> {
+    let Some(value) = args.get(field) else {
+        return Ok(default);
+    };
+    if value.is_null() {
+        return Err(format!("Field '{field}' must be a non-negative integer"));
+    }
+
+    let raw = value
+        .as_u64()
+        .ok_or_else(|| format!("Field '{field}' must be a non-negative integer"))?;
+    u16::try_from(raw).map_err(|_| format!("Field '{field}' must be between 0 and {}", u16::MAX))
+}
+
+#[cfg(feature = "docker")]
+fn parse_optional_u32_field(args: &Value, field: &str, default: u32) -> Result<u32, String> {
+    let Some(value) = args.get(field) else {
+        return Ok(default);
+    };
+    if value.is_null() {
+        return Err(format!("Field '{field}' must be a non-negative integer"));
+    }
+
+    let raw = value
+        .as_u64()
+        .ok_or_else(|| format!("Field '{field}' must be a non-negative integer"))?;
+    u32::try_from(raw).map_err(|_| format!("Field '{field}' must be between 0 and {}", u32::MAX))
 }
 
 // ---------------------------------------------------------------------------
@@ -298,5 +351,70 @@ mod tests {
             msg.contains("docker") || msg.contains("Failed"),
             "unexpected error: {msg}"
         );
+    }
+
+    #[test]
+    fn ax_browser_launch_rejects_unknown_top_level_fields() {
+        let result = super::handle_ax_browser_launch(&json!({"surprise": true}));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: surprise");
+    }
+
+    #[test]
+    fn ax_browser_launch_rejects_unknown_browser_value() {
+        let result = super::handle_ax_browser_launch(&json!({"browser": "opera"}));
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'browser' must be one of: chromium, firefox, brave, edge"
+        );
+    }
+
+    #[test]
+    fn ax_browser_launch_rejects_non_integer_port() {
+        let result = super::handle_ax_browser_launch(&json!({"cdp_port": "9222"}));
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'cdp_port' must be a non-negative integer"
+        );
+    }
+
+    #[test]
+    fn ax_browser_launch_rejects_overflowing_port() {
+        let result = super::handle_ax_browser_launch(&json!({"cdp_port": 70000}));
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'cdp_port' must be between 0 and 65535"
+        );
+    }
+
+    #[test]
+    fn ax_browser_stop_rejects_unknown_top_level_fields() {
+        let result = super::handle_ax_browser_stop(&json!({
+            "container_id": "abc123",
+            "extra": true
+        }));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
+    fn ax_browser_launch_schema_bounds_numeric_fields() {
+        let tools = super::docker_tools();
+        let launch = tools
+            .iter()
+            .find(|t| t.name == "ax_browser_launch")
+            .unwrap();
+        let props = &launch.input_schema["properties"];
+        assert_eq!(props["cdp_port"]["minimum"], 0);
+        assert_eq!(props["cdp_port"]["maximum"], 65535);
+        assert_eq!(props["vnc_port"]["minimum"], 0);
+        assert_eq!(props["vnc_port"]["maximum"], 65535);
+        assert_eq!(props["width"]["minimum"], 0);
+        assert_eq!(props["width"]["maximum"], 4294967295u64);
+        assert_eq!(props["height"]["minimum"], 0);
+        assert_eq!(props["height"]["maximum"], 4294967295u64);
     }
 }
