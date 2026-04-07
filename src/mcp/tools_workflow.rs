@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use crate::durable_steps::{DurableRunner, DurableStep, StepAction, StepExecutor, WorkflowResult};
 use crate::mcp::action_safety::{is_element_destructive, require_destructive_confirmation};
 use crate::mcp::annotations;
-use crate::mcp::args::{extract_or_return, extract_required_string_field, parse_json_array};
+use crate::mcp::args::{extract_or_return, extract_required_string_field};
 use crate::mcp::protocol::{ContentItem, Tool, ToolCallResult};
 use crate::mcp::tools::AppRegistry;
 
@@ -224,7 +224,7 @@ fn handle_ax_workflow_create(
     let name = extract_or_return!(extract_required_string_field(args, "name"));
     let app_name = args.get("app").and_then(Value::as_str).map(str::to_owned);
 
-    let steps = parse_workflow_steps(&args["steps"]);
+    let steps = extract_or_return!(parse_workflow_steps(&args["steps"]));
     let step_count = steps.len();
 
     let state = WorkflowState {
@@ -590,33 +590,53 @@ impl StepExecutor for NoopWorkflowExecutor {
 
 /// Parse a JSON array of step objects into [`Vec<DurableStep>`].
 ///
-/// Steps with an unrecognised `action` or missing required fields are skipped.
-fn parse_workflow_steps(steps_val: &Value) -> Vec<crate::durable_steps::DurableStep> {
-    parse_json_array(steps_val, parse_single_workflow_step)
+/// Missing `steps` still means "create an empty workflow", but a present malformed
+/// step definition is rejected instead of being silently dropped.
+fn parse_workflow_steps(
+    steps_val: &Value,
+) -> Result<Vec<crate::durable_steps::DurableStep>, String> {
+    match steps_val {
+        Value::Null => Ok(Vec::new()),
+        Value::Array(steps) => steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| {
+                parse_single_workflow_step(step)
+                    .map_err(|err| format!("Invalid workflow step at index {index}: {err}"))
+            })
+            .collect(),
+        _ => Err("Field 'steps' must be an array".to_owned()),
+    }
 }
 
-/// Parse one step JSON object into a [`DurableStep`], returning `None` on error.
-fn parse_single_workflow_step(s: &Value) -> Option<crate::durable_steps::DurableStep> {
+/// Parse one step JSON object into a [`DurableStep`].
+fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::DurableStep, String> {
     use crate::durable_steps::{DurableStep, StepAction};
 
-    let id = s["id"].as_str()?.to_string();
-    let action_str = s["action"].as_str()?;
+    let get_required_str = |field: &str| {
+        s.get(field)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("missing required field: {field}"))
+    };
+
+    let id = get_required_str("id")?.to_string();
+    let action_str = get_required_str("action")?;
     let max_retries = s["max_retries"].as_u64().unwrap_or(2) as u32;
     let timeout_ms = s["timeout_ms"].as_u64().unwrap_or(5_000);
 
     let action = match action_str {
         "checkpoint" => StepAction::Checkpoint,
-        "click" => StepAction::Click(s["target"].as_str()?.to_string()),
+        "click" => StepAction::Click(get_required_str("target")?.to_string()),
         "type" => StepAction::Type(
-            s["target"].as_str()?.to_string(),
+            get_required_str("target")?.to_string(),
             s["text"].as_str().unwrap_or("").to_string(),
         ),
-        "wait" => StepAction::Wait(s["target"].as_str()?.to_string()),
-        "assert" => StepAction::Assert(s["target"].as_str()?.to_string()),
-        _ => return None,
+        "wait" => StepAction::Wait(get_required_str("target")?.to_string()),
+        "assert" => StepAction::Assert(get_required_str("target")?.to_string()),
+        _ => return Err(format!("unknown action: {action_str}")),
     };
 
-    Some(DurableStep::with_config(
+    Ok(DurableStep::with_config(
         id,
         action,
         max_retries,
@@ -718,6 +738,28 @@ mod tests {
         let guard = wf.lock().unwrap();
         assert!(guard.contains_key("two-step-wf"));
         assert_eq!(guard["two-step-wf"].steps.len(), 2);
+    }
+
+    #[test]
+    fn ax_workflow_create_rejects_invalid_step_definitions() {
+        let wf = make_workflows();
+        let result = super::handle_ax_workflow_create(
+            &json!({
+                "name": "invalid-wf",
+                "steps": [
+                    { "id": "s1", "action": "click", "target": "OK" },
+                    { "id": "s2", "action": "teleport" }
+                ]
+            }),
+            &wf,
+        );
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Invalid workflow step at index 1: unknown action: teleport"
+        );
+        let guard = wf.lock().unwrap();
+        assert!(!guard.contains_key("invalid-wf"));
     }
 
     #[test]
@@ -1005,18 +1047,39 @@ mod tests {
 
     #[test]
     fn parse_workflow_steps_returns_empty_for_null() {
-        let steps = super::parse_workflow_steps(&json!(null));
+        let steps = super::parse_workflow_steps(&json!(null)).unwrap();
         assert!(steps.is_empty());
     }
 
     #[test]
-    fn parse_workflow_steps_skips_unknown_actions() {
-        let steps = super::parse_workflow_steps(&json!([
+    fn parse_workflow_steps_rejects_unknown_actions() {
+        let err = super::parse_workflow_steps(&json!([
             { "id": "s1", "action": "click", "target": "OK" },
             { "id": "s2", "action": "teleport" }
-        ]));
-        assert_eq!(steps.len(), 1);
-        assert_eq!(steps[0].id, "s1");
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 1: unknown action: teleport"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_missing_target() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click" }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: missing required field: target"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_non_array_input() {
+        let err = super::parse_workflow_steps(&json!({"oops": true})).unwrap_err();
+        assert_eq!(err, "Field 'steps' must be an array");
     }
 
     #[test]
@@ -1027,7 +1090,8 @@ mod tests {
             { "id": "w",  "action": "wait",       "target": "Spinner" },
             { "id": "a",  "action": "assert",     "target": "Result"  },
             { "id": "cp", "action": "checkpoint" }
-        ]));
+        ]))
+        .unwrap();
         assert_eq!(steps.len(), 5);
     }
 
