@@ -15,10 +15,7 @@ use serde_json::{json, Value};
 #[cfg(feature = "audio")]
 use crate::mcp::annotations;
 #[cfg(feature = "audio")]
-use crate::mcp::args::{
-    extract_bool_field_or, extract_f64_field_or, extract_or_return, extract_required_string_field,
-    extract_string_field_or,
-};
+use crate::mcp::args::{extract_or_return, extract_required_string_field, reject_unknown_fields};
 #[cfg(feature = "audio")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
@@ -312,46 +309,48 @@ fn tool_ax_audio_devices() -> Tool {
 /// Handle `ax_listen` — capture audio and optionally transcribe.
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
-    let duration = extract_f64_field_or(args, "duration", 5.0) as f32;
-    let source = extract_string_field_or(args, "source", "microphone");
-    let do_transcribe = extract_bool_field_or(args, "transcribe", false);
-    let language = args["language"].as_str();
-    let max_chunk_secs = args["max_chunk_secs"].as_f64().map(|v| v as f32);
-    let engine_str = extract_string_field_or(args, "engine", "apple");
+    if let Err(err) = reject_unknown_fields(
+        args,
+        &[
+            "duration",
+            "source",
+            "transcribe",
+            "engine",
+            "language",
+            "max_chunk_secs",
+        ],
+    ) {
+        return audio_input_error("unknown_field", err);
+    }
 
-    // Validate engine name before touching any hardware.
-    let engine = match crate::audio::AudioEngine::parse_str(engine_str) {
-        Some(e) => e,
-        None => {
-            return ToolCallResult::error(
-                json!({
-                    "error": format!("Unknown engine \"{engine_str}\". Valid values: \"apple\", \"parakeet\"."),
-                    "error_code": "invalid_engine"
-                })
-                .to_string(),
-            );
-        }
+    let duration = match parse_listen_duration(args) {
+        Ok(duration) => duration,
+        Err(message) => return audio_input_error("invalid_duration", message),
     };
-
-    let requested_source = match source {
-        "microphone" => crate::audio::AudioCaptureSource::Microphone,
-        "system" => crate::audio::AudioCaptureSource::System,
-        other => {
-            return ToolCallResult::error(
-                json!({
-                    "error": format!("Unknown source \"{other}\". Valid values: \"microphone\", \"system\"."),
-                    "error_code": "invalid_source"
-                })
-                .to_string(),
-            );
-        }
+    let requested_source = match parse_listen_source(args) {
+        Ok(source) => source,
+        Err(message) => return audio_input_error("invalid_source", message),
+    };
+    let do_transcribe = match parse_optional_bool_field(args, "transcribe", false) {
+        Ok(value) => value,
+        Err(message) => return audio_input_error("invalid_transcribe", message),
+    };
+    let language = match parse_optional_string_field(args, "language") {
+        Ok(value) => value,
+        Err(message) => return audio_input_error("invalid_language", message),
+    };
+    let max_chunk_secs = match parse_optional_max_chunk_secs(args) {
+        Ok(value) => value,
+        Err(message) => return audio_input_error("invalid_max_chunk_secs", message),
+    };
+    let engine = match parse_listen_engine(args) {
+        Ok(engine) => engine,
+        Err(message) => return audio_input_error("invalid_engine", message),
     };
 
     // AC5: validate duration cap before touching any hardware.
     if let Err(e) = crate::audio::validate_duration(duration) {
-        return ToolCallResult::error(
-            json!({ "error": e.to_string(), "error_code": e.code() }).to_string(),
-        );
+        return audio_input_error(e.code(), e.to_string());
     }
 
     let capture_result = match requested_source {
@@ -373,7 +372,7 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
     };
 
     let transcript = if do_transcribe {
-        match crate::audio::transcribe_with_engine(&captured.audio, language, engine) {
+        match crate::audio::transcribe_with_engine(&captured.audio, language.as_deref(), engine) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!(error = %e, "transcription failed — returning audio without transcript");
@@ -400,6 +399,7 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
 #[cfg(feature = "audio")]
 pub(crate) fn handle_ax_speak(args: &Value) -> ToolCallResult {
     let text = extract_or_return!(extract_required_string_field(args, "text"));
+    extract_or_return!(reject_unknown_fields(args, &["text"]));
 
     match crate::audio::speak(&text) {
         Ok(elapsed) => ToolCallResult::ok(
@@ -417,7 +417,9 @@ pub(crate) fn handle_ax_speak(args: &Value) -> ToolCallResult {
 
 /// Handle `ax_audio_devices` — enumerate CoreAudio devices.
 #[cfg(feature = "audio")]
-pub(crate) fn handle_ax_audio_devices() -> ToolCallResult {
+pub(crate) fn handle_ax_audio_devices(args: &Value) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(args, &[]));
+
     let devices = crate::audio::list_audio_devices();
     let count = devices.len();
     match serde_json::to_value(&devices) {
@@ -426,6 +428,90 @@ pub(crate) fn handle_ax_audio_devices() -> ToolCallResult {
         }
         Err(e) => ToolCallResult::error(format!("Failed to serialize devices: {e}")),
     }
+}
+
+#[cfg(feature = "audio")]
+fn audio_input_error(code: &str, message: impl Into<String>) -> ToolCallResult {
+    ToolCallResult::error(json!({ "error": message.into(), "error_code": code }).to_string())
+}
+
+#[cfg(feature = "audio")]
+fn parse_listen_duration(args: &Value) -> Result<f32, String> {
+    match args.get("duration") {
+        None => Ok(5.0),
+        Some(value) => value
+            .as_f64()
+            .map(|duration| duration as f32)
+            .ok_or_else(|| "Field 'duration' must be a number".to_owned()),
+    }
+}
+
+#[cfg(feature = "audio")]
+fn parse_listen_source(args: &Value) -> Result<crate::audio::AudioCaptureSource, String> {
+    let Some(value) = args.get("source") else {
+        return Ok(crate::audio::AudioCaptureSource::Microphone);
+    };
+
+    match value {
+        Value::String(source) => match source.as_str() {
+            "microphone" => Ok(crate::audio::AudioCaptureSource::Microphone),
+            "system" => Ok(crate::audio::AudioCaptureSource::System),
+            other => Err(format!(
+                "Unknown source \"{other}\". Valid values: \"microphone\", \"system\"."
+            )),
+        },
+        _ => Err("Field 'source' must be one of: \"microphone\", \"system\".".to_owned()),
+    }
+}
+
+#[cfg(feature = "audio")]
+fn parse_listen_engine(args: &Value) -> Result<crate::audio::AudioEngine, String> {
+    let Some(value) = args.get("engine") else {
+        return Ok(crate::audio::AudioEngine::Apple);
+    };
+
+    match value {
+        Value::String(engine) => crate::audio::AudioEngine::parse_str(engine).ok_or_else(|| {
+            format!("Unknown engine \"{engine}\". Valid values: \"apple\", \"parakeet\".")
+        }),
+        _ => Err("Field 'engine' must be one of: \"apple\", \"parakeet\".".to_owned()),
+    }
+}
+
+#[cfg(feature = "audio")]
+fn parse_optional_bool_field(args: &Value, field: &str, default: bool) -> Result<bool, String> {
+    match args.get(field) {
+        None => Ok(default),
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| format!("Field '{field}' must be a boolean")),
+    }
+}
+
+#[cfg(feature = "audio")]
+fn parse_optional_string_field(args: &Value, field: &str) -> Result<Option<String>, String> {
+    match args.get(field) {
+        None => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(format!("Field '{field}' must be a string")),
+    }
+}
+
+#[cfg(feature = "audio")]
+fn parse_optional_max_chunk_secs(args: &Value) -> Result<Option<f32>, String> {
+    let Some(value) = args.get("max_chunk_secs") else {
+        return Ok(None);
+    };
+
+    let raw = value
+        .as_f64()
+        .ok_or_else(|| "Field 'max_chunk_secs' must be a number".to_owned())?;
+    let secs = raw as f32;
+    if !(1.0..=30.0).contains(&secs) {
+        return Err("Field 'max_chunk_secs' must be between 1 and 30 seconds".to_owned());
+    }
+
+    Ok(Some(secs))
 }
 
 // ---------------------------------------------------------------------------
@@ -561,10 +647,17 @@ mod tests {
     }
 
     #[test]
+    fn handle_ax_speak_rejects_unknown_top_level_fields() {
+        let result = handle_ax_speak(&json!({ "text": "hello", "extra": true }));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
     fn handle_ax_audio_devices_returns_valid_json_with_required_keys() {
         // GIVEN: running macOS system
         // WHEN: ax_audio_devices is called
-        let result = handle_ax_audio_devices();
+        let result = handle_ax_audio_devices(&json!({}));
         // THEN: parses as JSON with device_count and devices keys
         assert!(
             !result.is_error,
@@ -574,6 +667,13 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["device_count"].is_number());
         assert!(v["devices"].is_array());
+    }
+
+    #[test]
+    fn handle_ax_audio_devices_rejects_unknown_top_level_fields() {
+        let result = handle_ax_audio_devices(&json!({ "extra": true }));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
     }
 
     #[test]
@@ -677,6 +777,54 @@ mod tests {
         assert!(result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["error_code"], "invalid_engine");
+    }
+
+    #[test]
+    fn handle_ax_listen_non_string_engine_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "engine": 42 }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_engine");
+    }
+
+    #[test]
+    fn handle_ax_listen_rejects_unknown_top_level_fields() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "extra": true }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "unknown_field");
+    }
+
+    #[test]
+    fn handle_ax_listen_non_boolean_transcribe_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "transcribe": "yes" }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_transcribe");
+    }
+
+    #[test]
+    fn handle_ax_listen_non_string_language_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "language": 7 }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_language");
+    }
+
+    #[test]
+    fn handle_ax_listen_non_numeric_max_chunk_secs_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "max_chunk_secs": "5" }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_max_chunk_secs");
+    }
+
+    #[test]
+    fn handle_ax_listen_out_of_range_max_chunk_secs_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "max_chunk_secs": 0.5 }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_max_chunk_secs");
     }
 
     #[test]

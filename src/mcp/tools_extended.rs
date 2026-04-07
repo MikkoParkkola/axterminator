@@ -153,7 +153,7 @@ pub fn call_tool_extended<W: Write>(
         }
         #[cfg(feature = "audio")]
         crate::mcp::tools_audio::TOOL_AX_AUDIO_DEVICES => {
-            Some(crate::mcp::tools_audio::handle_ax_audio_devices())
+            Some(crate::mcp::tools_audio::handle_ax_audio_devices(args))
         }
         #[cfg(feature = "audio")]
         crate::mcp::tools_capture::TOOL_AX_START_CAPTURE => {
