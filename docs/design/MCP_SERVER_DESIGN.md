@@ -523,7 +523,7 @@ No `uv run`, no `python`, no virtual environments. Just the binary.
 class Axterminator < Formula
   desc "macOS GUI automation for humans and AI"
   homepage "https://github.com/MikkoParkkola/axterminator"
-  url "https://github.com/MikkoParkkola/axterminator/releases/download/v0.6.1/axterminator-0.6.1-aarch64-apple-darwin.tar.gz"
+  url "https://github.com/MikkoParkkola/axterminator/releases/download/vX.Y.Z/axterminator-X.Y.Z-aarch64-apple-darwin.tar.gz"
   sha256 "..."
   license "MIT OR Apache-2.0"
 
@@ -2881,7 +2881,7 @@ See also: **Section 2D** for the `server.py` deprecation timeline.
 
 1. Add `rmcp = { version = "1.2", features = ["server", "transport-io", "macros"] }` dependency
 2. Implement `AXTerminatorServer` with `#[tool_router]` (see Section 2A.3)
-3. Implement `tools/list` and `tools/call` with all 19 core tools (connect, find, action, observe)
+3. Implement `tools/list` and `tools/call` for the default core tool surface (connect, find, action, observe)
 4. Add `ToolAnnotations` to all tools
 5. Add `outputSchema` to tools with structured returns
 6. Implement structured MCP logging (`notifications/message`)

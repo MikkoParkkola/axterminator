@@ -293,6 +293,14 @@ mod tests {
             .expect("docs/DESIGN.md should be readable during tests")
     }
 
+    fn mcp_server_design_doc() -> String {
+        fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/docs/design/MCP_SERVER_DESIGN.md"
+        ))
+        .expect("docs/design/MCP_SERVER_DESIGN.md should be readable during tests")
+    }
+
     fn default_build_tool_count() -> usize {
         crate::mcp::tools::all_tools()
             .into_iter()
@@ -415,5 +423,13 @@ mod tests {
 
         assert!(!doc.contains("Last updated:"));
         assert!(!doc.contains("Last Updated:"));
+    }
+
+    #[test]
+    fn mcp_server_design_doc_avoids_stale_release_and_tool_count_examples() {
+        let doc = mcp_server_design_doc();
+
+        assert!(!doc.contains("v0.6.1"));
+        assert!(!doc.contains("19 core tools"));
     }
 }
