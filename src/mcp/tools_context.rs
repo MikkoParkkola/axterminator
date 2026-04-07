@@ -5,13 +5,10 @@
 //! | `ax_system_context` | Full environmental snapshot | None |
 //! | `ax_location`       | GPS coordinates            | Location Services (feature `context`) |
 
-use serde_json::json;
-#[cfg(any(test, feature = "context"))]
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::mcp::annotations;
-#[cfg(feature = "context")]
-use crate::mcp::args::extract_f64_field_or;
+use crate::mcp::args::{extract_or_return, reject_unknown_fields};
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
@@ -129,7 +126,8 @@ fn tool_ax_location() -> Tool {
 // ---------------------------------------------------------------------------
 
 /// Handle `ax_system_context` — return full system snapshot.
-pub(crate) fn handle_ax_system_context() -> ToolCallResult {
+pub(crate) fn handle_ax_system_context(args: &Value) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(args, &[]));
     let ctx = crate::context::system::collect_system_context();
     match serde_json::to_value(&ctx) {
         Ok(v) => ToolCallResult::ok(v.to_string()),
@@ -140,7 +138,14 @@ pub(crate) fn handle_ax_system_context() -> ToolCallResult {
 /// Handle `ax_location` — request GPS location.
 #[cfg(feature = "context")]
 pub(crate) fn handle_ax_location(args: &Value) -> ToolCallResult {
-    let timeout_secs = extract_f64_field_or(args, "timeout", 10.0).clamp(1.0, 30.0);
+    if let Err(err) = reject_unknown_fields(args, &["timeout"]) {
+        return context_input_error("unknown_field", err);
+    }
+
+    let timeout_secs = match parse_location_timeout(args) {
+        Ok(timeout_secs) => timeout_secs,
+        Err(err) => return context_input_error("invalid_timeout", err),
+    };
     let timeout = std::time::Duration::from_secs_f64(timeout_secs);
 
     match crate::context::location::request_location(timeout) {
@@ -152,6 +157,27 @@ pub(crate) fn handle_ax_location(args: &Value) -> ToolCallResult {
             json!({ "error": e.to_string(), "error_code": e.code() }).to_string(),
         ),
     }
+}
+
+#[cfg(feature = "context")]
+fn context_input_error(code: &str, message: impl Into<String>) -> ToolCallResult {
+    ToolCallResult::error(json!({ "error": message.into(), "error_code": code }).to_string())
+}
+
+#[cfg(feature = "context")]
+fn parse_location_timeout(args: &Value) -> Result<f64, String> {
+    let timeout_secs = match args.get("timeout") {
+        None => return Ok(10.0),
+        Some(value) => value
+            .as_f64()
+            .ok_or_else(|| "Field 'timeout' must be a number".to_owned())?,
+    };
+
+    if !(1.0..=30.0).contains(&timeout_secs) {
+        return Err("Field 'timeout' must be between 1 and 30".to_owned());
+    }
+
+    Ok(timeout_secs)
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +225,7 @@ mod tests {
     #[test]
     fn handle_system_context_returns_valid_json() {
         let _guard = appkit_test_guard();
-        let result = handle_ax_system_context();
+        let result = handle_ax_system_context(&json!({}));
         assert!(
             !result.is_error,
             "unexpected error: {}",
@@ -208,5 +234,39 @@ mod tests {
         let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["macos_version"].is_string());
         assert!(v["dark_mode"].is_boolean());
+    }
+
+    #[test]
+    fn handle_system_context_rejects_unknown_top_level_fields() {
+        let result = handle_ax_system_context(&json!({ "extra": true }));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[cfg(feature = "context")]
+    #[test]
+    fn handle_location_rejects_unknown_top_level_fields() {
+        let result = handle_ax_location(&json!({ "extra": true }));
+        assert!(result.is_error);
+        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "unknown_field");
+    }
+
+    #[cfg(feature = "context")]
+    #[test]
+    fn handle_location_rejects_non_numeric_timeout() {
+        let result = handle_ax_location(&json!({ "timeout": "slow" }));
+        assert!(result.is_error);
+        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_timeout");
+    }
+
+    #[cfg(feature = "context")]
+    #[test]
+    fn handle_location_rejects_out_of_range_timeout() {
+        let result = handle_ax_location(&json!({ "timeout": 0.5 }));
+        assert!(result.is_error);
+        let v: Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_timeout");
     }
 }

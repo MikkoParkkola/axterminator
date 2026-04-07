@@ -192,7 +192,7 @@ pub fn call_tool_extended<W: Write>(
             Some(crate::mcp::tools_docker::handle_ax_browser_stop(args))
         }
         crate::mcp::tools_context::TOOL_AX_SYSTEM_CONTEXT => {
-            Some(crate::mcp::tools_context::handle_ax_system_context())
+            Some(crate::mcp::tools_context::handle_ax_system_context(args))
         }
         #[cfg(feature = "context")]
         crate::mcp::tools_context::TOOL_AX_LOCATION => {
