@@ -621,8 +621,8 @@ fn call_watch_tool_with_state(
 
     match name {
         "ax_watch_start" => Some(handle_ax_watch_start(args, watch_state)),
-        "ax_watch_stop" => Some(handle_ax_watch_stop(watch_state)),
-        "ax_watch_status" => Some(handle_ax_watch_status(watch_state)),
+        "ax_watch_stop" => Some(handle_ax_watch_stop(args, watch_state)),
+        "ax_watch_status" => Some(handle_ax_watch_status(args, watch_state)),
         _ => None,
     }
 }

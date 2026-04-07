@@ -13,7 +13,7 @@
 use serde_json::{json, Value};
 
 use crate::mcp::annotations;
-use crate::mcp::args::{extract_bool_field_or, extract_f64_field_or, extract_u64_field_or};
+use crate::mcp::args::{extract_or_return, reject_unknown_fields};
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
 // ---------------------------------------------------------------------------
@@ -152,15 +152,31 @@ fn tool_ax_watch_status() -> Tool {
 /// from the channel to MCP notifications.
 #[cfg(feature = "watch")]
 pub(crate) fn handle_ax_watch_start(args: &Value, state: &WatchState) -> ToolCallResult {
-    let audio = extract_bool_field_or(args, "audio", false);
-    let camera = extract_bool_field_or(args, "camera", false);
+    extract_or_return!(reject_unknown_fields(
+        args,
+        &["audio", "camera", "vad_threshold_db", "camera_interval_ms"]
+    ));
+    let audio = extract_or_return!(parse_optional_bool_field(args, "audio", false));
+    let camera = extract_or_return!(parse_optional_bool_field(args, "camera", false));
 
     if !audio && !camera {
         return ToolCallResult::error("At least one of 'audio' or 'camera' must be true");
     }
 
-    let vad_threshold_db = extract_f64_field_or(args, "vad_threshold_db", -40.0) as f32;
-    let camera_interval_ms = extract_u64_field_or(args, "camera_interval_ms", 2000);
+    let vad_threshold_db = extract_or_return!(parse_optional_f64_in_range(
+        args,
+        "vad_threshold_db",
+        -40.0,
+        -96.0,
+        0.0
+    )) as f32;
+    let camera_interval_ms = extract_or_return!(parse_optional_u64_in_range(
+        args,
+        "camera_interval_ms",
+        2000,
+        500,
+        30000
+    ));
 
     let config = crate::watch::WatchConfig {
         audio_enabled: audio,
@@ -190,14 +206,16 @@ pub(crate) fn handle_ax_watch_start(args: &Value, state: &WatchState) -> ToolCal
 
 /// Handle `ax_watch_stop`.
 #[cfg(feature = "watch")]
-pub(crate) fn handle_ax_watch_stop(state: &WatchState) -> ToolCallResult {
+pub(crate) fn handle_ax_watch_stop(args: &Value, state: &WatchState) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(args, &[]));
     state.stop();
     ToolCallResult::ok(json!({ "stopped": true, "message": "All watchers stopped" }).to_string())
 }
 
 /// Handle `ax_watch_status`.
 #[cfg(feature = "watch")]
-pub(crate) fn handle_ax_watch_status(state: &WatchState) -> ToolCallResult {
+pub(crate) fn handle_ax_watch_status(args: &Value, state: &WatchState) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(args, &[]));
     let status = state.status();
     ToolCallResult::ok(
         json!({
@@ -206,6 +224,60 @@ pub(crate) fn handle_ax_watch_status(state: &WatchState) -> ToolCallResult {
         })
         .to_string(),
     )
+}
+
+#[cfg(feature = "watch")]
+fn parse_optional_bool_field(args: &Value, field: &str, default: bool) -> Result<bool, String> {
+    match args.get(field) {
+        None => Ok(default),
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| format!("Field '{field}' must be a boolean")),
+    }
+}
+
+#[cfg(feature = "watch")]
+fn parse_optional_f64_in_range(
+    args: &Value,
+    field: &str,
+    default: f64,
+    min: f64,
+    max: f64,
+) -> Result<f64, String> {
+    let value = match args.get(field) {
+        None => return Ok(default),
+        Some(value) => value
+            .as_f64()
+            .ok_or_else(|| format!("Field '{field}' must be a number"))?,
+    };
+
+    if !(min..=max).contains(&value) {
+        return Err(format!("Field '{field}' must be between {min} and {max}"));
+    }
+
+    Ok(value)
+}
+
+#[cfg(feature = "watch")]
+fn parse_optional_u64_in_range(
+    args: &Value,
+    field: &str,
+    default: u64,
+    min: u64,
+    max: u64,
+) -> Result<u64, String> {
+    let value = match args.get(field) {
+        None => return Ok(default),
+        Some(value) => value
+            .as_u64()
+            .ok_or_else(|| format!("Field '{field}' must be an integer"))?,
+    };
+
+    if !(min..=max).contains(&value) {
+        return Err(format!("Field '{field}' must be between {min} and {max}"));
+    }
+
+    Ok(value)
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +438,7 @@ mod tests {
         // GIVEN: fresh state with no watchers
         let state = WatchState::new();
         // WHEN: stop called
-        let result = handle_ax_watch_stop(&state);
+        let result = handle_ax_watch_stop(&json!({}), &state);
         // THEN: succeeds silently
         assert!(!result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
@@ -376,7 +448,7 @@ mod tests {
     #[tokio::test]
     async fn ax_watch_status_reports_nothing_running_initially() {
         let state = WatchState::new();
-        let result = handle_ax_watch_status(&state);
+        let result = handle_ax_watch_status(&json!({}), &state);
         assert!(!result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["audio_running"], false);
@@ -425,5 +497,101 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert!(v["message"].as_str().unwrap().contains("5000"));
         state.stop();
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_unknown_top_level_fields() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(&json!({ "audio": true, "extra": true }), &state);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_non_boolean_audio() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(&json!({ "audio": "yes" }), &state);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Field 'audio' must be a boolean");
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_non_boolean_camera() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(&json!({ "audio": true, "camera": "yes" }), &state);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Field 'camera' must be a boolean");
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_non_numeric_vad_threshold() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(
+            &json!({ "audio": true, "vad_threshold_db": "loud" }),
+            &state,
+        );
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'vad_threshold_db' must be a number"
+        );
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_out_of_range_vad_threshold() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(
+            &json!({ "audio": true, "vad_threshold_db": -120.0 }),
+            &state,
+        );
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'vad_threshold_db' must be between -96 and 0"
+        );
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_non_integer_camera_interval() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(
+            &json!({ "camera": true, "camera_interval_ms": "fast" }),
+            &state,
+        );
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'camera_interval_ms' must be an integer"
+        );
+    }
+
+    #[test]
+    fn ax_watch_start_rejects_out_of_range_camera_interval() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_start(
+            &json!({ "camera": true, "camera_interval_ms": 100 }),
+            &state,
+        );
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Field 'camera_interval_ms' must be between 500 and 30000"
+        );
+    }
+
+    #[test]
+    fn ax_watch_stop_rejects_unknown_top_level_fields() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_stop(&json!({ "extra": true }), &state);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
+    fn ax_watch_status_rejects_unknown_top_level_fields() {
+        let state = WatchState::new();
+        let result = handle_ax_watch_status(&json!({ "extra": true }), &state);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
     }
 }
