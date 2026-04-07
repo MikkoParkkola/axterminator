@@ -241,6 +241,7 @@ fn handle_ax_workflow_create(
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
     let name = extract_or_return!(extract_required_string_field(args, "name"));
+    extract_or_return!(reject_unknown_fields(args, &["name", "app", "steps"]));
     let app_name = extract_or_return!(parse_optional_workflow_app(args));
     let steps = match args.get("steps") {
         Some(steps) => extract_or_return!(parse_workflow_steps(steps)),
@@ -293,6 +294,7 @@ fn handle_ax_workflow_step<W: Write>(
     out: &mut W,
 ) -> ToolCallResult {
     let name = extract_or_return!(extract_required_string_field(args, "name"));
+    extract_or_return!(reject_unknown_fields(args, &["name"]));
 
     let mut guard = match workflows.lock() {
         Ok(g) => g,
@@ -356,6 +358,7 @@ fn handle_ax_workflow_status(
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
     let name = extract_or_return!(extract_required_string_field(args, "name"));
+    extract_or_return!(reject_unknown_fields(args, &["name"]));
 
     let guard = match workflows.lock() {
         Ok(g) => g,
@@ -645,6 +648,20 @@ fn parse_optional_workflow_app(args: &Value) -> Result<Option<String>, String> {
     }
 }
 
+fn reject_unknown_fields(args: &Value, allowed: &[&str]) -> Result<(), String> {
+    let Some(obj) = args.as_object() else {
+        return Ok(());
+    };
+
+    for field in obj.keys() {
+        if !allowed.contains(&field.as_str()) {
+            return Err(format!("unknown field: {field}"));
+        }
+    }
+
+    Ok(())
+}
+
 /// Parse one step JSON object into a [`DurableStep`].
 fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::DurableStep, String> {
     use crate::durable_steps::{DurableStep, StepAction};
@@ -825,6 +842,23 @@ mod tests {
     }
 
     #[test]
+    fn ax_workflow_create_rejects_unknown_top_level_fields() {
+        let wf = make_workflows();
+        let result = super::handle_ax_workflow_create(
+            &json!({
+                "name": "extra-field-wf",
+                "steps": [{ "id": "cp", "action": "checkpoint" }],
+                "surprise": true
+            }),
+            &wf,
+        );
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: surprise");
+        let guard = wf.lock().unwrap();
+        assert!(!guard.contains_key("extra-field-wf"));
+    }
+
+    #[test]
     fn ax_workflow_create_stores_parsed_steps() {
         let wf = make_workflows();
         let result = super::handle_ax_workflow_create(
@@ -997,6 +1031,29 @@ mod tests {
     }
 
     #[test]
+    fn ax_workflow_step_rejects_unknown_top_level_fields() {
+        let registry = make_registry();
+        let wf = make_workflows();
+        let mut out = Vec::<u8>::new();
+        super::handle_ax_workflow_create(
+            &json!({"name": "known-wf", "steps": [{"id": "s1", "action": "checkpoint"}]}),
+            &wf,
+        );
+
+        let result = super::handle_ax_workflow_step(
+            &json!({"name": "known-wf", "extra": true}),
+            &registry,
+            &wf,
+            &mut out,
+        );
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+
+        let guard = wf.lock().unwrap();
+        assert_eq!(guard["known-wf"].current_step, 0);
+    }
+
+    #[test]
     fn ax_workflow_step_unknown_workflow_returns_error() {
         let registry = make_registry();
         let wf = make_workflows();
@@ -1109,6 +1166,19 @@ mod tests {
         let result = super::handle_ax_workflow_status(&json!({}), &wf);
         assert!(result.is_error);
         assert_eq!(result.content[0].text, "Missing required field: name");
+    }
+
+    #[test]
+    fn ax_workflow_status_rejects_unknown_top_level_fields() {
+        let wf = make_workflows();
+        super::handle_ax_workflow_create(
+            &json!({"name": "status-wf", "steps": [{"id": "s1", "action": "checkpoint"}]}),
+            &wf,
+        );
+        let result =
+            super::handle_ax_workflow_status(&json!({"name": "status-wf", "extra": true}), &wf);
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
     }
 
     #[test]
