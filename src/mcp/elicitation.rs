@@ -5,7 +5,7 @@
 //! client renders a form (or URL prompt) and returns the user's answer.
 //!
 //! This module implements the four scenarios that have the highest user-facing
-//! impact, matching the MCP 2025-11-05 `elicitation/create` wire format:
+//! impact, matching the MCP 2025-11-25 `elicitation/create` wire format:
 //!
 //! | # | Scenario | Trigger |
 //! |---|----------|---------|
@@ -84,7 +84,7 @@ pub enum ElicitError {
 
 /// Parameters for `elicitation/create` — sent from server to client.
 ///
-/// Matches the MCP 2025-11-05 wire format. The `requested_schema` field is a
+/// Matches the MCP 2025-11-25 wire format. The `requested_schema` field is a
 /// JSON Schema object describing the expected response shape.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ElicitParams {

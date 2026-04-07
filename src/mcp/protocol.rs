@@ -1,4 +1,4 @@
-//! MCP 2025-11-05 protocol types.
+//! MCP 2025-11-25 protocol types.
 //!
 //! Covers the wire types for Phase 1, Phase 2, and Phase 5 (Tasks API):
 //! - `initialize` handshake with resources + prompts + tasks capabilities
@@ -234,7 +234,7 @@ pub struct ServerCapabilities {
 /// to the client mid-tool-call.  The client is free to reject or ignore these
 /// requests; the server must handle the case gracefully.
 ///
-/// The value is an empty object per the MCP 2025-11-05 spec — capability
+/// The value is an empty object per the MCP 2025-11-25 spec — capability
 /// presence alone is the signal.
 #[derive(Debug, Serialize)]
 pub struct SamplingCapability {}
@@ -242,7 +242,7 @@ pub struct SamplingCapability {}
 /// Elicitation capability advertised in `initialize`.
 ///
 /// Presence signals that the server may send `elicitation/create` requests.
-/// The value is an empty object per the MCP 2025-11-05 spec.
+/// The value is an empty object per the MCP 2025-11-25 spec.
 #[derive(Debug, Serialize)]
 pub struct ElicitationCapability {}
 
@@ -311,7 +311,7 @@ pub struct Tool {
     pub annotations: ToolAnnotations,
 }
 
-/// Semantic hints for MCP clients (MCP 2025-11-05 §6.3).
+/// Semantic hints for MCP clients (MCP 2025-11-25 §6.3).
 ///
 /// These four boolean fields are a direct serialisation of the MCP wire format —
 /// each maps to a distinct JSON property. Refactoring into an enum would break
@@ -411,7 +411,7 @@ pub struct PingResult {}
 /// `resources/subscribe` params — client sends to start receiving
 /// `notifications/resources/updated` for a specific resource URI.
 ///
-/// Per MCP 2025-11-05 §6.3, the server must declare `resources.subscribe: true`
+/// Per MCP 2025-11-25 §6.3, the server must declare `resources.subscribe: true`
 /// in its `initialize` capabilities before clients will send this method.
 #[derive(Debug, Deserialize)]
 pub struct ResourceSubscribeParams {
@@ -428,7 +428,7 @@ pub struct ResourceUnsubscribeParams {
 }
 
 /// `resources/subscribe` and `resources/unsubscribe` both return an empty
-/// object per the MCP 2025-11-05 wire spec.
+/// object per the MCP 2025-11-25 wire spec.
 #[derive(Debug, Serialize)]
 pub struct ResourceSubscribeResult {}
 

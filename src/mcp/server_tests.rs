@@ -29,7 +29,7 @@ fn initialize_server(s: &mut Server) {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": { "name": "test", "version": "0.1" }
         })),
@@ -68,7 +68,7 @@ fn initialize_request_transitions_to_initializing() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -77,6 +77,7 @@ fn initialize_request_transitions_to_initializing() {
     // THEN: Initializing phase; response contains serverInfo
     assert_eq!(s.phase, Phase::Initializing);
     let v: Value = serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap();
+    assert_eq!(v["result"]["protocolVersion"], "2025-11-25");
     assert_eq!(v["result"]["serverInfo"]["name"], "axterminator");
 }
 
@@ -88,7 +89,7 @@ fn initialized_notification_transitions_to_running() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -215,7 +216,7 @@ fn initialize_response_advertises_resources_capability() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -234,7 +235,7 @@ fn initialize_response_advertises_prompts_capability() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -253,7 +254,7 @@ fn initialize_response_advertises_elicitation_capability() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -276,7 +277,7 @@ fn server_handle_ping_returns_empty_object() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -505,7 +506,7 @@ fn initialize_response_advertises_tasks_capability() {
         1,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -897,7 +898,7 @@ fn initialize_response_advertises_sampling_capability() {
         70,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test", "version": "1"}
         })),
@@ -920,7 +921,7 @@ fn client_supports_sampling_false_when_not_advertised() {
         71,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "no-sampling-client", "version": "1"}
         })),
@@ -942,7 +943,7 @@ fn client_supports_sampling_true_when_advertised() {
         72,
         "initialize",
         Some(json!({
-            "protocolVersion": "2025-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {
                 "sampling": { "createMessage": {} }
             },
@@ -1494,7 +1495,7 @@ fn every_tool_has_annotation_object_in_tools_list() {
             annotations.is_object(),
             "tool '{name}' missing annotations object; got: {annotations:?}"
         );
-        // At least one of the four MCP 2025-11-05 §6.3 hint fields must be present.
+        // At least one of the four MCP 2025-11-25 §6.3 hint fields must be present.
         let obj = annotations.as_object().unwrap();
         let has_hint = obj.contains_key("readOnlyHint")
             || obj.contains_key("destructiveHint")

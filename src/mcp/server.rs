@@ -436,7 +436,7 @@ pub fn emit_log(out: &mut impl Write, level: &str, message: &str) -> io::Result<
 /// present in the server's subscription set. Best-effort — I/O errors are
 /// silently swallowed so a broken notification never aborts a tool result.
 ///
-/// The notification body follows the MCP 2025-11-05 §6.3 wire format:
+/// The notification body follows the MCP 2025-11-25 §6.3 wire format:
 ///
 /// ```json
 /// {"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"..."}}

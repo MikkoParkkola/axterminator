@@ -677,7 +677,7 @@ fn build_initialize_result() -> InitializeResult {
     let experimental = None;
 
     InitializeResult {
-        protocol_version: "2025-11-05",
+        protocol_version: "2025-11-25",
         capabilities: ServerCapabilities {
             tools: ToolsCapability {
                 list_changed: false,

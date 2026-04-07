@@ -1,6 +1,6 @@
 //! Canonical tool annotations for every Phase 1 and Phase 2 tool.
 //!
-//! Each constant captures the semantic hints defined in MCP 2025-11-05 §6.3.
+//! Each constant captures the semantic hints defined in MCP 2025-11-25 §6.3.
 //! Centralising them here ensures the CLI help text and MCP `tools/list` response
 //! stay consistent with the design document.
 //!
