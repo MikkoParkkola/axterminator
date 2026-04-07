@@ -91,12 +91,30 @@ fn tool_ax_workflow_create() -> Tool {
                         "properties": {
                             "id":          { "type": "string",  "description": "Step identifier" },
                             "action":      { "type": "string",  "enum": ["click", "type", "wait", "assert", "checkpoint"] },
-                            "target":      { "type": "string",  "description": "Element query. wait/assert currently verify that the query resolves successfully." },
-                            "text":        { "type": "string",  "description": "Text to type (action=type only)" },
+                            "target":      { "type": "string",  "description": "Element query. Required for click/type/wait/assert. wait/assert currently verify that the query resolves successfully." },
+                            "text":        { "type": "string",  "description": "Text to type. Required for action=type." },
                             "max_retries": { "type": "integer", "default": 2 },
                             "timeout_ms":  { "type": "integer", "default": 5000 }
                         },
-                        "required": ["id", "action"]
+                        "required": ["id", "action"],
+                        "allOf": [
+                            {
+                                "if": { "properties": { "action": { "const": "click" } } },
+                                "then": { "required": ["id", "action", "target"] }
+                            },
+                            {
+                                "if": { "properties": { "action": { "const": "type" } } },
+                                "then": { "required": ["id", "action", "target", "text"] }
+                            },
+                            {
+                                "if": { "properties": { "action": { "const": "wait" } } },
+                                "then": { "required": ["id", "action", "target"] }
+                            },
+                            {
+                                "if": { "properties": { "action": { "const": "assert" } } },
+                                "then": { "required": ["id", "action", "target"] }
+                            }
+                        ]
                     }
                 }
             },
@@ -629,7 +647,7 @@ fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::Durable
         "click" => StepAction::Click(get_required_str("target")?.to_string()),
         "type" => StepAction::Type(
             get_required_str("target")?.to_string(),
-            s["text"].as_str().unwrap_or("").to_string(),
+            get_required_str("text")?.to_string(),
         ),
         "wait" => StepAction::Wait(get_required_str("target")?.to_string()),
         "assert" => StepAction::Assert(get_required_str("target")?.to_string()),
@@ -1077,6 +1095,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_workflow_steps_rejects_type_steps_without_text() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "type", "target": "Field" }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: missing required field: text"
+        );
+    }
+
+    #[test]
     fn parse_workflow_steps_rejects_non_array_input() {
         let err = super::parse_workflow_steps(&json!({"oops": true})).unwrap_err();
         assert_eq!(err, "Field 'steps' must be an array");
@@ -1093,6 +1123,25 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(steps.len(), 5);
+    }
+
+    #[test]
+    fn workflow_create_schema_requires_text_for_type_steps() {
+        let tool = super::tool_ax_workflow_create();
+        let all_of = tool.input_schema["properties"]["steps"]["items"]["allOf"]
+            .as_array()
+            .expect("workflow step conditionals");
+
+        let type_rule = all_of
+            .iter()
+            .find(|rule| rule["if"]["properties"]["action"]["const"] == "type")
+            .expect("type conditional requirement");
+
+        let required = type_rule["then"]["required"]
+            .as_array()
+            .expect("required array");
+        assert!(required.iter().any(|value| value == "target"));
+        assert!(required.iter().any(|value| value == "text"));
     }
 
     // -----------------------------------------------------------------------
