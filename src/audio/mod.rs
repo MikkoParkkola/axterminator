@@ -69,7 +69,11 @@ mod speech;
 // Public re-exports
 // ---------------------------------------------------------------------------
 
-pub use capture::{capture_microphone, capture_system_audio, validate_duration};
+pub use capture::{
+    capture_microphone, capture_microphone_with_metadata, capture_system_audio,
+    capture_system_audio_with_metadata, validate_duration, AudioCaptureBackend, AudioCaptureSource,
+    CapturedAudio,
+};
 pub use devices::{check_microphone_permission, list_audio_devices, AudioDevice};
 pub use speech::{speak, transcribe, transcribe_with_engine, AudioEngine};
 

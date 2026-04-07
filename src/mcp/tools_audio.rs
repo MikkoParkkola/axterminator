@@ -54,6 +54,8 @@ fn tool_ax_listen() -> Tool {
             \n\
             On macOS 14+, system audio capture uses ScreenCaptureKit in audio-only mode \
             (width=0, height=0) which does NOT require Screen Recording permission.\n\
+            If true system loopback is unavailable and capture falls back to AVAudioEngine input, \
+            inspect `source_used` and `capture_backend` in the response.\n\
             \n\
             Sources:\n\
             - `\"microphone\"` — default input device (requires TCC microphone permission)\n\
@@ -137,6 +139,9 @@ fn tool_ax_listen() -> Tool {
             "type": "object",
             "properties": {
                 "captured":       { "type": "boolean" },
+                "requested_source": { "type": "string", "enum": ["microphone", "system"] },
+                "source_used":    { "type": "string", "enum": ["microphone", "system"], "description": "Actual audio source that produced the capture. May differ from `requested_source` when system capture falls back to microphone input." },
+                "capture_backend": { "type": "string", "description": "Concrete capture path used: `screen_capturekit_audio_only`, `av_audio_engine_input`, or `av_audio_engine_input_fallback`." },
                 "duration_ms":    { "type": "integer" },
                 "sample_rate":    { "type": "integer" },
                 "size_bytes":     { "type": "integer", "description": "WAV payload size before base64" },
@@ -157,10 +162,70 @@ fn tool_ax_listen() -> Tool {
                     }
                 }
             },
-            "required": ["captured", "duration_ms", "sample_rate", "size_bytes"]
+            "required": ["captured", "requested_source", "source_used", "capture_backend", "duration_ms", "sample_rate", "size_bytes"]
         }),
         annotations: annotations::READ_ONLY,
     }
+}
+
+#[cfg(feature = "audio")]
+fn build_ax_listen_payload(
+    requested_source: crate::audio::AudioCaptureSource,
+    captured: crate::audio::CapturedAudio,
+    transcript: Option<String>,
+    engine: crate::audio::AudioEngine,
+    max_chunk_secs: Option<f32>,
+) -> Value {
+    let duration_ms = captured.audio.duration_ms();
+    let sample_rate = captured.audio.sample_rate;
+    let size_bytes = captured.audio.wav_size_bytes();
+    let source_used = captured.source_used.as_str();
+    let capture_backend = captured.capture_backend.as_str();
+    let requested_source = requested_source.as_str();
+
+    let mut payload = if let Some(chunk_secs) = max_chunk_secs {
+        let chunks = captured.audio.into_chunks(chunk_secs);
+        let chunks_json: Vec<Value> = chunks
+            .iter()
+            .enumerate()
+            .map(|(i, chunk)| {
+                json!({
+                    "index":       i,
+                    "duration_ms": chunk.duration_ms(),
+                    "size_bytes":  chunk.wav_size_bytes(),
+                    "base64_wav":  chunk.to_wav_base64(),
+                })
+            })
+            .collect();
+        json!({
+            "captured":         true,
+            "requested_source": requested_source,
+            "source_used":      source_used,
+            "capture_backend":  capture_backend,
+            "duration_ms":      duration_ms,
+            "sample_rate":      sample_rate,
+            "size_bytes":       size_bytes,
+            "chunks":           chunks_json,
+        })
+    } else {
+        json!({
+            "captured":         true,
+            "requested_source": requested_source,
+            "source_used":      source_used,
+            "capture_backend":  capture_backend,
+            "duration_ms":      duration_ms,
+            "sample_rate":      sample_rate,
+            "size_bytes":       size_bytes,
+            "base64_wav":       captured.audio.to_wav_base64(),
+        })
+    };
+
+    if let Some(t) = transcript {
+        payload["transcript"] = serde_json::Value::String(t);
+        payload["engine_used"] = serde_json::Value::String(engine.as_str().to_string());
+    }
+
+    payload
 }
 
 #[cfg(feature = "audio")]
@@ -268,9 +333,9 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
         }
     };
 
-    let source = match source {
-        "microphone" => "microphone",
-        "system" => "system",
+    let requested_source = match source {
+        "microphone" => crate::audio::AudioCaptureSource::Microphone,
+        "system" => crate::audio::AudioCaptureSource::System,
         other => {
             return ToolCallResult::error(
                 json!({
@@ -289,12 +354,16 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
         );
     }
 
-    let capture_result = match source {
-        "system" => crate::audio::capture_system_audio(duration),
-        _ => crate::audio::capture_microphone(duration),
+    let capture_result = match requested_source {
+        crate::audio::AudioCaptureSource::System => {
+            crate::audio::capture_system_audio_with_metadata(duration)
+        }
+        crate::audio::AudioCaptureSource::Microphone => {
+            crate::audio::capture_microphone_with_metadata(duration)
+        }
     };
 
-    let audio_data = match capture_result {
+    let captured = match capture_result {
         Ok(d) => d,
         Err(e) => {
             return ToolCallResult::error(
@@ -303,12 +372,8 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
         }
     };
 
-    let duration_ms = audio_data.duration_ms();
-    let sample_rate = audio_data.sample_rate;
-    let size_bytes = audio_data.wav_size_bytes();
-
     let transcript = if do_transcribe {
-        match crate::audio::transcribe_with_engine(&audio_data, language, engine) {
+        match crate::audio::transcribe_with_engine(&captured.audio, language, engine) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!(error = %e, "transcription failed — returning audio without transcript");
@@ -319,44 +384,16 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
         None
     };
 
-    // Chunking: split audio into smaller segments to keep MCP payload manageable.
-    let mut payload = if let Some(chunk_secs) = max_chunk_secs {
-        let chunks = audio_data.into_chunks(chunk_secs);
-        let chunks_json: Vec<Value> = chunks
-            .iter()
-            .enumerate()
-            .map(|(i, chunk)| {
-                json!({
-                    "index":       i,
-                    "duration_ms": chunk.duration_ms(),
-                    "size_bytes":  chunk.wav_size_bytes(),
-                    "base64_wav":  chunk.to_wav_base64(),
-                })
-            })
-            .collect();
-        json!({
-            "captured":    true,
-            "duration_ms": duration_ms,
-            "sample_rate": sample_rate,
-            "size_bytes":  size_bytes,
-            "chunks":      chunks_json,
-        })
-    } else {
-        json!({
-            "captured":    true,
-            "duration_ms": duration_ms,
-            "sample_rate": sample_rate,
-            "size_bytes":  size_bytes,
-            "base64_wav":  audio_data.to_wav_base64(),
-        })
-    };
-
-    if let Some(t) = transcript {
-        payload["transcript"] = serde_json::Value::String(t);
-        payload["engine_used"] = serde_json::Value::String(engine.as_str().to_string());
-    }
-
-    ToolCallResult::ok(payload.to_string())
+    ToolCallResult::ok(
+        build_ax_listen_payload(
+            requested_source,
+            captured,
+            transcript,
+            engine,
+            max_chunk_secs,
+        )
+        .to_string(),
+    )
 }
 
 /// Handle `ax_speak` — text-to-speech via NSSpeechSynthesizer.
@@ -439,6 +476,15 @@ mod tests {
     }
 
     #[test]
+    fn ax_listen_tool_reports_requested_and_actual_source_fields() {
+        let tool = tool_ax_listen();
+        let props = &tool.output_schema["properties"];
+        assert_eq!(props["requested_source"]["type"], "string");
+        assert_eq!(props["source_used"]["type"], "string");
+        assert_eq!(props["capture_backend"]["type"], "string");
+    }
+
+    #[test]
     fn ax_speak_tool_requires_text_field() {
         let tool = tool_ax_speak();
         let req_names = parse_json_string_array(&tool.input_schema["required"]);
@@ -485,6 +531,24 @@ mod tests {
         assert!(result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["error_code"], "invalid_source");
+    }
+
+    #[test]
+    fn build_ax_listen_payload_preserves_fallback_truth() {
+        let payload = build_ax_listen_payload(
+            crate::audio::AudioCaptureSource::System,
+            crate::audio::CapturedAudio {
+                audio: crate::audio::AudioData::silent(0.5),
+                source_used: crate::audio::AudioCaptureSource::Microphone,
+                capture_backend: crate::audio::AudioCaptureBackend::AvAudioEngineInputFallback,
+            },
+            None,
+            crate::audio::AudioEngine::Apple,
+            None,
+        );
+        assert_eq!(payload["requested_source"], "system");
+        assert_eq!(payload["source_used"], "microphone");
+        assert_eq!(payload["capture_backend"], "av_audio_engine_input_fallback");
     }
 
     #[test]

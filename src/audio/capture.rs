@@ -12,6 +12,50 @@ use super::devices::check_microphone_permission;
 use super::ffi::{ns_string_to_rust, objc_class, release_objc_object};
 use super::{AudioData, AudioError, CHANNELS, MAX_CAPTURE_SECS, MIN_CAPTURE_SECS, SAMPLE_RATE};
 
+/// Requested or effective audio source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioCaptureSource {
+    Microphone,
+    System,
+}
+
+impl AudioCaptureSource {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Microphone => "microphone",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Concrete backend used to satisfy an audio capture request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioCaptureBackend {
+    AvAudioEngineInput,
+    AvAudioEngineInputFallback,
+    ScreenCaptureKitAudioOnly,
+}
+
+impl AudioCaptureBackend {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AvAudioEngineInput => "av_audio_engine_input",
+            Self::AvAudioEngineInputFallback => "av_audio_engine_input_fallback",
+            Self::ScreenCaptureKitAudioOnly => "screen_capturekit_audio_only",
+        }
+    }
+}
+
+/// Audio plus truthful metadata about what backend/source actually produced it.
+#[derive(Debug, Clone)]
+pub struct CapturedAudio {
+    pub audio: AudioData,
+    pub source_used: AudioCaptureSource,
+    pub capture_backend: AudioCaptureBackend,
+}
+
 // ---------------------------------------------------------------------------
 // Internal state
 // ---------------------------------------------------------------------------
@@ -82,10 +126,19 @@ pub fn validate_duration(duration_secs: f32) -> Result<(), AudioError> {
 /// assert!(audio.duration_secs <= 1.5);
 /// ```
 pub fn capture_microphone(duration_secs: f32) -> Result<AudioData, AudioError> {
+    Ok(capture_microphone_with_metadata(duration_secs)?.audio)
+}
+
+/// Capture microphone audio and report the concrete backend/source used.
+pub fn capture_microphone_with_metadata(duration_secs: f32) -> Result<CapturedAudio, AudioError> {
     validate_duration(duration_secs)?;
     check_microphone_permission()?;
     debug!(duration = duration_secs, "capturing microphone audio");
-    capture_via_av_audio_engine(duration_secs)
+    Ok(CapturedAudio {
+        audio: capture_via_av_audio_engine(duration_secs)?,
+        source_used: AudioCaptureSource::Microphone,
+        capture_backend: AudioCaptureBackend::AvAudioEngineInput,
+    })
 }
 
 /// Capture system audio output for up to `duration_secs` seconds.
@@ -109,6 +162,11 @@ pub fn capture_microphone(duration_secs: f32) -> Result<AudioData, AudioError> {
 /// assert_eq!(audio.channels, 1);
 /// ```
 pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError> {
+    Ok(capture_system_audio_with_metadata(duration_secs)?.audio)
+}
+
+/// Capture system audio and report the concrete backend/source used.
+pub fn capture_system_audio_with_metadata(duration_secs: f32) -> Result<CapturedAudio, AudioError> {
     validate_duration(duration_secs)?;
 
     // Prefer ScreenCaptureKit on macOS 14+ (no Screen Recording permission needed).
@@ -118,7 +176,13 @@ pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError>
             "attempting SCK audio-only capture (macOS 14+)"
         );
         match super::sck_capture::capture_system_audio_sck(duration_secs) {
-            Ok(data) => return Ok(data),
+            Ok(audio) => {
+                return Ok(CapturedAudio {
+                    audio,
+                    source_used: AudioCaptureSource::System,
+                    capture_backend: AudioCaptureBackend::ScreenCaptureKitAudioOnly,
+                });
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "SCK capture failed, falling back to AVAudioEngine");
             }
@@ -131,7 +195,11 @@ pub fn capture_system_audio(duration_secs: f32) -> Result<AudioData, AudioError>
         duration = duration_secs,
         "capturing system audio via AVAudioEngine (fallback)"
     );
-    capture_via_av_audio_engine(duration_secs)
+    Ok(CapturedAudio {
+        audio: capture_via_av_audio_engine(duration_secs)?,
+        source_used: AudioCaptureSource::Microphone,
+        capture_backend: AudioCaptureBackend::AvAudioEngineInputFallback,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -376,5 +444,27 @@ mod tests {
         assert_eq!(err.code(), "invalid_duration");
         let err = validate_duration(f32::NAN).unwrap_err();
         assert_eq!(err.code(), "invalid_duration");
+    }
+
+    #[test]
+    fn audio_capture_source_strings_are_stable() {
+        assert_eq!(AudioCaptureSource::Microphone.as_str(), "microphone");
+        assert_eq!(AudioCaptureSource::System.as_str(), "system");
+    }
+
+    #[test]
+    fn audio_capture_backend_strings_are_stable() {
+        assert_eq!(
+            AudioCaptureBackend::AvAudioEngineInput.as_str(),
+            "av_audio_engine_input"
+        );
+        assert_eq!(
+            AudioCaptureBackend::AvAudioEngineInputFallback.as_str(),
+            "av_audio_engine_input_fallback"
+        );
+        assert_eq!(
+            AudioCaptureBackend::ScreenCaptureKitAudioOnly.as_str(),
+            "screen_capturekit_audio_only"
+        );
     }
 }
