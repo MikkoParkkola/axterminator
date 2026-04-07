@@ -52,7 +52,7 @@ args = ["mcp", "serve"]
 
 Open **System Settings > Privacy & Security > Accessibility** and add your terminal app.
 
-Your agent now has 19 core tools to control any macOS app.
+Your agent can now call `tools/list` to inspect the exact runtime tool surface for this build.
 
 ## CLI
 
@@ -75,4 +75,3 @@ axterminator screenshot --app Safari
 # HTTP MCP transport
 axterminator mcp serve --http 8080 --token secret
 ```
-

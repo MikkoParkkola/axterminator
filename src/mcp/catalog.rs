@@ -219,6 +219,8 @@ pub(crate) fn quickstart_markdown() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::{
         quickstart_markdown, quickstart_section, runtime_tools_for_mode, tool_count_for_mode,
         SECTION_OTHER,
@@ -266,5 +268,119 @@ mod tests {
             unmapped.is_empty(),
             "unmapped quickstart tools: {unmapped:?}"
         );
+    }
+
+    fn docs_api_mcp_tools() -> String {
+        fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/docs/api/mcp-tools.md"
+        ))
+        .expect("docs/api/mcp-tools.md should be readable during tests")
+    }
+
+    fn default_build_tool_count() -> usize {
+        crate::mcp::tools::all_tools()
+            .into_iter()
+            .filter(|tool| {
+                !matches!(
+                    tool.name,
+                    "ax_audio_devices"
+                        | "ax_listen"
+                        | "ax_speak"
+                        | "ax_start_capture"
+                        | "ax_stop_capture"
+                        | "ax_get_transcription"
+                        | "ax_capture_status"
+                        | "ax_camera_capture"
+                        | "ax_gesture_detect"
+                        | "ax_gesture_listen"
+                        | "ax_watch_start"
+                        | "ax_watch_stop"
+                        | "ax_watch_status"
+                        | "ax_list_spaces"
+                        | "ax_create_space"
+                        | "ax_move_to_space"
+                        | "ax_switch_space"
+                        | "ax_destroy_space"
+                        | "ax_browser_launch"
+                        | "ax_browser_stop"
+                        | "ax_location"
+                )
+            })
+            .count()
+    }
+
+    fn default_static_resource_count() -> usize {
+        crate::mcp::resources::static_resources()
+            .resources
+            .into_iter()
+            .filter(|resource| {
+                !matches!(
+                    resource.uri,
+                    "axterminator://spaces"
+                        | "axterminator://audio/devices"
+                        | "axterminator://camera/devices"
+                        | "axterminator://capture/transcription"
+                        | "axterminator://capture/screen"
+                        | "axterminator://capture/status"
+                )
+            })
+            .count()
+    }
+
+    #[test]
+    fn api_reference_matches_current_surface_claims() {
+        let doc = docs_api_mcp_tools();
+        let default_tool_count = default_build_tool_count();
+        let default_static_resources = default_static_resource_count();
+        let template_count = crate::mcp::resources::resource_templates()
+            .resource_templates
+            .len();
+        let prompt_count = crate::mcp::prompts::all_prompts().prompts.len();
+
+        assert!(doc.contains(&format!(
+            "default CLI build exposes {default_tool_count} MCP tools"
+        )));
+        assert!(doc.contains(&format!(
+            "{default_static_resources} static resources by default"
+        )));
+        assert!(doc.contains(&format!("{template_count} dynamic resource templates")));
+        assert!(doc.contains(&format!("{prompt_count} guided prompts")));
+        assert!(doc.contains("4 elicitation scenarios"));
+        assert!(doc.contains("axterminator://guide/quickstart"));
+        assert!(doc.contains("ax_workflow_create"));
+        assert!(doc.contains("ax_watch_start"));
+        assert!(!doc.contains("v0.6.1"));
+        assert!(!doc.contains("30 MCP tools"));
+        assert!(!doc.contains("9 elicitation scenarios"));
+
+        if cfg!(feature = "audio")
+            && cfg!(feature = "camera")
+            && cfg!(feature = "watch")
+            && cfg!(feature = "spaces")
+            && cfg!(feature = "docker")
+            && cfg!(feature = "context")
+        {
+            assert!(doc.contains(&format!(
+                "surface to {} tools",
+                crate::mcp::tools::all_tools().len()
+            )));
+            assert!(doc.contains(&format!(
+                "{} with all optional resource families",
+                crate::mcp::resources::static_resources().resources.len()
+            )));
+        }
+    }
+
+    #[test]
+    fn getting_started_quickstart_avoids_hard_coded_tool_count() {
+        let doc = fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/docs/getting-started/quickstart.md"
+        ))
+        .expect("docs/getting-started/quickstart.md should be readable during tests");
+
+        assert!(doc.contains("call `tools/list` to inspect the exact runtime tool surface"));
+        assert!(!doc.contains("19 core tools"));
     }
 }

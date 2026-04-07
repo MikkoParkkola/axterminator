@@ -2965,8 +2965,17 @@ mod tests {
     // ax_session_info handler
     // -----------------------------------------------------------------------
 
+    fn session_info_normal_mode_guard() -> std::sync::MutexGuard<'static, ()> {
+        let guard = crate::test_sync::security_mode_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+        guard
+    }
+
     #[test]
     fn ax_session_info_returns_all_required_fields() {
+        let _guard = session_info_normal_mode_guard();
         // GIVEN: an empty registry
         let registry = Arc::new(AppRegistry::default());
         // WHEN: calling the handler
@@ -2982,6 +2991,7 @@ mod tests {
 
     #[test]
     fn ax_session_info_tool_count_matches_runtime_surface() {
+        let _guard = session_info_normal_mode_guard();
         let registry = Arc::new(AppRegistry::default());
         let result = super::handle_ax_session_info(&json!({}), &registry);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
@@ -3029,6 +3039,7 @@ mod tests {
 
     #[test]
     fn ax_session_info_version_is_non_empty() {
+        let _guard = session_info_normal_mode_guard();
         // GIVEN: any registry
         let registry = Arc::new(AppRegistry::default());
         // WHEN: calling the handler
@@ -3040,6 +3051,7 @@ mod tests {
 
     #[test]
     fn ax_session_info_connected_apps_is_empty_with_fresh_registry() {
+        let _guard = session_info_normal_mode_guard();
         // GIVEN: a fresh registry with no connected apps
         let registry = Arc::new(AppRegistry::default());
         // WHEN: calling the handler
