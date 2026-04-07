@@ -15,7 +15,7 @@
 //! in `tools_innovation` because it is stateless (uses a global `Lazy` tracker)
 //! and has no dependency on `WorkflowState`.
 
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
@@ -257,16 +257,23 @@ fn handle_ax_workflow_create(
 
     match workflows.lock() {
         Ok(mut guard) => {
-            guard.insert(name.clone(), state);
-            ToolCallResult::ok(
-                json!({
-                    "created":    true,
-                    "name":       name,
-                    "app":        app_name,
-                    "step_count": step_count
-                })
-                .to_string(),
-            )
+            match guard.entry(name.clone()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(state);
+                    ToolCallResult::ok(
+                        json!({
+                            "created":    true,
+                            "name":       name,
+                            "app":        app_name,
+                            "step_count": step_count
+                        })
+                        .to_string(),
+                    )
+                }
+                Entry::Occupied(_) => ToolCallResult::error(format!(
+                    "Workflow '{name}' already exists — use ax_workflow_step / ax_workflow_status or choose a different name"
+                )),
+            }
         }
         Err(_) => ToolCallResult::error("Workflow mutex poisoned"),
     }
@@ -826,7 +833,7 @@ mod tests {
     }
 
     #[test]
-    fn ax_workflow_create_overwrites_existing_workflow() {
+    fn ax_workflow_create_rejects_duplicate_workflow_names() {
         let wf = make_workflows();
         super::handle_ax_workflow_create(
             &json!({
@@ -845,10 +852,13 @@ mod tests {
             }),
             &wf,
         );
-        let v = parse_payload(&result);
-        assert_eq!(v["step_count"], 1);
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Workflow 'overwrite-wf' already exists — use ax_workflow_step / ax_workflow_status or choose a different name"
+        );
         let guard = wf.lock().unwrap();
-        assert_eq!(guard["overwrite-wf"].steps.len(), 1);
+        assert_eq!(guard["overwrite-wf"].steps.len(), 2);
     }
 
     // -----------------------------------------------------------------------
