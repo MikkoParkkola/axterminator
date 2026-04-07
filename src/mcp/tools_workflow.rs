@@ -93,8 +93,8 @@ fn tool_ax_workflow_create() -> Tool {
                             "action":      { "type": "string",  "enum": ["click", "type", "wait", "assert", "checkpoint"] },
                             "target":      { "type": "string",  "description": "Element query. Required for click/type/wait/assert. wait/assert currently verify that the query resolves successfully." },
                             "text":        { "type": "string",  "description": "Text to type. Required for action=type." },
-                            "max_retries": { "type": "integer", "default": 2 },
-                            "timeout_ms":  { "type": "integer", "default": 5000 }
+                            "max_retries": { "type": "integer", "minimum": 0, "maximum": 4294967295u64, "default": 2 },
+                            "timeout_ms":  { "type": "integer", "minimum": 0, "default": 5000 }
                         },
                         "required": ["id", "action"],
                         "allOf": [
@@ -639,8 +639,8 @@ fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::Durable
 
     let id = get_required_str("id")?.to_string();
     let action_str = get_required_str("action")?;
-    let max_retries = s["max_retries"].as_u64().unwrap_or(2) as u32;
-    let timeout_ms = s["timeout_ms"].as_u64().unwrap_or(5_000);
+    let max_retries = parse_optional_u32_field(s, "max_retries", 2)?;
+    let timeout_ms = parse_optional_u64_field(s, "timeout_ms", 5_000)?;
 
     let action = match action_str {
         "checkpoint" => StepAction::Checkpoint,
@@ -660,6 +660,33 @@ fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::Durable
         max_retries,
         timeout_ms,
     ))
+}
+
+fn parse_optional_u32_field(s: &Value, field: &str, default: u32) -> Result<u32, String> {
+    let Some(value) = s.get(field) else {
+        return Ok(default);
+    };
+    if value.is_null() {
+        return Ok(default);
+    }
+
+    let raw = value
+        .as_u64()
+        .ok_or_else(|| format!("field '{field}' must be a non-negative integer"))?;
+    u32::try_from(raw).map_err(|_| format!("field '{field}' must be between 0 and {}", u32::MAX))
+}
+
+fn parse_optional_u64_field(s: &Value, field: &str, default: u64) -> Result<u64, String> {
+    let Some(value) = s.get(field) else {
+        return Ok(default);
+    };
+    if value.is_null() {
+        return Ok(default);
+    }
+
+    value
+        .as_u64()
+        .ok_or_else(|| format!("field '{field}' must be a non-negative integer"))
 }
 
 /// Return a stable display label for a [`StepAction`] variant.
@@ -1107,6 +1134,42 @@ mod tests {
     }
 
     #[test]
+    fn parse_workflow_steps_rejects_negative_max_retries() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click", "target": "OK", "max_retries": -1 }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: field 'max_retries' must be a non-negative integer"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_overflowing_max_retries() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click", "target": "OK", "max_retries": 4294967296u64 }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: field 'max_retries' must be between 0 and 4294967295"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_negative_timeout() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click", "target": "OK", "timeout_ms": -1 }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: field 'timeout_ms' must be a non-negative integer"
+        );
+    }
+
+    #[test]
     fn parse_workflow_steps_rejects_non_array_input() {
         let err = super::parse_workflow_steps(&json!({"oops": true})).unwrap_err();
         assert_eq!(err, "Field 'steps' must be an array");
@@ -1142,6 +1205,16 @@ mod tests {
             .expect("required array");
         assert!(required.iter().any(|value| value == "target"));
         assert!(required.iter().any(|value| value == "text"));
+    }
+
+    #[test]
+    fn workflow_create_schema_bounds_retry_and_timeout_values() {
+        let tool = super::tool_ax_workflow_create();
+        let items = &tool.input_schema["properties"]["steps"]["items"]["properties"];
+
+        assert_eq!(items["max_retries"]["minimum"], 0);
+        assert_eq!(items["max_retries"]["maximum"], 4294967295u64);
+        assert_eq!(items["timeout_ms"]["minimum"], 0);
     }
 
     // -----------------------------------------------------------------------
