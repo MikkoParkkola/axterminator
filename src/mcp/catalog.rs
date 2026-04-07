@@ -278,6 +278,16 @@ mod tests {
         .expect("docs/api/mcp-tools.md should be readable during tests")
     }
 
+    fn readme() -> String {
+        fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))
+            .expect("README.md should be readable during tests")
+    }
+
+    fn docs_index() -> String {
+        fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/index.md"))
+            .expect("docs/index.md should be readable during tests")
+    }
+
     fn default_build_tool_count() -> usize {
         crate::mcp::tools::all_tools()
             .into_iter()
@@ -382,5 +392,15 @@ mod tests {
 
         assert!(doc.contains("call `tools/list` to inspect the exact runtime tool surface"));
         assert!(!doc.contains("19 core tools"));
+    }
+
+    #[test]
+    fn landing_docs_keep_performance_claims_qualified() {
+        for doc in [readme(), docs_index()] {
+            assert!(doc.contains("379us per element access (Criterion, M1 MacBook Pro)."));
+            assert!(doc.contains("performance guide"));
+            assert!(doc.contains("comparison methodology"));
+            assert!(!doc.contains("Appium needs 500ms for the same thing."));
+        }
     }
 }

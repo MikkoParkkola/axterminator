@@ -136,7 +136,7 @@ axterminator mcp serve --http 8080 --token secret  # HTTP transport
 
 AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIElementPerformAction()` works on unfocused windows. Your agent clicks buttons in one app while you work in another. Neither notices.
 
-379us per element access (Criterion, M1 MacBook Pro). Appium needs 500ms for the same thing.
+379us per element access (Criterion, M1 MacBook Pro). See the [performance guide](performance.md) for benchmark details and comparison methodology.
 
 7-strategy self-healing locators survive UI changes: data_testid, aria_label, identifier, title, xpath, position, visual_vlm.
 
