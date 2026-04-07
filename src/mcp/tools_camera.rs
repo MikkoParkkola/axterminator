@@ -15,7 +15,9 @@ use serde_json::{json, Value};
 #[cfg(feature = "camera")]
 use crate::mcp::annotations;
 #[cfg(feature = "camera")]
-use crate::mcp::args::{extract_f64_field_or, extract_string_array_field};
+use crate::mcp::args::{
+    extract_f64_field_or, extract_or_return, extract_string_array_field, reject_unknown_fields,
+};
 #[cfg(feature = "camera")]
 use crate::mcp::protocol::{Tool, ToolCallResult};
 
@@ -185,6 +187,7 @@ fn tool_ax_gesture_listen() -> Tool {
 /// Handle `ax_camera_capture`.
 #[cfg(feature = "camera")]
 pub(crate) fn handle_ax_camera_capture(args: &Value) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(args, &["device_id"]));
     let device_id = args["device_id"].as_str();
     match crate::camera::capture_frame(device_id) {
         Ok(frame) => ToolCallResult::ok(
@@ -202,6 +205,7 @@ pub(crate) fn handle_ax_camera_capture(args: &Value) -> ToolCallResult {
 /// Handle `ax_gesture_detect`.
 #[cfg(feature = "camera")]
 pub(crate) fn handle_ax_gesture_detect(args: &Value) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(args, &["device_id"]));
     let device_id = args["device_id"].as_str();
     match crate::camera::capture_and_detect(device_id) {
         Ok((frame, detections)) => {
@@ -228,6 +232,10 @@ pub(crate) fn gesture_to_json(d: &crate::camera::GestureDetection) -> serde_json
 /// Handle `ax_gesture_listen`.
 #[cfg(feature = "camera")]
 pub(crate) fn handle_ax_gesture_listen(args: &Value) -> ToolCallResult {
+    extract_or_return!(reject_unknown_fields(
+        args,
+        &["duration_seconds", "gestures", "device_id"],
+    ));
     let duration_secs = extract_f64_field_or(args, "duration_seconds", 10.0);
     if let Err(e) = crate::camera::validate_duration(duration_secs) {
         return ToolCallResult::error(e.to_string());
@@ -408,6 +416,20 @@ mod tests {
     }
 
     #[test]
+    fn camera_capture_handler_rejects_unknown_fields() {
+        let result = handle_ax_camera_capture(&json!({"device_id": "cam", "extra": true}));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
+    fn gesture_detect_handler_rejects_unknown_fields() {
+        let result = handle_ax_gesture_detect(&json!({"device_id": "cam", "extra": true}));
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
     fn gesture_listen_handler_rejects_duration_above_60() {
         // GIVEN: duration = 90s
         let args = json!({"duration_seconds": 90.0, "gestures": ["thumbs_up"]});
@@ -420,6 +442,15 @@ mod tests {
             "got: {}",
             result.content[0].text
         );
+    }
+
+    #[test]
+    fn gesture_listen_handler_rejects_unknown_fields() {
+        let result = handle_ax_gesture_listen(
+            &json!({"duration_seconds": 5.0, "gestures": ["thumbs_up"], "extra": true}),
+        );
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
     }
 
     #[test]
