@@ -483,6 +483,21 @@ pub struct SyncEngine {
 }
 
 impl SyncEngine {
+    #[must_use]
+    fn normalize_mode(requested: SyncMode, xpc_available: bool) -> SyncMode {
+        match requested {
+            SyncMode::XPC if !xpc_available => SyncMode::Heuristic,
+            SyncMode::Auto => {
+                if xpc_available {
+                    SyncMode::XPC
+                } else {
+                    SyncMode::Heuristic
+                }
+            }
+            other => other,
+        }
+    }
+
     /// Create a new sync engine for the given application
     ///
     /// # Arguments
@@ -497,11 +512,7 @@ impl SyncEngine {
         // TODO: Re-enable when EspressoMac SDK is properly set up in target apps
         // let xpc = EspressoMacClient::connect(pid);
         let xpc: Option<EspressoMacClient> = None;
-        let mode = if xpc.is_some() {
-            SyncMode::XPC
-        } else {
-            SyncMode::Heuristic
-        };
+        let mode = Self::normalize_mode(SyncMode::Auto, xpc.is_some());
 
         Self {
             mode,
@@ -515,12 +526,13 @@ impl SyncEngine {
     /// # Arguments
     /// * `pid` - Process ID
     /// * `element` - Root accessibility element
-    /// * `mode` - Explicit synchronization mode
+    /// * `mode` - Requested synchronization mode. Falls back to heuristic when
+    ///   XPC is unavailable.
     #[must_use]
     pub fn with_mode(pid: i32, element: AXUIElementRef, mode: SyncMode) -> Self {
         // XPC connection disabled - crashes when service doesn't exist
         let xpc: Option<EspressoMacClient> = None;
-        let _ = mode; // Silence unused warning - we always use Heuristic for now
+        let mode = Self::normalize_mode(mode, xpc.is_some());
 
         Self {
             mode,
@@ -738,7 +750,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "Requires real AXUIElement - null pointer causes SIGBUS"]
         fn test_sync_engine_explicit_mode_heuristic() {
             let engine = SyncEngine::with_mode(1234, mock_element(), SyncMode::Heuristic);
             assert_eq!(engine.mode(), SyncMode::Heuristic);
@@ -746,10 +757,17 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "Requires real AXUIElement - null pointer causes SIGBUS"]
-        fn test_sync_engine_explicit_mode_auto() {
+        fn test_sync_engine_explicit_mode_auto_falls_back_to_heuristic_without_xpc() {
             let engine = SyncEngine::with_mode(1234, mock_element(), SyncMode::Auto);
-            assert_eq!(engine.mode(), SyncMode::Auto);
+            assert_eq!(engine.mode(), SyncMode::Heuristic);
+            assert!(!engine.has_xpc());
+        }
+
+        #[test]
+        fn test_sync_engine_explicit_mode_xpc_falls_back_to_heuristic_without_xpc() {
+            let engine = SyncEngine::with_mode(1234, mock_element(), SyncMode::XPC);
+            assert_eq!(engine.mode(), SyncMode::Heuristic);
+            assert!(!engine.has_xpc());
         }
 
         #[test]
