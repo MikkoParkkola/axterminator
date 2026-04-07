@@ -241,7 +241,7 @@ fn handle_ax_workflow_create(
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
     let name = extract_or_return!(extract_required_string_field(args, "name"));
-    let app_name = args.get("app").and_then(Value::as_str).map(str::to_owned);
+    let app_name = extract_or_return!(parse_optional_workflow_app(args));
     let steps = match args.get("steps") {
         Some(steps) => extract_or_return!(parse_workflow_steps(steps)),
         None => Vec::new(),
@@ -637,6 +637,14 @@ fn parse_workflow_steps(
     }
 }
 
+fn parse_optional_workflow_app(args: &Value) -> Result<Option<String>, String> {
+    match args.get("app") {
+        None => Ok(None),
+        Some(Value::String(app)) => Ok(Some(app.clone())),
+        Some(_) => Err("Field 'app' must be a string".to_owned()),
+    }
+}
+
 /// Parse one step JSON object into a [`DurableStep`].
 fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::DurableStep, String> {
     use crate::durable_steps::{DurableStep, StepAction};
@@ -797,6 +805,23 @@ mod tests {
         assert_eq!(result.content[0].text, "Field 'steps' must be an array");
         let guard = wf.lock().unwrap();
         assert!(!guard.contains_key("null-steps-wf"));
+    }
+
+    #[test]
+    fn ax_workflow_create_rejects_non_string_app() {
+        let wf = make_workflows();
+        let result = super::handle_ax_workflow_create(
+            &json!({
+                "name": "bad-app-wf",
+                "app": 123,
+                "steps": [{ "id": "cp", "action": "checkpoint" }]
+            }),
+            &wf,
+        );
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Field 'app' must be a string");
+        let guard = wf.lock().unwrap();
+        assert!(!guard.contains_key("bad-app-wf"));
     }
 
     #[test]
