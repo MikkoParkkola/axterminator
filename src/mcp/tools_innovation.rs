@@ -22,7 +22,7 @@ use crate::mcp::analysis_engine::analyze_scene;
 use crate::mcp::annotations;
 use crate::mcp::args::{
     extract_app_query, extract_clamped_u64_field_or, extract_f64_field_or, extract_or_return,
-    extract_required_string_field, extract_string_field_or, extract_u64_field_or, parse_json_array,
+    extract_required_string_field, extract_string_field_or, extract_u64_field_or,
 };
 use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
@@ -277,9 +277,31 @@ fn tool_ax_test_run() -> Tool {
                             "query":      { "type": "string" },
                             "text":       { "type": "string" },
                             "path":       { "type": "string" },
-                            "timeout_ms": { "type": "integer" }
+                            "timeout_ms": { "type": "integer", "minimum": 0, "default": 5000 }
                         },
-                        "required": ["type"]
+                        "required": ["type"],
+                        "allOf": [
+                            {
+                                "if": { "properties": { "type": { "const": "launch" } } },
+                                "then": { "required": ["type", "app"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "find_and_click" } } },
+                                "then": { "required": ["type", "query"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "find_and_type" } } },
+                                "then": { "required": ["type", "query", "text"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "wait_for_element" } } },
+                                "then": { "required": ["type", "query"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "screenshot" } } },
+                                "then": { "required": ["type", "path"] }
+                            }
+                        ]
                     }
                 },
                 "assertions": {
@@ -293,7 +315,25 @@ fn tool_ax_test_run() -> Tool {
                             "expected": { "type": "string" },
                             "needle":   { "type": "string" }
                         },
-                        "required": ["type"]
+                        "required": ["type"],
+                        "allOf": [
+                            {
+                                "if": { "properties": { "type": { "const": "element_exists" } } },
+                                "then": { "required": ["type", "query"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "element_has_text" } } },
+                                "then": { "required": ["type", "query", "expected"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "element_not_exists" } } },
+                                "then": { "required": ["type", "query"] }
+                            },
+                            {
+                                "if": { "properties": { "type": { "const": "screen_contains" } } },
+                                "then": { "required": ["type", "needle"] }
+                            }
+                        ]
                     }
                 }
             },
@@ -725,8 +765,8 @@ fn handle_ax_test_run<W: Write>(args: &Value, out: &mut W) -> ToolCallResult {
     let app_name = extract_or_return!(extract_required_string_field(args, "app"));
     let test_name = extract_or_return!(extract_required_string_field(args, "test_name"));
 
-    let steps = parse_test_steps(&args["steps"]);
-    let assertions = parse_test_assertions(&args["assertions"]);
+    let steps = extract_or_return!(parse_test_steps(&args["steps"]));
+    let assertions = extract_or_return!(parse_test_assertions(&args["assertions"]));
     let total = (steps.len() + assertions.len()).max(1) as u32;
 
     let mut reporter = ProgressReporter::new(out, total);
@@ -759,65 +799,118 @@ fn handle_ax_test_run<W: Write>(args: &Value, out: &mut W) -> ToolCallResult {
 
 /// Parse a JSON array of step objects into `Vec<TestStep>`.
 ///
-/// Steps that cannot be parsed are silently skipped so a single malformed
-/// entry does not abort the entire test run.
-fn parse_test_steps(steps_val: &Value) -> Vec<crate::blackbox::TestStep> {
-    parse_json_array(steps_val, parse_single_step)
+/// Missing steps still means "run an empty test case", but a present malformed
+/// step definition is rejected instead of being silently dropped.
+fn parse_test_steps(steps_val: &Value) -> Result<Vec<crate::blackbox::TestStep>, String> {
+    match steps_val {
+        Value::Null => Ok(Vec::new()),
+        Value::Array(steps) => steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| {
+                parse_single_step(step)
+                    .map_err(|err| format!("Invalid test step at index {index}: {err}"))
+            })
+            .collect(),
+        _ => Err("Field 'steps' must be an array".to_owned()),
+    }
 }
 
-/// Parse a single step JSON object into a `TestStep`, or `None` on error.
-fn parse_single_step(s: &Value) -> Option<crate::blackbox::TestStep> {
+/// Parse a single step JSON object into a `TestStep`.
+fn parse_single_step(s: &Value) -> Result<crate::blackbox::TestStep, String> {
     use crate::blackbox::TestStep;
 
-    let kind = s["type"].as_str()?;
+    let get_required_str = |field: &str| {
+        s.get(field)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("missing required field: {field}"))
+    };
+
+    let kind = get_required_str("type")?;
     match kind {
-        "launch" => Some(TestStep::Launch {
-            app: s["app"].as_str()?.to_string(),
+        "launch" => Ok(TestStep::Launch {
+            app: get_required_str("app")?.to_string(),
         }),
-        "find_and_click" => Some(TestStep::FindAndClick {
-            query: s["query"].as_str()?.to_string(),
+        "find_and_click" => Ok(TestStep::FindAndClick {
+            query: get_required_str("query")?.to_string(),
         }),
-        "find_and_type" => Some(TestStep::FindAndType {
-            query: s["query"].as_str()?.to_string(),
-            text: s["text"].as_str()?.to_string(),
+        "find_and_type" => Ok(TestStep::FindAndType {
+            query: get_required_str("query")?.to_string(),
+            text: get_required_str("text")?.to_string(),
         }),
-        "wait_for_element" => Some(TestStep::WaitForElement {
-            query: s["query"].as_str()?.to_string(),
-            timeout_ms: s["timeout_ms"].as_u64().unwrap_or(5_000),
+        "wait_for_element" => Ok(TestStep::WaitForElement {
+            query: get_required_str("query")?.to_string(),
+            timeout_ms: parse_optional_non_negative_u64_field(s, "timeout_ms", 5_000)?,
         }),
-        "screenshot" => Some(TestStep::Screenshot {
-            path: s["path"].as_str()?.to_string(),
+        "screenshot" => Ok(TestStep::Screenshot {
+            path: get_required_str("path")?.to_string(),
         }),
-        _ => None,
+        _ => Err(format!("unknown step type: {kind}")),
     }
 }
 
 /// Parse a JSON array of assertion objects into `Vec<TestAssertion>`.
-fn parse_test_assertions(assertions_val: &Value) -> Vec<crate::blackbox::TestAssertion> {
-    parse_json_array(assertions_val, parse_single_assertion)
+fn parse_test_assertions(
+    assertions_val: &Value,
+) -> Result<Vec<crate::blackbox::TestAssertion>, String> {
+    match assertions_val {
+        Value::Null => Ok(Vec::new()),
+        Value::Array(assertions) => assertions
+            .iter()
+            .enumerate()
+            .map(|(index, assertion)| {
+                parse_single_assertion(assertion)
+                    .map_err(|err| format!("Invalid test assertion at index {index}: {err}"))
+            })
+            .collect(),
+        _ => Err("Field 'assertions' must be an array".to_owned()),
+    }
 }
 
-/// Parse a single assertion JSON object into a `TestAssertion`, or `None` on error.
-fn parse_single_assertion(a: &Value) -> Option<crate::blackbox::TestAssertion> {
+/// Parse a single assertion JSON object into a `TestAssertion`.
+fn parse_single_assertion(a: &Value) -> Result<crate::blackbox::TestAssertion, String> {
     use crate::blackbox::TestAssertion;
 
-    let kind = a["type"].as_str()?;
+    let get_required_str = |field: &str| {
+        a.get(field)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("missing required field: {field}"))
+    };
+
+    let kind = get_required_str("type")?;
     match kind {
-        "element_exists" => Some(TestAssertion::ElementExists {
-            query: a["query"].as_str()?.to_string(),
+        "element_exists" => Ok(TestAssertion::ElementExists {
+            query: get_required_str("query")?.to_string(),
         }),
-        "element_has_text" => Some(TestAssertion::ElementHasText {
-            query: a["query"].as_str()?.to_string(),
-            expected: a["expected"].as_str()?.to_string(),
+        "element_has_text" => Ok(TestAssertion::ElementHasText {
+            query: get_required_str("query")?.to_string(),
+            expected: get_required_str("expected")?.to_string(),
         }),
-        "element_not_exists" => Some(TestAssertion::ElementNotExists {
-            query: a["query"].as_str()?.to_string(),
+        "element_not_exists" => Ok(TestAssertion::ElementNotExists {
+            query: get_required_str("query")?.to_string(),
         }),
-        "screen_contains" => Some(TestAssertion::ScreenContains {
-            needle: a["needle"].as_str()?.to_string(),
+        "screen_contains" => Ok(TestAssertion::ScreenContains {
+            needle: get_required_str("needle")?.to_string(),
         }),
-        _ => None,
+        _ => Err(format!("unknown assertion type: {kind}")),
     }
+}
+
+fn parse_optional_non_negative_u64_field(
+    value: &Value,
+    field: &str,
+    default: u64,
+) -> Result<u64, String> {
+    let Some(raw_value) = value.get(field) else {
+        return Ok(default);
+    };
+    if raw_value.is_null() {
+        return Ok(default);
+    }
+
+    raw_value
+        .as_u64()
+        .ok_or_else(|| format!("field '{field}' must be a non-negative integer"))
 }
 
 /// Handle `ax_track_workflow` — record a focus event or query the tracker.
@@ -1974,30 +2067,122 @@ mod tests {
     }
 
     #[test]
+    fn ax_test_run_rejects_invalid_step_definitions() {
+        let mut out = Vec::<u8>::new();
+        let result = super::handle_ax_test_run(
+            &json!({
+                "app": "__ghost__",
+                "test_name": "bad_step",
+                "steps": [
+                    { "type": "find_and_click" }
+                ]
+            }),
+            &mut out,
+        );
+
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Invalid test step at index 0: missing required field: query"
+        );
+    }
+
+    #[test]
+    fn ax_test_run_rejects_invalid_assertion_definitions() {
+        let mut out = Vec::<u8>::new();
+        let result = super::handle_ax_test_run(
+            &json!({
+                "app": "__ghost__",
+                "test_name": "bad_assertion",
+                "assertions": [
+                    { "type": "element_has_text", "query": "Title" }
+                ]
+            }),
+            &mut out,
+        );
+
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Invalid test assertion at index 0: missing required field: expected"
+        );
+    }
+
+    #[test]
     fn parse_test_steps_returns_empty_for_null() {
         // GIVEN: null steps value
-        let steps = super::parse_test_steps(&json!(null));
+        let steps = super::parse_test_steps(&json!(null)).unwrap();
         // THEN: empty vec, no panic
         assert!(steps.is_empty());
     }
 
     #[test]
-    fn parse_test_steps_skips_unknown_step_types() {
-        // GIVEN: one valid step and one unknown type
-        let steps = super::parse_test_steps(&json!([
+    fn parse_test_steps_rejects_unknown_step_types() {
+        let err = super::parse_test_steps(&json!([
             { "type": "wait_for_element", "query": "OK", "timeout_ms": 100 },
             { "type": "unsupported_future_step" }
-        ]));
-        // THEN: only the valid step is returned
-        assert_eq!(steps.len(), 1);
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid test step at index 1: unknown step type: unsupported_future_step"
+        );
+    }
+
+    #[test]
+    fn parse_test_steps_rejects_negative_timeout() {
+        let err = super::parse_test_steps(&json!([
+            { "type": "wait_for_element", "query": "OK", "timeout_ms": -1 }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid test step at index 0: field 'timeout_ms' must be a non-negative integer"
+        );
     }
 
     #[test]
     fn parse_test_assertions_returns_empty_for_null() {
         // GIVEN: null assertions value
-        let assertions = super::parse_test_assertions(&json!(null));
+        let assertions = super::parse_test_assertions(&json!(null)).unwrap();
         // THEN: empty vec, no panic
         assert!(assertions.is_empty());
+    }
+
+    #[test]
+    fn test_run_schema_requires_step_and_assertion_fields() {
+        let tool = super::tool_ax_test_run();
+        let steps_all_of = tool.input_schema["properties"]["steps"]["items"]["allOf"]
+            .as_array()
+            .expect("step allOf rules");
+        let assertions_all_of = tool.input_schema["properties"]["assertions"]["items"]["allOf"]
+            .as_array()
+            .expect("assertion allOf rules");
+
+        let find_and_type_rule = steps_all_of
+            .iter()
+            .find(|rule| rule["if"]["properties"]["type"]["const"] == "find_and_type")
+            .expect("find_and_type rule");
+        let element_has_text_rule = assertions_all_of
+            .iter()
+            .find(|rule| rule["if"]["properties"]["type"]["const"] == "element_has_text")
+            .expect("element_has_text rule");
+
+        assert!(find_and_type_rule["then"]["required"]
+            .as_array()
+            .expect("required step fields")
+            .iter()
+            .any(|field| field == "text"));
+        assert!(element_has_text_rule["then"]["required"]
+            .as_array()
+            .expect("required assertion fields")
+            .iter()
+            .any(|field| field == "expected"));
+        assert_eq!(
+            tool.input_schema["properties"]["steps"]["items"]["properties"]["timeout_ms"]
+                ["minimum"],
+            0
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -3917,7 +4102,8 @@ mod tests {
         // GIVEN: element_exists assertion
         let assertions = super::parse_test_assertions(&json!([
             { "type": "element_exists", "query": "Submit" }
-        ]));
+        ]))
+        .unwrap();
         assert_eq!(assertions.len(), 1);
     }
 
@@ -3926,7 +4112,8 @@ mod tests {
         // GIVEN: element_has_text assertion
         let assertions = super::parse_test_assertions(&json!([
             { "type": "element_has_text", "query": "Title", "expected": "Hello" }
-        ]));
+        ]))
+        .unwrap();
         assert_eq!(assertions.len(), 1);
     }
 
@@ -3935,7 +4122,8 @@ mod tests {
         // GIVEN: element_not_exists assertion
         let assertions = super::parse_test_assertions(&json!([
             { "type": "element_not_exists", "query": "Error" }
-        ]));
+        ]))
+        .unwrap();
         assert_eq!(assertions.len(), 1);
     }
 
@@ -3944,19 +4132,22 @@ mod tests {
         // GIVEN: screen_contains assertion
         let assertions = super::parse_test_assertions(&json!([
             { "type": "screen_contains", "needle": "Welcome" }
-        ]));
+        ]))
+        .unwrap();
         assert_eq!(assertions.len(), 1);
     }
 
     #[test]
-    fn parse_test_assertions_skips_unknown_type() {
-        // GIVEN: one known and one unknown assertion type
-        let assertions = super::parse_test_assertions(&json!([
+    fn parse_test_assertions_rejects_unknown_type() {
+        let err = super::parse_test_assertions(&json!([
             { "type": "element_exists", "query": "OK" },
             { "type": "unsupported_future_assertion" }
-        ]));
-        // THEN: only the valid assertion survives
-        assert_eq!(assertions.len(), 1);
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid test assertion at index 1: unknown assertion type: unsupported_future_assertion"
+        );
     }
 
     // -----------------------------------------------------------------------

@@ -103,6 +103,7 @@ pub(crate) fn extract_f64_field_or(args: &Value, field: &str, default: f64) -> f
 // JSON array helpers
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 pub(crate) fn parse_json_array<T, F>(value: &Value, mut parser: F) -> Vec<T>
 where
     F: FnMut(&Value) -> Option<T>,
