@@ -288,6 +288,11 @@ mod tests {
             .expect("docs/index.md should be readable during tests")
     }
 
+    fn design_doc() -> String {
+        fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/DESIGN.md"))
+            .expect("docs/DESIGN.md should be readable during tests")
+    }
+
     fn default_build_tool_count() -> usize {
         crate::mcp::tools::all_tools()
             .into_iter()
@@ -402,5 +407,13 @@ mod tests {
             assert!(doc.contains("comparison methodology"));
             assert!(!doc.contains("Appium needs 500ms for the same thing."));
         }
+    }
+
+    #[test]
+    fn design_doc_avoids_hard_coded_update_timestamps() {
+        let doc = design_doc();
+
+        assert!(!doc.contains("Last updated:"));
+        assert!(!doc.contains("Last Updated:"));
     }
 }

@@ -217,5 +217,3 @@ Measured on Apple M1 MacBook Pro, macOS 14.2 using Criterion benchmarks:
 | VLM fallback | ~400 ms | Depends on backend |
 
 ---
-
-*Last updated: 2026-03-21*
