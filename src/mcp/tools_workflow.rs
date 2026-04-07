@@ -241,8 +241,10 @@ fn handle_ax_workflow_create(
 ) -> ToolCallResult {
     let name = extract_or_return!(extract_required_string_field(args, "name"));
     let app_name = args.get("app").and_then(Value::as_str).map(str::to_owned);
-
-    let steps = extract_or_return!(parse_workflow_steps(&args["steps"]));
+    let steps = match args.get("steps") {
+        Some(steps) => extract_or_return!(parse_workflow_steps(steps)),
+        None => Vec::new(),
+    };
     let step_count = steps.len();
 
     let state = WorkflowState {
@@ -621,7 +623,7 @@ fn parse_workflow_steps(
     steps_val: &Value,
 ) -> Result<Vec<crate::durable_steps::DurableStep>, String> {
     match steps_val {
-        Value::Null => Ok(Vec::new()),
+        Value::Null => Err("Field 'steps' must be an array".to_owned()),
         Value::Array(steps) => steps
             .iter()
             .enumerate()
@@ -769,6 +771,22 @@ mod tests {
         assert_eq!(v["name"], "empty-wf");
         assert_eq!(v["step_count"], 0);
         assert_eq!(v["app"], Value::Null);
+    }
+
+    #[test]
+    fn ax_workflow_create_rejects_null_steps() {
+        let wf = make_workflows();
+        let result = super::handle_ax_workflow_create(
+            &json!({
+                "name": "null-steps-wf",
+                "steps": null
+            }),
+            &wf,
+        );
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Field 'steps' must be an array");
+        let guard = wf.lock().unwrap();
+        assert!(!guard.contains_key("null-steps-wf"));
     }
 
     #[test]
@@ -1101,9 +1119,9 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn parse_workflow_steps_returns_empty_for_null() {
-        let steps = super::parse_workflow_steps(&json!(null)).unwrap();
-        assert!(steps.is_empty());
+    fn parse_workflow_steps_rejects_null() {
+        let err = super::parse_workflow_steps(&json!(null)).unwrap_err();
+        assert_eq!(err, "Field 'steps' must be an array");
     }
 
     #[test]
