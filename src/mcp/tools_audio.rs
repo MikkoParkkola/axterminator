@@ -85,8 +85,8 @@ fn tool_ax_listen() -> Tool {
                     "type": "number",
                     "description": "Capture length in seconds (default 5, max 30)",
                     "default": 5.0,
-                    "minimum": 0.1,
-                    "maximum": 30.0
+                    "minimum": crate::audio::MIN_CAPTURE_SECS,
+                    "maximum": crate::audio::MAX_CAPTURE_SECS
                 },
                 "source": {
                     "type": "string",
@@ -262,6 +262,20 @@ pub(crate) fn handle_ax_listen(args: &Value) -> ToolCallResult {
                 json!({
                     "error": format!("Unknown engine \"{engine_str}\". Valid values: \"apple\", \"parakeet\"."),
                     "error_code": "invalid_engine"
+                })
+                .to_string(),
+            );
+        }
+    };
+
+    let source = match source {
+        "microphone" => "microphone",
+        "system" => "system",
+        other => {
+            return ToolCallResult::error(
+                json!({
+                    "error": format!("Unknown source \"{other}\". Valid values: \"microphone\", \"system\"."),
+                    "error_code": "invalid_source"
                 })
                 .to_string(),
             );
@@ -455,6 +469,22 @@ mod tests {
         assert!(result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["error_code"], "duration_exceeded");
+    }
+
+    #[test]
+    fn handle_ax_listen_zero_duration_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 0.0 }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_duration");
+    }
+
+    #[test]
+    fn handle_ax_listen_invalid_source_returns_error() {
+        let result = handle_ax_listen(&json!({ "duration": 1.0, "source": "loopback" }));
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_source");
     }
 
     #[test]

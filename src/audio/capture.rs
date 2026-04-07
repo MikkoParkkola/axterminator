@@ -10,7 +10,7 @@ use tracing::debug;
 
 use super::devices::check_microphone_permission;
 use super::ffi::{ns_string_to_rust, objc_class, release_objc_object};
-use super::{AudioData, AudioError, CHANNELS, MAX_CAPTURE_SECS, SAMPLE_RATE};
+use super::{AudioData, AudioError, CHANNELS, MAX_CAPTURE_SECS, MIN_CAPTURE_SECS, SAMPLE_RATE};
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -26,11 +26,13 @@ pub(super) struct CaptureState {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Validate that `duration_secs` does not exceed [`MAX_CAPTURE_SECS`].
+/// Validate that `duration_secs` stays within the supported capture range.
 ///
 /// # Errors
 ///
-/// Returns [`AudioError::DurationExceeded`] when `duration_secs > MAX_CAPTURE_SECS`.
+/// Returns [`AudioError::InvalidDuration`] when `duration_secs` is non-finite or
+/// below [`MIN_CAPTURE_SECS`], and [`AudioError::DurationExceeded`] when it
+/// exceeds [`MAX_CAPTURE_SECS`].
 ///
 /// # Examples
 ///
@@ -38,12 +40,18 @@ pub(super) struct CaptureState {
 /// use axterminator::audio::{validate_duration, AudioError, MAX_CAPTURE_SECS};
 ///
 /// assert!(validate_duration(5.0).is_ok());
+/// assert!(validate_duration(MIN_CAPTURE_SECS).is_ok());
 /// assert!(validate_duration(MAX_CAPTURE_SECS).is_ok());
 /// let err = validate_duration(31.0).unwrap_err();
 /// assert_eq!(err.code(), "duration_exceeded");
 /// ```
 pub fn validate_duration(duration_secs: f32) -> Result<(), AudioError> {
-    if duration_secs > MAX_CAPTURE_SECS {
+    if !duration_secs.is_finite() || duration_secs < MIN_CAPTURE_SECS {
+        Err(AudioError::InvalidDuration {
+            requested: duration_secs,
+            min: MIN_CAPTURE_SECS,
+        })
+    } else if duration_secs > MAX_CAPTURE_SECS {
         Err(AudioError::DurationExceeded {
             requested: duration_secs,
             max: MAX_CAPTURE_SECS,
@@ -325,7 +333,7 @@ mod tests {
     #[test]
     fn validate_duration_accepts_minimum() {
         // GIVEN: a very short duration
-        assert!(validate_duration(0.1).is_ok());
+        assert!(validate_duration(MIN_CAPTURE_SECS).is_ok());
     }
 
     #[test]
@@ -348,5 +356,25 @@ mod tests {
     fn validate_duration_rejects_large_value() {
         let err = validate_duration(3600.0).unwrap_err();
         assert_eq!(err.code(), "duration_exceeded");
+    }
+
+    #[test]
+    fn validate_duration_rejects_zero() {
+        let err = validate_duration(0.0).unwrap_err();
+        assert_eq!(err.code(), "invalid_duration");
+    }
+
+    #[test]
+    fn validate_duration_rejects_negative() {
+        let err = validate_duration(-1.0).unwrap_err();
+        assert_eq!(err.code(), "invalid_duration");
+    }
+
+    #[test]
+    fn validate_duration_rejects_non_finite() {
+        let err = validate_duration(f32::INFINITY).unwrap_err();
+        assert_eq!(err.code(), "invalid_duration");
+        let err = validate_duration(f32::NAN).unwrap_err();
+        assert_eq!(err.code(), "invalid_duration");
     }
 }

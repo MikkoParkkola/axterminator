@@ -49,7 +49,7 @@
 //! - No audio data leaves the machine (when on-device model is available).
 //! - Temporary WAV files (when used) are written to `/tmp` with mode `0600`
 //!   and deleted immediately after encoding.
-//! - Recording is hard-capped at [`MAX_CAPTURE_SECS`] (30 seconds).
+//! - Recording duration must stay within [`MIN_CAPTURE_SECS`]..=[`MAX_CAPTURE_SECS`].
 
 use base64::Engine as _;
 
@@ -76,6 +76,9 @@ pub use speech::{speak, transcribe, transcribe_with_engine, AudioEngine};
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+/// Minimum capture duration in seconds.
+pub const MIN_CAPTURE_SECS: f32 = 0.1;
 
 /// Hard cap on capture duration in seconds (prevents surveillance-length recordings).
 pub const MAX_CAPTURE_SECS: f32 = 30.0;
@@ -111,6 +114,10 @@ pub enum AudioError {
     #[error("Duration {requested}s exceeds maximum allowed {max}s")]
     DurationExceeded { requested: f32, max: f32 },
 
+    /// Requested duration is missing, non-finite, or shorter than the minimum.
+    #[error("Duration {requested}s must be finite and at least {min}s")]
+    InvalidDuration { requested: f32, min: f32 },
+
     /// An underlying CoreAudio or Objective-C framework call failed.
     #[error("Audio framework error: {0}")]
     Framework(String),
@@ -142,6 +149,7 @@ impl AudioError {
         match self {
             Self::PermissionDenied => "microphone_denied",
             Self::DurationExceeded { .. } => "duration_exceeded",
+            Self::InvalidDuration { .. } => "invalid_duration",
             Self::Framework(_) => "framework_error",
             Self::Transcription(_) => "transcription_error",
             Self::Synthesis(_) => "synthesis_error",
@@ -389,6 +397,15 @@ mod tests {
             max: 30.0,
         };
         assert_eq!(e.code(), "duration_exceeded");
+    }
+
+    #[test]
+    fn audio_error_invalid_duration_code() {
+        let e = AudioError::InvalidDuration {
+            requested: 0.0,
+            min: 0.1,
+        };
+        assert_eq!(e.code(), "invalid_duration");
     }
 
     #[test]
