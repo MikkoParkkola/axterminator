@@ -270,8 +270,8 @@ Complex:    //AXWindow[@AXTitle='Editor']/AXGroup/AXButton[@AXTitle='Save' and @
 
 ## Summary
 
-This implementation delivers a production-ready self-healing system that:
-1. **Surpasses industry standards** with 7 strategies (vs typical 2-3)
+This implementation delivers a self-healing system that:
+1. **Uses 7 recovery strategies** in an ordered fallback chain
 2. **Provides robust fallback** via ordered strategy chain
 3. **Optimizes performance** with caching and timeout budgets
 4. **Ensures type safety** with Rust's ownership model
