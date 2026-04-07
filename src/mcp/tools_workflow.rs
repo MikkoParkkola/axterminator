@@ -114,7 +114,8 @@ fn tool_ax_workflow_create() -> Tool {
                                 "if": { "properties": { "action": { "const": "assert" } } },
                                 "then": { "required": ["id", "action", "target"] }
                             }
-                        ]
+                        ],
+                        "additionalProperties": false
                     }
                 }
             },
@@ -640,6 +641,15 @@ fn parse_workflow_steps(
 fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::DurableStep, String> {
     use crate::durable_steps::{DurableStep, StepAction};
 
+    if let Some(step) = s.as_object() {
+        for field in step.keys() {
+            match field.as_str() {
+                "id" | "action" | "target" | "text" | "max_retries" | "timeout_ms" => {}
+                _ => return Err(format!("unknown field: {field}")),
+            }
+        }
+    }
+
     let get_required_str = |field: &str| {
         s.get(field)
             .and_then(Value::as_str)
@@ -676,7 +686,7 @@ fn parse_optional_u32_field(s: &Value, field: &str, default: u32) -> Result<u32,
         return Ok(default);
     };
     if value.is_null() {
-        return Ok(default);
+        return Err(format!("field '{field}' must be a non-negative integer"));
     }
 
     let raw = value
@@ -690,7 +700,7 @@ fn parse_optional_u64_field(s: &Value, field: &str, default: u64) -> Result<u64,
         return Ok(default);
     };
     if value.is_null() {
-        return Ok(default);
+        return Err(format!("field '{field}' must be a non-negative integer"));
     }
 
     value
@@ -1198,6 +1208,42 @@ mod tests {
     }
 
     #[test]
+    fn parse_workflow_steps_rejects_null_max_retries() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click", "target": "OK", "max_retries": null }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: field 'max_retries' must be a non-negative integer"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_null_timeout() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click", "target": "OK", "timeout_ms": null }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: field 'timeout_ms' must be a non-negative integer"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_unknown_fields() {
+        let err = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "click", "target": "OK", "surprise": true }
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Invalid workflow step at index 0: unknown field: surprise"
+        );
+    }
+
+    #[test]
     fn parse_workflow_steps_rejects_non_array_input() {
         let err = super::parse_workflow_steps(&json!({"oops": true})).unwrap_err();
         assert_eq!(err, "Field 'steps' must be an array");
@@ -1238,11 +1284,13 @@ mod tests {
     #[test]
     fn workflow_create_schema_bounds_retry_and_timeout_values() {
         let tool = super::tool_ax_workflow_create();
-        let items = &tool.input_schema["properties"]["steps"]["items"]["properties"];
+        let step_schema = &tool.input_schema["properties"]["steps"]["items"];
+        let items = &step_schema["properties"];
 
         assert_eq!(items["max_retries"]["minimum"], 0);
         assert_eq!(items["max_retries"]["maximum"], 4294967295u64);
         assert_eq!(items["timeout_ms"]["minimum"], 0);
+        assert_eq!(step_schema["additionalProperties"], false);
     }
 
     // -----------------------------------------------------------------------
