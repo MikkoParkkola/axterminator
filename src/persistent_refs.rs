@@ -105,6 +105,34 @@ impl ElementRef {
 /// Maximum missed-refresh count before [`RefStore::gc`] removes a ref.
 pub const GC_THRESHOLD: u32 = 3;
 
+/// Errors produced while refreshing tracked refs against a live accessibility tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefreshError {
+    /// The live snapshot list contained two elements with the same fingerprint.
+    DuplicateFingerprint {
+        fingerprint: u64,
+        first_index: usize,
+        duplicate_index: usize,
+    },
+}
+
+impl std::fmt::Display for RefreshError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateFingerprint {
+                fingerprint,
+                first_index,
+                duplicate_index,
+            } => write!(
+                f,
+                "duplicate fingerprint {fingerprint} in live refresh snapshots at indexes {first_index} and {duplicate_index}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RefreshError {}
+
 /// Stores and manages persistent references across MCP tool calls.
 ///
 /// Thread-safety: [`RefStore`] is not `Sync` by default.  Wrap in a `Mutex`
@@ -201,17 +229,30 @@ impl RefStore {
     /// Elements whose fingerprint appears in `current_elements` are marked alive;
     /// all others have their `missed_refreshes` incremented and `alive` set to
     /// `false`.
-    pub fn refresh(&mut self, current_elements: &[ElementSnapshot]) {
-        // Build a set of fingerprints present in the current tree.
-        let live_fps: HashMap<u64, &ElementSnapshot> = current_elements
-            .iter()
-            .map(|s| (fingerprint(&s.role, &s.label, &s.path), s))
-            .collect();
+    ///
+    /// Returns an error if `current_elements` contains duplicate fingerprints,
+    /// because refresh cannot truthfully choose which duplicate bounds to apply.
+    pub fn refresh(&mut self, current_elements: &[ElementSnapshot]) -> Result<(), RefreshError> {
+        // Build a set of fingerprints present in the current tree and reject
+        // duplicate live snapshots before mutating tracked refs.
+        let mut live_fps: HashMap<u64, (usize, &ElementSnapshot)> =
+            HashMap::with_capacity(current_elements.len());
+        for (idx, snap) in current_elements.iter().enumerate() {
+            let fp = fingerprint(&snap.role, &snap.label, &snap.path);
+            if let Some((first_index, _)) = live_fps.get(&fp) {
+                return Err(RefreshError::DuplicateFingerprint {
+                    fingerprint: fp,
+                    first_index: *first_index,
+                    duplicate_index: idx,
+                });
+            }
+            live_fps.insert(fp, (idx, snap));
+        }
 
         let now = unix_ns();
 
         for entry in self.refs.values_mut() {
-            if let Some(snap) = live_fps.get(&entry.fingerprint) {
+            if let Some((_, snap)) = live_fps.get(&entry.fingerprint) {
                 entry.bounds = snap.bounds;
                 entry.alive = true;
                 entry.last_seen_ns = now;
@@ -221,6 +262,8 @@ impl RefStore {
                 entry.missed_refreshes = entry.missed_refreshes.saturating_add(1);
             }
         }
+
+        Ok(())
     }
 
     /// Remove refs that have been absent for more than [`GC_THRESHOLD`]
@@ -483,7 +526,7 @@ mod tests {
         let cancel_ref = store.track(button_snap("Cancel"));
 
         // WHEN: Refreshing with only "Save" present
-        store.refresh(&[button_snap("Save")]);
+        store.refresh(&[button_snap("Save")]).unwrap();
 
         // THEN: "Save" is alive, "Cancel" is not
         assert!(store.resolve(save_ref.id).unwrap().alive);
@@ -497,8 +540,8 @@ mod tests {
         let r = store.track(button_snap("Vanished"));
 
         // WHEN: Two consecutive refreshes without the element
-        store.refresh(&[]);
-        store.refresh(&[]);
+        store.refresh(&[]).unwrap();
+        store.refresh(&[]).unwrap();
 
         // THEN: missed_refreshes counts both absences
         assert_eq!(store.resolve(r.id).unwrap().missed_refreshes, 2);
@@ -509,10 +552,10 @@ mod tests {
         // GIVEN: Element that was absent for one refresh
         let mut store = RefStore::new();
         let r = store.track(button_snap("Flicker"));
-        store.refresh(&[]); // missed_refreshes = 1
+        store.refresh(&[]).unwrap(); // missed_refreshes = 1
 
         // WHEN: Element reappears in next refresh
-        store.refresh(&[button_snap("Flicker")]);
+        store.refresh(&[button_snap("Flicker")]).unwrap();
 
         // THEN: missed_refreshes reset to 0
         assert_eq!(store.resolve(r.id).unwrap().missed_refreshes, 0);
@@ -526,7 +569,7 @@ mod tests {
         let r = store.track(button_snap("Stale"));
 
         for _ in 0..GC_THRESHOLD {
-            store.refresh(&[]);
+            store.refresh(&[]).unwrap();
         }
 
         // WHEN: Running GC
@@ -546,7 +589,7 @@ mod tests {
         let near_stale = store.track(button_snap("NearStale"));
 
         // Miss one refresh for NearStale (threshold is 3)
-        store.refresh(&[button_snap("Active")]);
+        store.refresh(&[button_snap("Active")]).unwrap();
 
         // WHEN: Running GC
         let removed = store.gc();
@@ -623,11 +666,39 @@ mod tests {
         store.track(button_snap("B"));
         store.track(button_snap("C"));
 
-        store.refresh(&[button_snap("A"), button_snap("B")]);
+        store
+            .refresh(&[button_snap("A"), button_snap("B")])
+            .unwrap();
 
         // THEN: alive_count == 2, len == 3
         assert_eq!(store.alive_count(), 2);
         assert_eq!(store.len(), 3);
+    }
+
+    #[test]
+    fn refresh_rejects_duplicate_live_fingerprints_without_mutating_state() {
+        // GIVEN: Store tracking a single button
+        let mut store = RefStore::new();
+        let tracked = store.track(button_snap("Save"));
+        let original = store.resolve(tracked.id).unwrap().clone();
+        let mut duplicate = button_snap("Save");
+        duplicate.bounds = (999.0, 888.0, 77.0, 66.0);
+
+        // WHEN: Refresh receives duplicate live snapshots for the same fingerprint
+        let err = store
+            .refresh(&[button_snap("Save"), duplicate])
+            .unwrap_err();
+
+        // THEN: Refresh fails explicitly instead of silently keeping one duplicate
+        assert_eq!(
+            err,
+            RefreshError::DuplicateFingerprint {
+                fingerprint: tracked.fingerprint,
+                first_index: 0,
+                duplicate_index: 1,
+            }
+        );
+        assert_eq!(store.resolve(tracked.id).unwrap(), &original);
     }
 
     #[test]
@@ -645,7 +716,7 @@ mod tests {
         store.track(snap.clone());
 
         for _ in 0..GC_THRESHOLD {
-            store.refresh(&[]);
+            store.refresh(&[]).unwrap();
         }
         store.gc();
 
