@@ -64,6 +64,8 @@ mod ffi;
 pub mod parakeet;
 mod sck_capture;
 mod speech;
+#[cfg(feature = "vad")]
+pub mod vad;
 
 // ---------------------------------------------------------------------------
 // Public re-exports
@@ -76,6 +78,8 @@ pub use capture::{
 };
 pub use devices::{check_microphone_permission, list_audio_devices, AudioDevice};
 pub use speech::{speak, transcribe, transcribe_with_engine, AudioEngine};
+#[cfg(feature = "vad")]
+pub use vad::{VadDetector, model_file_present as vad_model_present};
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -31,6 +31,7 @@ mod accessibility;
 mod actions;
 mod app;
 pub mod blackbox;
+pub mod ocr;
 pub mod copilot;
 pub mod copilot_extract;
 pub mod copilot_format;

@@ -472,20 +472,22 @@ pub(crate) fn handle_get_tree<W: Write>(
 
     registry
         .with_app(&app_name, |app| {
-            let root_element = if let Some(ref q) = query {
+            let (tree, screenshot) = if let Some(ref q) = query {
                 match app.find_native(q, Some(100)) {
                     Ok(el) => {
                         let tree = build_element_tree(el.element, depth, &mut reporter);
-                        return ok_found_tree(tree);
+                        let shot = app.screenshot_native().ok();
+                        (tree, shot)
                     }
                     Err(_) => return ok_found_false(),
                 }
             } else {
-                app.element
+                let tree = build_app_root_tree(app.element, depth, &mut reporter);
+                let shot = app.screenshot_native().ok();
+                (tree, shot)
             };
 
-            let tree = build_app_root_tree(root_element, depth, &mut reporter);
-            ok_found_tree(tree)
+            maybe_append_ocr(ok_found_tree(tree), screenshot.as_deref())
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -659,6 +661,65 @@ fn build_tree_node<W: Write>(
         "enabled":  enabled,
         "children": children
     })
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers — OCR fallback
+// ---------------------------------------------------------------------------
+
+/// Count the total text characters in the AX tree JSON (titles + values).
+///
+/// Traverses `node` recursively accumulating the lengths of all non-null
+/// `"title"` and `"value"` string fields.
+fn ax_text_len(node: &Value) -> usize {
+    let title_len = node["title"].as_str().map_or(0, str::len);
+    let value_len = node["value"].as_str().map_or(0, str::len);
+    let children_len = node["children"]
+        .as_array()
+        .map_or(0, |ch| ch.iter().map(ax_text_len).sum());
+    title_len + value_len + children_len
+}
+
+/// Optionally append an OCR annotation to a `ToolCallResult`.
+///
+/// Appends `[OCR fallback: …]` when:
+/// * `AXTERMINATOR_OCR=true` (or `1` or `yes`) is set, AND
+/// * the AX-tree text extracted from `result` is below the 50-char threshold, AND
+/// * `screenshot` is `Some` non-empty PNG bytes.
+///
+/// The annotation is injected into the first `text` content item so it is
+/// visible to the caller without changing the JSON structure.
+fn maybe_append_ocr(result: ToolCallResult, screenshot: Option<&[u8]>) -> ToolCallResult {
+    if !crate::ocr::ocr_fallback_enabled() {
+        return result;
+    }
+    let Some(png) = screenshot else {
+        return result;
+    };
+
+    // Extract the tree payload to measure AX text length.
+    let ax_text = result
+        .content
+        .first()
+        .and_then(|c| serde_json::from_str::<Value>(&c.text).ok())
+        .and_then(|v| v["tree"].as_object().map(|_| v["tree"].clone()));
+
+    let ax_len = ax_text.as_ref().map_or(0, ax_text_len);
+    if !crate::ocr::ocr_fallback_threshold_check(&"x".repeat(ax_len)) {
+        return result;
+    }
+
+    let Some(annotation) = crate::ocr::ocr_fallback_annotation(png) else {
+        return result;
+    };
+
+    // Append OCR annotation to the text content without re-encoding the tree.
+    let mut out = result;
+    if let Some(item) = out.content.first_mut() {
+        item.text.push('\n');
+        item.text.push_str(&annotation);
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------

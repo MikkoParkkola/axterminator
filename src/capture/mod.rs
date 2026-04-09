@@ -628,6 +628,23 @@ fn transcribe_and_store(
     start_ms: u64,
     end_ms: u64,
 ) {
+    // VAD pre-filter: skip STT entirely when no speech is detected.
+    // When the vad feature is disabled or the model is absent, has_speech
+    // returns Ok(true) — no gate applied.
+    #[cfg(feature = "vad")]
+    {
+        use crate::audio::VadDetector;
+        let vad = VadDetector::from_env();
+        match vad.has_speech(&audio_data.samples, audio_data.sample_rate) {
+            Ok(false) => {
+                debug!("VAD: silence detected — skipping transcription");
+                return;
+            }
+            Ok(true) => debug!("VAD: speech detected — proceeding to transcription"),
+            Err(e) => debug!(error = %e, "VAD check failed — proceeding to transcription"),
+        }
+    }
+
     match transcribe(audio_data, None) {
         Ok(text) if !text.trim().is_empty() => {
             let segment = TranscriptSegment {

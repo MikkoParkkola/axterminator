@@ -19,6 +19,13 @@ fn main() {
     println!("cargo:rustc-link-lib=framework=CoreGraphics");
     println!("cargo:rustc-link-lib=framework=AppKit");
 
+    // OCR fallback: VNRecognizeTextRequest — always compiled, available macOS 10.15+.
+    // Vision and CoreImage are unconditionally linked here; the camera feature
+    // may also link them — duplicate link directives are harmless.
+    compile_ocr_objc();
+    println!("cargo:rustc-link-lib=framework=Vision");
+    println!("cargo:rustc-link-lib=framework=CoreImage");
+
     // Camera feature: compile the Objective-C AVFoundation + Vision bindings
     // and link the required system frameworks.
     if std::env::var("CARGO_FEATURE_CAMERA").is_ok() {
@@ -58,6 +65,20 @@ fn main() {
         // Weak link: resolved at runtime, nil if framework absent.
         println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
     }
+}
+
+/// Compile `src/ocr_objc.m` into a static library that Cargo links.
+///
+/// Unconditionally compiled — `VNRecognizeTextRequest` has been stable since
+/// macOS 10.15, and the `ObjC` side guards the call with `@available(macOS 10.15, *)`.
+fn compile_ocr_objc() {
+    cc::Build::new()
+        .file("src/ocr_objc.m")
+        .flag("-fobjc-arc")
+        .flag("-fmodules")
+        .compile("ocr_objc");
+
+    println!("cargo:rerun-if-changed=src/ocr_objc.m");
 }
 
 /// Compile `src/camera_objc.m` into a static library that Cargo links.

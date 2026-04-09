@@ -62,6 +62,16 @@ docker = []
 #     --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3
 # The `ort` crate uses pre-built ONNX Runtime binaries (no manual SDK install).
 parakeet = ["audio", "dep:ort"]
+# vad: Silero VAD pre-filter gate before STT.  Skips transcription when no
+# speech is detected, reducing CPU usage on silent audio windows.
+# Implemented directly against the same `ort` version as `parakeet` (rc.12)
+# to avoid duplicate ONNX Runtime binaries.  The `vad-rs` crate pins
+# ort=rc.9 which is incompatible.
+# Model file (~1.8 MB) must be downloaded separately:
+#   curl -L https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx \
+#        -o ~/.axterminator/models/silero_vad.onnx
+# When the model is absent the gate is bypassed (pass-through).
+vad = ["audio", "dep:ort"]
 
 [dependencies]
 # CLI (feature-gated so it's only compiled for the binary target)
