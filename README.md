@@ -23,12 +23,27 @@ Up to 34+ MCP tools (27 core + optional audio, camera, spaces). Background inter
 ## Deploy
 
 ```bash
+brew install MikkoParkkola/tap/axterminator
+```
+
+Grant accessibility permissions: **System Settings > Privacy & Security > Accessibility** (add your terminal app).
+
+<details>
+<summary>Build from source</summary>
+
+```bash
+cargo install axterminator --features cli
+```
+
+Or clone and build manually:
+
+```bash
 git clone https://github.com/MikkoParkkola/axterminator
 cd axterminator
 cargo build --release --features cli
 ```
 
-Grant accessibility permissions: **System Settings > Privacy & Security > Accessibility** (add your terminal app).
+</details>
 
 ### Connect your AI agent
 
@@ -38,7 +53,7 @@ Add to MCP config (Claude Code, OpenCode, Cursor):
 {
   "mcpServers": {
     "axterminator": {
-      "command": "/path/to/axterminator",
+      "command": "axterminator",
       "args": ["mcp", "serve"]
     }
   }
@@ -49,11 +64,9 @@ For Codex (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.axterminator]
-command = "/path/to/axterminator"
+command = "axterminator"
 args = ["mcp", "serve"]
 ```
-
-Replace `/path/to/axterminator` with the actual binary path (run `which axterminator` or use the full build output path).
 
 Done. Your agent has 27 core tools (up to 34+ with all feature flags) to control any macOS app.
 
@@ -148,7 +161,7 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 
 ## Feature Flags
 
-Build with optional capabilities:
+The Homebrew formula includes all features. When building from source, select capabilities with feature flags:
 
 ```bash
 cargo build --release --features "cli,audio,camera,spaces"

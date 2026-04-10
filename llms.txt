@@ -10,7 +10,6 @@ AXTerminator is an MCP server that gives you (the AI agent) the ability to see a
 ## Requirements
 
 - macOS 12+ (Apple Silicon or Intel)
-- Rust toolchain (for building from source — RECOMMENDED)
 - Accessibility permission granted to the host app
 
 ## Check for Existing Installation
@@ -32,19 +31,19 @@ If not installed, follow Installation.
 ## Upgrade
 
 ```bash
-# Option 1: Homebrew (simplest)
+# Option 1: Homebrew (recommended)
 brew upgrade axterminator
 
 # Option 2: cargo
 cargo install axterminator --features cli --force
 
-# Option 3: Build from source (if cloned previously)
+# Option 3: Build from source (if cloned previously, least common)
 cd /path/to/axterminator-src
 git pull origin main
 cargo build --release --features cli
 cp target/release/axterminator ~/.local/bin/axterminator
 
-# Option 4: Download prebuilt binary (replace existing)
+# Option 4: Download prebuilt binary (least common — prefer Option 1 or 2)
 ARCH=$(uname -m)
 case "$ARCH" in
   arm64) TARGET="aarch64-apple-darwin" ;;
@@ -69,35 +68,21 @@ axterminator check
 
 ## Installation (Preferred → Fallback)
 
-### Option A: Build from source (RECOMMENDED)
+### Option A: Homebrew (RECOMMENDED)
 
 ```bash
-# 1. Clone
-git clone https://github.com/MikkoParkkola/axterminator /tmp/axterminator-src
-cd /tmp/axterminator-src
+brew install MikkoParkkola/tap/axterminator
 
-# 2. Build
-cargo build --release --features cli
-
-# 3. Install binary
-cp target/release/axterminator ~/.local/bin/axterminator
-chmod +x ~/.local/bin/axterminator
-
-# 4. Verify
-~/.local/bin/axterminator check
+# Verify
+axterminator check
 # Expected output: "Accessibility: OK" and a version string
 # If output says "Accessibility: DISABLED", the host app needs permission — see PERMISSIONS below
-
-# 5. Verify MCP handshake
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | ~/.local/bin/axterminator mcp serve 2>/dev/null | head -1
-# Expected: JSON response containing "serverInfo" and "capabilities"
 ```
 
-### Option B: Homebrew
+### Option B: cargo install
 
 ```bash
-brew tap MikkoParkkola/tap
-brew install axterminator
+cargo install axterminator --features cli
 
 # Verify
 axterminator check
@@ -123,7 +108,18 @@ chmod +x ~/.local/bin/axterminator
 ~/.local/bin/axterminator check
 ```
 
-The prebuilt binary is fully self-contained -- no runtime dependencies required.
+### Option D: Build from source
+
+```bash
+git clone https://github.com/MikkoParkkola/axterminator /tmp/axterminator-src
+cd /tmp/axterminator-src
+cargo build --release --features cli
+cp target/release/axterminator ~/.local/bin/axterminator
+chmod +x ~/.local/bin/axterminator
+
+# Verify
+~/.local/bin/axterminator check
+```
 
 ## PERMISSIONS
 
@@ -151,14 +147,14 @@ File: `~/.claude/settings.json` (or project `.mcp.json`)
 {
   "mcpServers": {
     "axterminator": {
-      "command": "BINARY_PATH",
+      "command": "axterminator",
       "args": ["mcp", "serve"]
     }
   }
 }
 ```
 
-Replace `BINARY_PATH` with the actual path (e.g., `~/.local/bin/axterminator` or the full path from `which axterminator`).
+If installed via Homebrew or cargo install, `axterminator` is on PATH. Otherwise replace with the full binary path (e.g., `~/.local/bin/axterminator`).
 
 ### Codex
 
@@ -166,7 +162,7 @@ File: `~/.codex/config.toml`
 
 ```toml
 [mcp_servers.axterminator]
-command = "BINARY_PATH"
+command = "axterminator"
 args = ["mcp", "serve"]
 ```
 
@@ -178,7 +174,7 @@ File: `.cursor/mcp.json` (or equivalent)
 {
   "mcpServers": {
     "axterminator": {
-      "command": "BINARY_PATH",
+      "command": "axterminator",
       "args": ["mcp", "serve"]
     }
   }
@@ -188,16 +184,16 @@ File: `.cursor/mcp.json` (or equivalent)
 ### Generic MCP client (stdio transport)
 
 ```bash
-BINARY_PATH mcp serve
+axterminator mcp serve
 # Reads JSON-RPC from stdin, writes to stdout, logs to stderr
 ```
 
 ### HTTP transport (optional)
 
 ```bash
-BINARY_PATH mcp serve --http 8741 --localhost-only
+axterminator mcp serve --http 8741 --localhost-only
 # Or with auth:
-BINARY_PATH mcp serve --http 8741 --token YOUR_SECRET_TOKEN
+axterminator mcp serve --http 8741 --token YOUR_SECRET_TOKEN
 ```
 
 ## Available Tools (34+)
