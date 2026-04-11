@@ -171,10 +171,11 @@ fn tool_ax_analyze() -> Tool {
 fn tool_ax_workflow_create() -> Tool {
     Tool {
         name: "ax_workflow_create",
-        title: "Create a durable multi-step workflow",
-        description: "Create a durable multi-step workflow with automatic retry and \
-            checkpoint/resume. Define steps that click, type, wait, or assert. \
-            Steps are executed one at a time via ax_workflow_step.",
+        title: "Create a tracked multi-step workflow",
+        description: "Create a named workflow plan with click, type, wait, assert, or \
+            checkpoint steps. Steps are stored and advanced one at a time via \
+            ax_workflow_step. This workflow surface tracks progress; it does not \
+            execute UI actions, retries, or checkpoint resume automatically.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -218,9 +219,10 @@ fn tool_ax_workflow_create() -> Tool {
 fn tool_ax_workflow_step() -> Tool {
     Tool {
         name: "ax_workflow_step",
-        title: "Execute the next workflow step",
-        description: "Execute the next step in a durable workflow. Returns the step result \
-            and whether the workflow is complete. Call repeatedly until completed=true.",
+        title: "Advance workflow progress",
+        description: "Advance the named workflow to its next stored step. Emits a progress \
+            notification and records the step in workflow state. Call repeatedly until \
+            completed=true.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -252,8 +254,8 @@ fn tool_ax_workflow_status() -> Tool {
     Tool {
         name: "ax_workflow_status",
         title: "Check workflow status",
-        description: "Check the status of a durable workflow: current step, completed steps, \
-            and overall progress.",
+        description: "Check stored workflow progress: current step index, total steps, \
+            completion state, and recorded result count.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -1543,7 +1545,7 @@ fn parse_transition_trigger(s: &str) -> crate::cross_app::TransitionTrigger {
 // Workflow tool handlers
 // ---------------------------------------------------------------------------
 
-/// Handle `ax_workflow_create` — parse step definitions and store the workflow.
+/// Handle `ax_workflow_create` — parse step definitions and store the workflow plan.
 fn handle_ax_workflow_create(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
@@ -1578,10 +1580,10 @@ fn handle_ax_workflow_create(
     }
 }
 
-/// Handle `ax_workflow_step` — execute the next pending step.
+/// Handle `ax_workflow_step` — advance the next pending step in workflow state.
 ///
-/// Emits a progress notification before dispatching the step so MCP clients
-/// can track how far through the workflow execution has reached.
+/// Emits a progress notification before recording the step so MCP clients can
+/// track how far through the workflow plan has advanced.
 fn handle_ax_workflow_step<W: Write>(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
@@ -1636,8 +1638,8 @@ fn handle_ax_workflow_step<W: Write>(
     let step_index = state.current_step;
     let total_steps = state.steps.len() as u32;
 
-    // Emit progress before dispatching: MCP clients see "step N/total".
-    // Best-effort: silently ignore I/O failures so they never mask the result.
+    // Emit progress before recording the step. Best-effort: silently ignore
+    // I/O failures so they never mask the workflow-state result.
     let _ = crate::mcp::progress::emit_progress(
         out,
         &crate::mcp::progress::next_progress_token(),
@@ -1646,9 +1648,8 @@ fn handle_ax_workflow_step<W: Write>(
         &format!("Step {}/{total_steps}: {}", step_index + 1, step.id),
     );
 
-    // Simulate step execution: checkpoint steps always succeed; others are
-    // recorded as successfully dispatched (actual UI execution is async and
-    // happens through the existing ax_click/ax_type/ax_find tool chain).
+    // Record workflow progress only. This surface does not execute the
+    // underlying UI action or call DurableRunner here.
     let result = crate::durable_steps::WorkflowResult::Success {
         steps_executed: step_index + 1,
         total_retries: 0,
@@ -1668,7 +1669,7 @@ fn handle_ax_workflow_step<W: Write>(
             "completed":  completed,
             "action":     action_str,
             "ok":         true,
-            "message":    format!("Step '{}' dispatched", step.id)
+            "message":    format!("Recorded workflow step '{}'", step.id)
         })
         .to_string(),
     )
@@ -2961,8 +2962,10 @@ mod tests {
         let v2: serde_json::Value = serde_json::from_str(&r2.content[0].text).unwrap();
         assert_eq!(v1["completed"], false);
         assert_eq!(v1["step_id"], "step-1");
+        assert_eq!(v1["message"], "Recorded workflow step 'step-1'");
         assert_eq!(v2["completed"], true);
         assert_eq!(v2["step_id"], "step-2");
+        assert_eq!(v2["message"], "Recorded workflow step 'step-2'");
     }
 
     #[test]

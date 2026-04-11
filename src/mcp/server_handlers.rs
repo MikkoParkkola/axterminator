@@ -772,7 +772,7 @@ Key rules:\n\
 Advanced tools:\n\
 - ax_query: natural language UI questions\n\
 - ax_analyze: detect UI patterns, infer app state, suggest actions\n\
-- ax_workflow_create/step/status: durable multi-step automation\n\
+- ax_workflow_create/step/status: tracked multi-step workflow planning and progress\n\
 - ax_test_run: black-box testing\n\
 - ax_app_profile: Electron app metadata\n\
 - ax_track_workflow: cross-app pattern detection\n\
@@ -788,7 +788,7 @@ Use prompts/get for detailed guidance:\n\
 - 'troubleshooting' — when something fails\n\
 - 'app-guide' with app arg — per-app playbook\n\
 - 'debug-ui' — debug element-not-found issues\n\
-- 'automate-workflow' — durable workflow guidance\n\
+- 'automate-workflow' — tracked workflow planning guidance\n\
 - 'analyze-app' — comprehensive UI analysis\n\
 - 'test-app' / 'navigate-to' / 'extract-data' / 'accessibility-audit'",
     }

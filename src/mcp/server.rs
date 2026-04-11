@@ -73,7 +73,7 @@ pub(super) enum Phase {
     Running,
 }
 
-/// Tracks the in-progress state of a single durable workflow across MCP calls.
+/// Tracks the in-progress state of a single workflow plan across MCP calls.
 pub(crate) struct WorkflowState {
     /// The ordered steps that make up this workflow.
     pub steps: Vec<crate::durable_steps::DurableStep>,
@@ -101,7 +101,7 @@ pub(crate) struct TaskEntry {
 pub(super) struct Server {
     pub(super) registry: Arc<AppRegistry>,
     pub(super) phase: Phase,
-    /// Active durable workflows, keyed by workflow name.
+    /// Active workflow plans, keyed by workflow name.
     pub(super) workflows: Arc<Mutex<HashMap<String, WorkflowState>>>,
     /// Resource URIs the client has subscribed to via `resources/subscribe`.
     ///
