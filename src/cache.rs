@@ -51,9 +51,7 @@ impl ElementCache {
         if let Some(entry) = cache.get(key) {
             // Check if entry is still valid
             if entry.timestamp.elapsed().as_millis() < u128::from(self.max_age_ms) {
-                // Clone the element (we can't move out of the cache)
-                // TODO: Implement proper element cloning
-                return None;
+                return Some(entry.element.clone());
             }
             // Entry expired, remove it
             cache.pop(key);
@@ -117,6 +115,7 @@ pub fn global_cache() -> &'static ElementCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn test_cache_key_equality() {
@@ -129,5 +128,54 @@ mod tests {
             query: "Save".to_string(),
         };
         assert_eq!(key1, key2);
+    }
+
+    fn test_element(role: &str, title: &str) -> AXElement {
+        AXElement {
+            element: std::ptr::null(),
+            role: Some(role.to_string()),
+            title: Some(title.to_string()),
+        }
+    }
+
+    #[test]
+    fn test_cache_returns_cloned_element_before_expiry() {
+        let cache = ElementCache::new(10, 5_000);
+        let key = CacheKey {
+            pid: 123,
+            query: "button:Save".to_string(),
+        };
+        let element = test_element("AXButton", "Save");
+
+        cache.put(key.clone(), element);
+
+        let cached = cache.get(&key).expect("expected cached element");
+        assert_eq!(cached.role, Some("AXButton".to_string()));
+        assert_eq!(cached.title, Some("Save".to_string()));
+    }
+
+    #[test]
+    fn test_cache_removes_expired_entries() {
+        let cache = ElementCache::new(10, 5_000);
+        let key = CacheKey {
+            pid: 123,
+            query: "button:Save".to_string(),
+        };
+
+        cache.put(key.clone(), test_element("AXButton", "Save"));
+
+        {
+            let mut inner = cache
+                .cache
+                .lock()
+                .expect("cache lock should not be poisoned");
+            let entry = inner
+                .get_mut(&key)
+                .expect("expected inserted cache entry to exist");
+            entry.timestamp = Instant::now() - Duration::from_secs(10);
+        }
+
+        assert!(cache.get(&key).is_none());
+        assert_eq!(cache.stats().size, 0);
     }
 }
