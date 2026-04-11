@@ -173,7 +173,8 @@ mod tests {
     fn read_clipboard_returns_content() {
         // Should not panic regardless of clipboard state.
         let content = read_clipboard();
-        assert!(content.item_count >= 0);
+        // item_count is usize — just verify the call succeeds.
+        let _ = content.item_count;
     }
 
     #[test]

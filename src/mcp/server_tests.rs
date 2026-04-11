@@ -881,7 +881,7 @@ fn client_supports_sampling_false_by_default_before_initialize() {
 }
 
 #[test]
-fn sampling_createMessage_is_method_not_found_from_server_side() {
+fn sampling_create_message_is_method_not_found_from_server_side() {
     // GIVEN: initialized server — sampling/createMessage is a CLIENT-to-LLM
     //        call, not a server method. The server should not handle it.
     let mut s = Server::new();
