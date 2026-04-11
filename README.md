@@ -47,7 +47,20 @@ cargo build --release --features cli
 
 ### Connect your AI agent
 
-Add to MCP config (Claude Code, OpenCode, Cursor):
+```bash
+axterminator mcp install                       # Claude Desktop (default)
+axterminator mcp install --client cursor       # Cursor
+axterminator mcp install --client windsurf     # Windsurf
+axterminator mcp install --client claude-code  # Claude Code
+axterminator mcp install --dry-run             # Preview without writing
+```
+
+This auto-detects the config file, backs up any existing config, and preserves other MCP server entries.
+
+<details>
+<summary>Manual config (Codex, OpenCode, or other clients)</summary>
+
+Add to your MCP config JSON:
 
 ```json
 {
@@ -67,6 +80,8 @@ For Codex (`~/.codex/config.toml`):
 command = "axterminator"
 args = ["mcp", "serve"]
 ```
+
+</details>
 
 Done. Your agent has 27 core tools (up to 34+ with all feature flags) to control any macOS app.
 

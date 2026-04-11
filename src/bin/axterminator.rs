@@ -151,6 +151,32 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum McpSubcommand {
+    /// Install axterminator as an MCP server in your AI client's config.
+    ///
+    /// No JSON editing, no file-path hunting. Run this command, restart
+    /// your client, and axterminator appears as an MCP server.
+    ///
+    /// Examples:
+    ///   axterminator mcp install                       # Claude Desktop (default)
+    ///   axterminator mcp install --client cursor       # Cursor
+    ///   axterminator mcp install --client claude-code  # Claude Code
+    ///   axterminator mcp install --dry-run             # show what would change
+    Install {
+        /// MCP client to configure.
+        #[arg(long, default_value = "claude-desktop", value_parser = [
+            "claude-desktop", "claude", "cursor", "windsurf", "claude-code",
+        ])]
+        client: String,
+
+        /// Overwrite existing axterminator entry without asking.
+        #[arg(long)]
+        force: bool,
+
+        /// Print the planned change without writing the file.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Start the MCP server (stdio transport, default).
     ///
     /// Use `--http <port>` to start the Streamable HTTP transport instead.
@@ -260,6 +286,11 @@ fn dispatch(cmd: Commands) -> Result<()> {
 
 fn dispatch_mcp(sub: McpSubcommand) -> Result<()> {
     match sub {
+        McpSubcommand::Install {
+            client,
+            force,
+            dry_run,
+        } => cmd_mcp_install(&client, force, dry_run),
         McpSubcommand::Serve {
             http,
             stdio,
@@ -268,6 +299,141 @@ fn dispatch_mcp(sub: McpSubcommand) -> Result<()> {
             localhost_only,
         } => dispatch_mcp_serve(http, stdio, token, &bind, localhost_only),
     }
+}
+
+// ---------------------------------------------------------------------------
+// mcp install
+// ---------------------------------------------------------------------------
+
+/// Resolve the MCP config file path for a given AI client.
+fn client_config_path(client: &str) -> Result<std::path::PathBuf> {
+    let home = PathBuf::from(std::env::var("HOME").context("$HOME not set")?);
+
+    match client {
+        "claude-desktop" | "claude" => {
+            if cfg!(target_os = "macos") {
+                Ok(home
+                    .join("Library/Application Support/Claude")
+                    .join("claude_desktop_config.json"))
+            } else if cfg!(target_os = "linux") {
+                Ok(home.join(".config/Claude/claude_desktop_config.json"))
+            } else {
+                // Windows
+                let appdata = std::env::var("APPDATA")
+                    .unwrap_or_else(|_| home.join("AppData/Roaming").to_string_lossy().into());
+                Ok(PathBuf::from(appdata)
+                    .join("Claude")
+                    .join("claude_desktop_config.json"))
+            }
+        }
+        "cursor" => Ok(home.join(".cursor/mcp.json")),
+        "windsurf" => Ok(home.join(".codeium/windsurf/mcp_config.json")),
+        "claude-code" => Ok(home.join(".claude.json")),
+        _ => anyhow::bail!(
+            "unknown client {client:?} (supported: claude-desktop, cursor, windsurf, claude-code)"
+        ),
+    }
+}
+
+/// Return the absolute path to the currently-running binary.
+fn self_binary_path() -> Result<PathBuf> {
+    // Prefer the resolved executable path, fall back to $PATH lookup.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Ok(abs) = exe.canonicalize() {
+            return Ok(abs);
+        }
+        return Ok(exe);
+    }
+    // No which crate — current_exe() should always work.
+    anyhow::bail!("cannot locate axterminator binary")
+}
+
+/// Install axterminator into the target client's MCP config.
+fn cmd_mcp_install(client: &str, force: bool, dry_run: bool) -> Result<()> {
+    let cfg_path = client_config_path(client)?;
+    let binary = self_binary_path()?;
+
+    // Load existing config or start fresh.
+    let mut cfg: serde_json::Map<String, serde_json::Value> = if cfg_path.exists() {
+        let data = std::fs::read_to_string(&cfg_path)
+            .with_context(|| format!("read config {}", cfg_path.display()))?;
+        if data.trim().is_empty() {
+            serde_json::Map::new()
+        } else {
+            serde_json::from_str(&data).with_context(|| {
+                format!(
+                    "parse existing config {} (fix the file or use --force to overwrite)",
+                    cfg_path.display()
+                )
+            })?
+        }
+    } else {
+        serde_json::Map::new()
+    };
+
+    // Ensure mcpServers section exists.
+    let servers = cfg
+        .entry("mcpServers")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let servers = servers
+        .as_object_mut()
+        .context("mcpServers is not a JSON object")?;
+
+    // Check for existing entry.
+    if servers.contains_key("axterminator") && !force {
+        if dry_run {
+            println!(
+                "axterminator is already installed in {}\n  would not change (use --force to overwrite)",
+                cfg_path.display()
+            );
+        } else {
+            println!(
+                "axterminator is already installed in {}\nUse --force to overwrite.",
+                cfg_path.display()
+            );
+        }
+        return Ok(());
+    }
+
+    // Write the axterminator entry.
+    servers.insert(
+        "axterminator".to_string(),
+        serde_json::json!({
+            "command": binary.to_string_lossy(),
+            "args": ["mcp", "serve"]
+        }),
+    );
+
+    let out = serde_json::to_string_pretty(&cfg).context("encode config")?;
+
+    if dry_run {
+        println!("Would write to {}:\n\n{}", cfg_path.display(), out);
+        return Ok(());
+    }
+
+    // Create parent directory if missing.
+    if let Some(parent) = cfg_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create config directory {}", parent.display()))?;
+    }
+
+    // Backup existing file.
+    if cfg_path.exists() {
+        let backup = cfg_path.with_extension("axterminator.bak");
+        if let Ok(data) = std::fs::read(&cfg_path) {
+            let _ = std::fs::write(&backup, data);
+        }
+    }
+
+    std::fs::write(&cfg_path, &out)
+        .with_context(|| format!("write config {}", cfg_path.display()))?;
+
+    println!("Installed axterminator as MCP server for {client}.");
+    println!("  config: {}", cfg_path.display());
+    println!("  binary: {}", binary.display());
+    println!();
+    println!("Restart your client to pick up the change.");
+    Ok(())
 }
 
 fn dispatch_mcp_serve(
@@ -857,5 +1023,164 @@ mod tests {
     #[test]
     fn mcp_requires_subcommand() {
         assert!(parse(&["mcp"]).is_err());
+    }
+
+    // -- mcp install parsing tests --
+
+    #[test]
+    fn parses_mcp_install_default_client() {
+        let cli = parse(&["mcp", "install"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Install { client, force, dry_run },
+            } => {
+                assert_eq!(client, "claude-desktop");
+                assert!(!force);
+                assert!(!dry_run);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_install_cursor() {
+        let cli = parse(&["mcp", "install", "--client", "cursor"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Install { client, .. },
+            } => assert_eq!(client, "cursor"),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_install_windsurf() {
+        let cli = parse(&["mcp", "install", "--client", "windsurf"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Install { client, .. },
+            } => assert_eq!(client, "windsurf"),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_install_claude_code() {
+        let cli = parse(&["mcp", "install", "--client", "claude-code"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Install { client, .. },
+            } => assert_eq!(client, "claude-code"),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_install_force() {
+        let cli = parse(&["mcp", "install", "--force"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Install { force, .. },
+            } => assert!(force),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parses_mcp_install_dry_run() {
+        let cli = parse(&["mcp", "install", "--dry-run"]).unwrap();
+        match cli.command {
+            Commands::Mcp {
+                subcommand: McpSubcommand::Install { dry_run, .. },
+            } => assert!(dry_run),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn mcp_install_rejects_unknown_client() {
+        assert!(parse(&["mcp", "install", "--client", "vscode"]).is_err());
+    }
+
+    // -- mcp install logic tests --
+
+    #[test]
+    fn client_config_path_claude_desktop() {
+        let path = client_config_path("claude-desktop").unwrap();
+        let s = path.to_string_lossy();
+        assert!(s.contains("claude_desktop_config.json"), "got: {s}");
+    }
+
+    #[test]
+    fn client_config_path_cursor() {
+        let path = client_config_path("cursor").unwrap();
+        assert!(path.to_string_lossy().ends_with(".cursor/mcp.json"));
+    }
+
+    #[test]
+    fn client_config_path_windsurf() {
+        let path = client_config_path("windsurf").unwrap();
+        assert!(path.to_string_lossy().contains("windsurf/mcp_config.json"));
+    }
+
+    #[test]
+    fn client_config_path_claude_code() {
+        let path = client_config_path("claude-code").unwrap();
+        assert!(path.to_string_lossy().ends_with(".claude.json"));
+    }
+
+    #[test]
+    fn client_config_path_unknown_errors() {
+        assert!(client_config_path("unknown").is_err());
+    }
+
+    #[test]
+    fn mcp_install_dry_run_fresh_config() {
+        // Write to a temp dir to test the full flow.
+        let dir = std::env::temp_dir().join("axterminator_test_install");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg_path = dir.join("test_config.json");
+
+        // Simulate cmd_mcp_install logic inline to avoid needing real $HOME.
+        let mut cfg: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+        let servers = cfg
+            .entry("mcpServers")
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        let servers = servers.as_object_mut().unwrap();
+        servers.insert(
+            "axterminator".to_string(),
+            serde_json::json!({"command": "axterminator", "args": ["mcp", "serve"]}),
+        );
+        let out = serde_json::to_string_pretty(&cfg).unwrap();
+        std::fs::write(&cfg_path, &out).unwrap();
+
+        let written: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let entry = &written["mcpServers"]["axterminator"];
+        assert_eq!(entry["command"], "axterminator");
+        assert_eq!(entry["args"], serde_json::json!(["mcp", "serve"]));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mcp_install_preserves_other_entries() {
+        let existing = serde_json::json!({
+            "mcpServers": {
+                "other-tool": {"command": "other", "args": []}
+            }
+        });
+        let mut cfg: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_value(existing).unwrap();
+        let servers = cfg.get_mut("mcpServers").unwrap().as_object_mut().unwrap();
+        servers.insert(
+            "axterminator".to_string(),
+            serde_json::json!({"command": "axterminator", "args": ["mcp", "serve"]}),
+        );
+
+        // other-tool must still be present.
+        assert!(servers.contains_key("other-tool"));
+        assert!(servers.contains_key("axterminator"));
+        assert_eq!(servers.len(), 2);
     }
 }
