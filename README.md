@@ -206,16 +206,16 @@ Machine-readable installation guide: [`llms.txt`](https://raw.githubusercontent.
 
 Your agent can fetch this URL to get step-by-step installation, MCP config for every host, and troubleshooting.
 
-## More Tools
+## Ecosystem
 
-| Tool | What it does |
+axterminator is part of a suite of MCP tools:
+
+| Tool | Description |
 |------|-------------|
-| [trvl](https://github.com/MikkoParkkola/trvl) | AI travel agent — flights, hotels, ferries, 33 MCP tools |
-| [mcp-gateway](https://github.com/MikkoParkkola/mcp-gateway) | Universal MCP gateway — single-port multiplexing |
-| [nab](https://github.com/MikkoParkkola/nab) | Token-optimized HTTP client for LLMs |
-| [nowifi](https://github.com/MikkoParkkola/nowifi) | One-command captive portal bypass |
-
-All tools: `brew tap MikkoParkkola/tap && brew install trvl axterminator mcp-gateway nab nowifi`
+| [mcp-gateway](https://github.com/MikkoParkkola/mcp-gateway) | Universal MCP gateway — 4 meta-tools replace 100+ registrations |
+| [trvl](https://github.com/MikkoParkkola/trvl) | AI travel agent — 34 MCP tools for flights, hotels, ground transport |
+| [nab](https://github.com/MikkoParkkola/nab) | Web content extraction — fetch any URL with cookies + anti-bot bypass |
+| **[axterminator](https://github.com/MikkoParkkola/axterminator)** | **macOS GUI automation — 34 MCP tools via Accessibility API** |
 
 ## License
 
