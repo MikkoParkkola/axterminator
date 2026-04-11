@@ -193,10 +193,31 @@ fn tool_ax_workflow_create() -> Tool {
                             "action":      { "type": "string",  "enum": ["click", "type", "wait", "assert", "checkpoint"] },
                             "target":      { "type": "string",  "description": "Element query for click/type/wait/assert" },
                             "text":        { "type": "string",  "description": "Text to type (action=type only)" },
-                            "max_retries": { "type": "integer", "default": 2 },
-                            "timeout_ms":  { "type": "integer", "default": 5000 }
+                            "max_retries": { "type": "integer", "minimum": 0, "maximum": 4294967295u64, "default": 2 },
+                            "timeout_ms":  { "type": "integer", "minimum": 0, "maximum": 18446744073709551615u64, "default": 5000 }
                         },
-                        "required": ["id", "action"]
+                        "required": ["id", "action"],
+                        "additionalProperties": false,
+                        "allOf": [
+                            {
+                                "if": {
+                                    "properties": {
+                                        "action": { "enum": ["click", "wait", "assert"] }
+                                    },
+                                    "required": ["action"]
+                                },
+                                "then": { "required": ["target"] }
+                            },
+                            {
+                                "if": {
+                                    "properties": {
+                                        "action": { "const": "type" }
+                                    },
+                                    "required": ["action"]
+                                },
+                                "then": { "required": ["target", "text"] }
+                            }
+                        ]
                     }
                 }
             },
@@ -237,10 +258,10 @@ fn tool_ax_workflow_step() -> Tool {
         output_schema: json!({
             "type": "object",
             "properties": {
-                "step_id":      { "type": "string" },
+                "step_id":      { "type": ["string", "null"] },
                 "step_index":   { "type": "integer" },
                 "completed":    { "type": "boolean" },
-                "action":       { "type": "string" },
+                "action":       { "type": ["string", "null"] },
                 "ok":           { "type": "boolean" },
                 "message":      { "type": "string" }
             },
@@ -1550,11 +1571,21 @@ fn handle_ax_workflow_create(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
+    if let Err(error) = reject_unknown_fields(args, &["name", "steps"]) {
+        return ToolCallResult::error(error);
+    }
+
     let Some(name) = args["name"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: name");
     };
 
-    let steps = parse_workflow_steps(&args["steps"]);
+    let steps = match args.get("steps") {
+        Some(steps_value) => match parse_workflow_steps(steps_value) {
+            Ok(steps) => steps,
+            Err(error) => return ToolCallResult::error(error),
+        },
+        None => Vec::new(),
+    };
     let step_count = steps.len();
 
     let state = WorkflowState {
@@ -1566,6 +1597,11 @@ fn handle_ax_workflow_create(
 
     match workflows.lock() {
         Ok(mut guard) => {
+            if guard.contains_key(&name) {
+                return ToolCallResult::error(format!(
+                    "Workflow '{name}' already exists — choose a unique name"
+                ));
+            }
             guard.insert(name.clone(), state);
             ToolCallResult::ok(
                 json!({
@@ -1589,6 +1625,10 @@ fn handle_ax_workflow_step<W: Write>(
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
     out: &mut W,
 ) -> ToolCallResult {
+    if let Err(error) = reject_unknown_fields(args, &["name"]) {
+        return ToolCallResult::error(error);
+    }
+
     let Some(name) = args["name"].as_str() else {
         return ToolCallResult::error("Missing required field: name");
     };
@@ -1680,6 +1720,10 @@ fn handle_ax_workflow_status(
     args: &Value,
     workflows: &Arc<Mutex<HashMap<String, WorkflowState>>>,
 ) -> ToolCallResult {
+    if let Err(error) = reject_unknown_fields(args, &["name"]) {
+        return ToolCallResult::error(error);
+    }
+
     let Some(name) = args["name"].as_str() else {
         return ToolCallResult::error("Missing required field: name");
     };
@@ -1709,41 +1753,124 @@ fn handle_ax_workflow_status(
 
 /// Parse a JSON array of step objects into [`Vec<DurableStep>`].
 ///
-/// Steps with an unrecognised `action` or missing required fields are skipped.
-fn parse_workflow_steps(steps_val: &Value) -> Vec<crate::durable_steps::DurableStep> {
+/// Malformed steps fail the full workflow creation request so the stored plan
+/// always matches the caller's actual intent.
+fn parse_workflow_steps(
+    steps_val: &Value,
+) -> Result<Vec<crate::durable_steps::DurableStep>, String> {
     let Some(arr) = steps_val.as_array() else {
-        return vec![];
+        return Err("Field 'steps' must be an array".to_string());
     };
-    arr.iter().filter_map(parse_single_workflow_step).collect()
+    arr.iter().map(parse_single_workflow_step).collect()
 }
 
-/// Parse one step JSON object into a [`DurableStep`], returning `None` on error.
-fn parse_single_workflow_step(s: &Value) -> Option<crate::durable_steps::DurableStep> {
+/// Parse one step JSON object into a [`DurableStep`].
+fn parse_single_workflow_step(s: &Value) -> Result<crate::durable_steps::DurableStep, String> {
     use crate::durable_steps::{DurableStep, StepAction};
 
-    let id = s["id"].as_str()?.to_string();
-    let action_str = s["action"].as_str()?;
-    let max_retries = s["max_retries"].as_u64().unwrap_or(2) as u32;
-    let timeout_ms = s["timeout_ms"].as_u64().unwrap_or(5_000);
+    reject_unknown_fields(
+        s,
+        &[
+            "id",
+            "action",
+            "target",
+            "text",
+            "max_retries",
+            "timeout_ms",
+        ],
+    )?;
+
+    let id = match s.get("id").and_then(Value::as_str) {
+        Some(value) => value.to_string(),
+        None => return Err("Workflow step missing string field: id".to_string()),
+    };
+    let action_str = match s.get("action").and_then(Value::as_str) {
+        Some(value) => value,
+        None => return Err(format!("Workflow step '{id}' missing string field: action")),
+    };
+    let max_retries = parse_optional_workflow_u32_field(s, "max_retries", 2)?;
+    let timeout_ms = parse_optional_workflow_u64_field(s, "timeout_ms", 5_000)?;
 
     let action = match action_str {
         "checkpoint" => StepAction::Checkpoint,
-        "click" => StepAction::Click(s["target"].as_str()?.to_string()),
+        "click" => StepAction::Click(required_workflow_step_string(s, &id, "target")?),
         "type" => StepAction::Type(
-            s["target"].as_str()?.to_string(),
-            s["text"].as_str().unwrap_or("").to_string(),
+            required_workflow_step_string(s, &id, "target")?,
+            required_workflow_step_string(s, &id, "text")?,
         ),
-        "wait" => StepAction::Wait(s["target"].as_str()?.to_string()),
-        "assert" => StepAction::Assert(s["target"].as_str()?.to_string()),
-        _ => return None,
+        "wait" => StepAction::Wait(required_workflow_step_string(s, &id, "target")?),
+        "assert" => StepAction::Assert(required_workflow_step_string(s, &id, "target")?),
+        other => return Err(format!("Workflow step '{id}' has unknown action: {other}")),
     };
 
-    Some(DurableStep::with_config(
+    Ok(DurableStep::with_config(
         id,
         action,
         max_retries,
         timeout_ms,
     ))
+}
+
+fn reject_unknown_fields(value: &Value, allowed: &[&str]) -> Result<(), String> {
+    let Some(obj) = value.as_object() else {
+        return Ok(());
+    };
+
+    for key in obj.keys() {
+        if !allowed.iter().any(|allowed_key| allowed_key == key) {
+            return Err(format!("unknown field: {key}"));
+        }
+    }
+
+    Ok(())
+}
+
+fn required_workflow_step_string(
+    value: &Value,
+    step_id: &str,
+    field: &str,
+) -> Result<String, String> {
+    match value.get(field) {
+        Some(Value::String(s)) => Ok(s.clone()),
+        _ => Err(format!(
+            "Workflow step '{step_id}' missing string field: {field}"
+        )),
+    }
+}
+
+fn parse_optional_workflow_u32_field(
+    value: &Value,
+    field: &str,
+    default: u32,
+) -> Result<u32, String> {
+    match value.get(field) {
+        None => Ok(default),
+        Some(Value::Number(n)) => {
+            let raw = n.as_u64().ok_or_else(|| {
+                format!("Workflow field '{field}' must be a non-negative integer")
+            })?;
+            u32::try_from(raw).map_err(|_| format!("Workflow field '{field}' exceeds u32 range"))
+        }
+        _ => Err(format!(
+            "Workflow field '{field}' must be a non-negative integer"
+        )),
+    }
+}
+
+fn parse_optional_workflow_u64_field(
+    value: &Value,
+    field: &str,
+    default: u64,
+) -> Result<u64, String> {
+    match value.get(field) {
+        None => Ok(default),
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .ok_or_else(|| format!("Workflow field '{field}' must be a non-negative integer")),
+        _ => Err(format!(
+            "Workflow field '{field}' must be a non-negative integer"
+        )),
+    }
 }
 
 /// Return a stable display label for a [`StepAction`] variant.
@@ -2887,6 +3014,31 @@ mod tests {
     }
 
     #[test]
+    fn ax_workflow_create_rejects_unknown_fields() {
+        // GIVEN: extra top-level fields outside the published schema
+        let wf = make_workflows();
+        let result = super::handle_ax_workflow_create(
+            &json!({"name": "wf", "steps": [], "extra": true}),
+            &wf,
+        );
+
+        // THEN: runtime validation matches additionalProperties=false
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
+    fn ax_workflow_create_rejects_null_steps() {
+        // GIVEN: explicit null instead of an array
+        let wf = make_workflows();
+        let result = super::handle_ax_workflow_create(&json!({"name": "wf", "steps": null}), &wf);
+
+        // THEN: explicit null does not silently degrade into an empty workflow
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "Field 'steps' must be an array");
+    }
+
+    #[test]
     fn ax_workflow_create_stores_parsed_steps() {
         // GIVEN: two step definitions
         let wf = make_workflows();
@@ -2909,6 +3061,38 @@ mod tests {
         assert_eq!(guard["two-step-wf"].steps.len(), 2);
     }
 
+    #[test]
+    fn ax_workflow_create_rejects_duplicate_workflow_names() {
+        // GIVEN: a workflow already stored under the requested name
+        let wf = make_workflows();
+        super::handle_ax_workflow_create(
+            &json!({
+                "name": "duplicate-wf",
+                "steps": [{ "id": "s1", "action": "checkpoint" }]
+            }),
+            &wf,
+        );
+
+        // WHEN: creating another workflow with the same name
+        let result = super::handle_ax_workflow_create(
+            &json!({
+                "name": "duplicate-wf",
+                "steps": [{ "id": "s2", "action": "checkpoint" }]
+            }),
+            &wf,
+        );
+
+        // THEN: the existing workflow is preserved and the duplicate is rejected
+        assert!(result.is_error);
+        assert_eq!(
+            result.content[0].text,
+            "Workflow 'duplicate-wf' already exists — choose a unique name"
+        );
+        let guard = wf.lock().unwrap();
+        assert_eq!(guard["duplicate-wf"].steps.len(), 1);
+        assert_eq!(guard["duplicate-wf"].steps[0].id, "s1");
+    }
+
     // -----------------------------------------------------------------------
     // ax_workflow_step handler
     // -----------------------------------------------------------------------
@@ -2923,6 +3107,28 @@ mod tests {
         // THEN: error payload
         assert!(result.is_error);
         assert!(result.content[0].text.contains("Missing"));
+    }
+
+    #[test]
+    fn ax_workflow_step_rejects_unknown_fields() {
+        // GIVEN: a valid workflow plus an extra field
+        let wf = make_workflows();
+        super::handle_ax_workflow_create(
+            &json!({"name": "step-wf", "steps": [{ "id": "s1", "action": "checkpoint" }]}),
+            &wf,
+        );
+        let mut out = Vec::<u8>::new();
+
+        // WHEN: stepping with schema-invalid extra input
+        let result = super::handle_ax_workflow_step(
+            &json!({"name": "step-wf", "extra": true}),
+            &wf,
+            &mut out,
+        );
+
+        // THEN: runtime rejects the unsupported field
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
     }
 
     #[test]
@@ -3023,6 +3229,24 @@ mod tests {
     }
 
     #[test]
+    fn ax_workflow_status_rejects_unknown_fields() {
+        // GIVEN: a valid workflow plus an extra field
+        let wf = make_workflows();
+        super::handle_ax_workflow_create(
+            &json!({"name": "status-wf", "steps": [{ "id": "s1", "action": "checkpoint" }]}),
+            &wf,
+        );
+
+        // WHEN: checking status with schema-invalid extra input
+        let result =
+            super::handle_ax_workflow_status(&json!({"name": "status-wf", "extra": true}), &wf);
+
+        // THEN: runtime rejects the unsupported field
+        assert!(result.is_error);
+        assert_eq!(result.content[0].text, "unknown field: extra");
+    }
+
+    #[test]
     fn ax_workflow_status_unknown_workflow_returns_error() {
         // GIVEN: workflow not created
         let wf = make_workflows();
@@ -3068,23 +3292,24 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn parse_workflow_steps_returns_empty_for_null() {
+    fn parse_workflow_steps_rejects_null_steps() {
         // GIVEN: null value
-        let steps = super::parse_workflow_steps(&json!(null));
-        // THEN: empty vec, no panic
-        assert!(steps.is_empty());
+        let result = super::parse_workflow_steps(&json!(null));
+        // THEN: explicit null is rejected instead of degrading into an empty list
+        assert_eq!(result.unwrap_err(), "Field 'steps' must be an array");
     }
 
     #[test]
-    fn parse_workflow_steps_skips_unknown_actions() {
-        // GIVEN: one valid step and one with an unknown action
-        let steps = super::parse_workflow_steps(&json!([
-            { "id": "s1", "action": "click", "target": "OK" },
-            { "id": "s2", "action": "teleport" }
+    fn parse_workflow_steps_rejects_unknown_actions() {
+        // GIVEN: a step with an unsupported action
+        let result = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "teleport" }
         ]));
-        // THEN: only the valid step survives
-        assert_eq!(steps.len(), 1);
-        assert_eq!(steps[0].id, "s1");
+        // THEN: workflow creation would fail instead of silently dropping the step
+        assert_eq!(
+            result.unwrap_err(),
+            "Workflow step 's1' has unknown action: teleport"
+        );
     }
 
     #[test]
@@ -3096,9 +3321,49 @@ mod tests {
             { "id": "w",  "action": "wait",        "target": "Spinner" },
             { "id": "a",  "action": "assert",      "target": "Result"  },
             { "id": "cp", "action": "checkpoint" }
-        ]));
+        ]))
+        .unwrap();
         // THEN: all five steps parsed
         assert_eq!(steps.len(), 5);
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_type_without_text() {
+        // GIVEN: a type step missing its required text payload
+        let result = super::parse_workflow_steps(&json!([
+            { "id": "type-1", "action": "type", "target": "Field" }
+        ]));
+
+        // THEN: the parser rejects the malformed step
+        assert_eq!(
+            result.unwrap_err(),
+            "Workflow step 'type-1' missing string field: text"
+        );
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_unknown_step_fields() {
+        // GIVEN: a step carrying an unsupported key
+        let result = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "checkpoint", "extra": true }
+        ]));
+
+        // THEN: the parser rejects the unknown field
+        assert_eq!(result.unwrap_err(), "unknown field: extra");
+    }
+
+    #[test]
+    fn parse_workflow_steps_rejects_invalid_retry_config() {
+        // GIVEN: a step with null retry config
+        let result = super::parse_workflow_steps(&json!([
+            { "id": "s1", "action": "checkpoint", "max_retries": null }
+        ]));
+
+        // THEN: retry config must be a non-negative integer
+        assert_eq!(
+            result.unwrap_err(),
+            "Workflow field 'max_retries' must be a non-negative integer"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -4959,39 +5224,6 @@ mod tests {
         // THEN: error mentioning the unknown action_type
         assert!(result.is_error);
         assert!(result.content[0].text.contains("teleport"));
-    }
-
-    // -----------------------------------------------------------------------
-    // ax_workflow_create — overwrite semantics
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn ax_workflow_create_overwrites_existing_workflow() {
-        // GIVEN: workflow created with 2 steps
-        let wf = make_workflows();
-        super::handle_ax_workflow_create(
-            &json!({
-                "name": "overwrite-wf",
-                "steps": [
-                    { "id": "s1", "action": "click", "target": "A" },
-                    { "id": "s2", "action": "click", "target": "B" }
-                ]
-            }),
-            &wf,
-        );
-        // WHEN: same name created with 1 step
-        let result = super::handle_ax_workflow_create(
-            &json!({
-                "name": "overwrite-wf",
-                "steps": [{ "id": "only", "action": "checkpoint" }]
-            }),
-            &wf,
-        );
-        // THEN: step_count reflects the new definition
-        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
-        assert_eq!(v["step_count"], 1);
-        let guard = wf.lock().unwrap();
-        assert_eq!(guard["overwrite-wf"].steps.len(), 1);
     }
 
     // -----------------------------------------------------------------------
