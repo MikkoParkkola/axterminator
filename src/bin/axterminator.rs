@@ -1032,7 +1032,12 @@ mod tests {
         let cli = parse(&["mcp", "install"]).unwrap();
         match cli.command {
             Commands::Mcp {
-                subcommand: McpSubcommand::Install { client, force, dry_run },
+                subcommand:
+                    McpSubcommand::Install {
+                        client,
+                        force,
+                        dry_run,
+                    },
             } => {
                 assert_eq!(client, "claude-desktop");
                 assert!(!force);

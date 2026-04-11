@@ -3218,10 +3218,11 @@ mod tests {
     // ax_analyze — unit tests for the three pure intelligence helpers
     // -----------------------------------------------------------------------
 
+    /// (role, title, label, identifier) — describes one mock UI node.
+    type NodeTuple<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Option<&'a str>);
+
     // Helper: build a SceneGraph from a list of (role, title, label, identifier) tuples.
-    fn make_scene(
-        nodes: &[(&str, Option<&str>, Option<&str>, Option<&str>)],
-    ) -> crate::intent::SceneGraph {
+    fn make_scene(nodes: &[NodeTuple<'_>]) -> crate::intent::SceneGraph {
         let mut g = crate::intent::SceneGraph::empty();
         for (role, title, label, identifier) in nodes {
             let node = crate::intent::SceneNode {
@@ -4248,9 +4249,7 @@ mod tests {
     // audit_node / audit_accessibility — pure unit tests (no live app)
     // -----------------------------------------------------------------------
 
-    fn make_a11y_scene(
-        nodes: &[(&str, Option<&str>, Option<&str>, Option<&str>)],
-    ) -> crate::intent::SceneGraph {
+    fn make_a11y_scene(nodes: &[NodeTuple<'_>]) -> crate::intent::SceneGraph {
         let mut g = crate::intent::SceneGraph::empty();
         for (role, title, label, description) in nodes {
             let node = crate::intent::SceneNode {
@@ -4311,8 +4310,7 @@ mod tests {
     fn audit_accessibility_all_interactive_roles_flagged_when_unlabeled() {
         // GIVEN: one unlabeled node per interactive role
         let roles = super::INTERACTIVE_ROLES;
-        let nodes: Vec<(&str, Option<&str>, Option<&str>, Option<&str>)> =
-            roles.iter().map(|r| (*r, None, None, None)).collect();
+        let nodes: Vec<NodeTuple<'_>> = roles.iter().map(|r| (*r, None, None, None)).collect();
         let scene = make_a11y_scene(&nodes);
         // WHEN: auditing
         let issues = super::audit_accessibility(&scene);
@@ -4599,8 +4597,7 @@ mod tests {
     #[test]
     fn detect_patterns_text_editor_from_text_area_with_many_nodes() {
         // GIVEN: AXTextArea with >10 surrounding nodes (no toolbar required)
-        let mut nodes: Vec<(&str, Option<&str>, Option<&str>, Option<&str>)> =
-            vec![("AXTextArea", None, None, None)];
+        let mut nodes: Vec<NodeTuple<'_>> = vec![("AXTextArea", None, None, None)];
         for _ in 0..11 {
             nodes.push(("AXStaticText", None, None, None));
         }

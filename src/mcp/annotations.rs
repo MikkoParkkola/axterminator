@@ -74,6 +74,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn read_only_annotations_are_safe() {
         assert!(READ_ONLY.read_only);
         assert!(!READ_ONLY.destructive);
@@ -82,6 +83,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn connect_annotations_are_not_read_only() {
         assert!(!CONNECT.read_only);
         assert!(CONNECT.idempotent);
@@ -90,6 +92,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn action_is_not_idempotent() {
         assert!(!ACTION.idempotent);
         assert!(!ACTION.read_only);
@@ -97,6 +100,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn destructive_annotations_flag_correctly() {
         assert!(DESTRUCTIVE.destructive);
         assert!(!DESTRUCTIVE.idempotent);
@@ -104,6 +108,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn open_world_sets_open_world_flag() {
         // GIVEN: OPEN_WORLD constant
         // WHEN: inspected

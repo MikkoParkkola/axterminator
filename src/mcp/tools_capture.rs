@@ -442,6 +442,7 @@ fn parse_capture_config(args: &Value) -> CaptureConfig {
 /// Exposed as `pub(crate)` so that sibling test modules (e.g.
 /// `resources::tests`) can acquire the same lock.
 #[cfg(test)]
+#[allow(dead_code)] // used by sibling test modules (resources::tests, server_tests)
 pub(crate) fn session_test_lock() -> &'static std::sync::Mutex<()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))

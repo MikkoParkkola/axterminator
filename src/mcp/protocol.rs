@@ -758,8 +758,10 @@ mod tests {
     #[test]
     fn supports_elicitation_true_when_set() {
         // GIVEN: capabilities with elicitation key
-        let mut caps = ClientCapabilities::default();
-        caps.elicitation = Some(json!({}));
+        let caps = ClientCapabilities {
+            elicitation: Some(json!({})),
+            ..Default::default()
+        };
         // THEN: elicitation supported
         assert!(caps.supports_elicitation());
     }
@@ -772,8 +774,10 @@ mod tests {
 
     #[test]
     fn supports_sampling_true_when_set() {
-        let mut caps = ClientCapabilities::default();
-        caps.sampling = Some(json!({"createMessage": {}}));
+        let caps = ClientCapabilities {
+            sampling: Some(json!({"createMessage": {}})),
+            ..Default::default()
+        };
         assert!(caps.supports_sampling());
     }
 }
