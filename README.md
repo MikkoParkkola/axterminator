@@ -47,6 +47,8 @@ cargo build --release --features cli
 
 ### Connect your AI agent
 
+**Automatic** (recommended):
+
 ```bash
 axterminator mcp install                       # Claude Desktop (default)
 axterminator mcp install --client cursor       # Cursor
@@ -55,12 +57,7 @@ axterminator mcp install --client claude-code  # Claude Code
 axterminator mcp install --dry-run             # Preview without writing
 ```
 
-This auto-detects the config file, backs up any existing config, and preserves other MCP server entries.
-
-<details>
-<summary>Manual config (Codex, OpenCode, or other clients)</summary>
-
-Add to your MCP config JSON:
+**Manual** -- add to your MCP client config (Claude Desktop, Cursor, Windsurf, etc.):
 
 ```json
 {
@@ -72,6 +69,9 @@ Add to your MCP config JSON:
   }
 }
 ```
+
+<details>
+<summary>Codex config</summary>
 
 For Codex (`~/.codex/config.toml`):
 
