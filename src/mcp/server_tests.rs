@@ -925,7 +925,7 @@ fn tools_list_returns_exactly_34_base_tools_with_default_features() {
     assert_eq!(
         tools.len(),
         expected,
-        "expected {expected} tools but got {}; base=36 + context_loc={extra_context_location} + spaces={extra_spaces} + \
+        "expected {expected} tools but got {}; base=35 + context_loc={extra_context_location} + spaces={extra_spaces} + \
          audio={extra_audio} + camera={extra_camera} + watch={extra_watch} + docker={extra_docker}",
         tools.len()
     );

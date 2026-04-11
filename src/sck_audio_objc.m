@@ -307,7 +307,15 @@ AXTSCKCaptureResult axt_sck_capture_system_audio(float duration_secs) {
         dispatch_time_t timeout = dispatch_time(
             DISPATCH_TIME_NOW,
             (int64_t)((captureDuration + 15.0f) * (float)NSEC_PER_SEC));
-        dispatch_semaphore_wait(doneSem, timeout);
+        long waited = dispatch_semaphore_wait(doneSem, timeout);
+        if (waited != 0) {
+            // Timed out — the async block may still be running.  Mark the
+            // result as an error so the Rust caller does not consume stale
+            // or partially-written data.
+            blockResult.error_code = 1;
+            snprintf(blockResult.error_msg, sizeof(blockResult.error_msg),
+                     "System audio capture timed out");
+        }
 
         result = blockResult;
         return result;

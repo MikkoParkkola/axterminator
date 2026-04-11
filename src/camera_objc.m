@@ -90,7 +90,8 @@ int av_request_camera_access(void) {
         granted = g;
         dispatch_semaphore_signal(sema);
     }];
-    dispatch_semaphore_wait(sema, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC));
+    long waited = dispatch_semaphore_wait(sema, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC));
+    if (waited != 0) return 0;  // timed out — treat as denied
     return granted ? 1 : 0;
 }
 
