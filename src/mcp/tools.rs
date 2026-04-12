@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use crate::app::AXApp;
 use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::security::SecurityMode;
 use crate::mcp::tools_handlers::{
     handle_click, handle_click_at, handle_connect, handle_find, handle_find_visual,
     handle_get_value, handle_is_accessible, handle_list_windows, handle_screenshot,
@@ -118,6 +119,15 @@ pub fn all_tools() -> Vec<Tool> {
     ];
     tools.extend(crate::mcp::tools_extended::extended_tools());
     tools
+}
+
+/// All tools visible in the given security mode.
+#[must_use]
+pub fn tools_for_mode(security_mode: SecurityMode) -> Vec<Tool> {
+    all_tools()
+        .into_iter()
+        .filter(|tool| security_mode.is_tool_allowed(tool.name))
+        .collect()
 }
 
 fn tool_ax_is_accessible() -> Tool {
@@ -545,6 +555,17 @@ pub fn call_tool<W: std::io::Write>(
     registry: &Arc<AppRegistry>,
     out: &mut W,
 ) -> ToolCallResult {
+    call_tool_with_mode(name, args, registry, SecurityMode::Normal, out)
+}
+
+/// Dispatch a `tools/call` invocation using an explicit security mode.
+pub fn call_tool_with_mode<W: std::io::Write>(
+    name: &str,
+    args: &Value,
+    registry: &Arc<AppRegistry>,
+    security_mode: SecurityMode,
+    out: &mut W,
+) -> ToolCallResult {
     match name {
         "ax_is_accessible" => handle_is_accessible(),
         "ax_connect" => handle_connect(args, registry),
@@ -568,9 +589,13 @@ pub fn call_tool<W: std::io::Write>(
         "ax_find_visual" => handle_find_visual(args, registry),
         "ax_wait_idle" => handle_wait_idle(args, registry),
         other => {
-            if let Some(result) =
-                crate::mcp::tools_extended::call_tool_extended(other, args, registry, out)
-            {
+            if let Some(result) = crate::mcp::tools_extended::call_tool_extended_with_mode(
+                other,
+                args,
+                registry,
+                security_mode,
+                out,
+            ) {
                 return result;
             }
             ToolCallResult::error(format!("Unknown tool: {other}"))

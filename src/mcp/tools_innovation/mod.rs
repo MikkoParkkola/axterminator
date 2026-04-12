@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 use crate::mcp::annotations;
 use crate::mcp::progress::ProgressReporter;
 use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::security::SecurityMode;
 use crate::mcp::server::WorkflowState;
 use crate::mcp::tools::AppRegistry;
 
@@ -566,10 +567,22 @@ fn tool_ax_record() -> Tool {
 ///
 /// Workflow tools (`ax_workflow_*`) require session state and are dispatched
 /// separately via [`call_workflow_tool`].
+#[cfg(test)]
 pub(crate) fn call_tool_innovation<W: Write>(
     name: &str,
     args: &Value,
     registry: &Arc<AppRegistry>,
+    out: &mut W,
+) -> Option<ToolCallResult> {
+    call_tool_innovation_with_mode(name, args, registry, SecurityMode::Normal, out)
+}
+
+/// Dispatch an innovation tool call using an explicit security mode.
+pub(crate) fn call_tool_innovation_with_mode<W: Write>(
+    name: &str,
+    args: &Value,
+    registry: &Arc<AppRegistry>,
+    security_mode: SecurityMode,
     out: &mut W,
 ) -> Option<ToolCallResult> {
     match name {
@@ -580,8 +593,12 @@ pub(crate) fn call_tool_innovation<W: Write>(
         "ax_record" => Some(handle_ax_record(args)),
         "ax_analyze" => Some(handle_ax_analyze(args, registry)),
         "ax_run_script" => Some(handle_ax_run_script(args)),
-        "ax_clipboard" => Some(handle_ax_clipboard(args)),
-        "ax_session_info" => Some(handle_ax_session_info(args, registry)),
+        "ax_clipboard" => Some(handle_ax_clipboard_with_mode(args, security_mode)),
+        "ax_session_info" => Some(handle_ax_session_info_with_mode(
+            args,
+            registry,
+            security_mode,
+        )),
         "ax_undo" => Some(handle_ax_undo(args)),
         "ax_visual_diff" => Some(handle_ax_visual_diff(args, registry)),
         "ax_a11y_audit" => Some(handle_ax_a11y_audit(args, registry)),
@@ -1981,8 +1998,9 @@ fn tool_ax_session_info() -> Tool {
         name: "ax_session_info",
         title: "Server session state",
         description: "Return server session information: the names of all connected apps, \
-            the total number of registered tools, the active security mode, and the server \
-            version. Useful for health-checks and debugging MCP client state.",
+            the number of tools currently available in the active security mode, the active \
+            security mode itself, and the server version. Useful for health-checks and \
+            debugging MCP client state.",
         input_schema: json!({
             "type": "object",
             "properties": {},
@@ -2051,10 +2069,15 @@ fn tool_ax_undo() -> Tool {
 /// Handle `ax_clipboard` — read from or write to the macOS system clipboard.
 ///
 /// Writes are blocked when running in [`SecurityMode::Sandboxed`].
+#[cfg(test)]
 fn handle_ax_clipboard(args: &Value) -> ToolCallResult {
+    handle_ax_clipboard_with_mode(args, SecurityMode::Normal)
+}
+
+fn handle_ax_clipboard_with_mode(args: &Value, security_mode: SecurityMode) -> ToolCallResult {
     match args["action"].as_str() {
         Some("read") => clipboard_read(),
-        Some("write") => clipboard_write(args),
+        Some("write") => clipboard_write(args, security_mode),
         Some(other) => ToolCallResult::error(format!("Unknown clipboard action: '{other}'")),
         None => ToolCallResult::error("Missing required field: action"),
     }
@@ -2073,10 +2096,8 @@ fn clipboard_read() -> ToolCallResult {
     }
 }
 
-fn clipboard_write(args: &Value) -> ToolCallResult {
-    use crate::mcp::security::SecurityMode;
-
-    if SecurityMode::from_env() == SecurityMode::Sandboxed {
+fn clipboard_write(args: &Value, security_mode: SecurityMode) -> ToolCallResult {
+    if security_mode == SecurityMode::Sandboxed {
         return ToolCallResult::error("ax_clipboard write is blocked in sandboxed security mode");
     }
 
@@ -2104,27 +2125,36 @@ fn clipboard_write(args: &Value) -> ToolCallResult {
 /// Handle `ax_session_info` — return a snapshot of server session state.
 ///
 /// All data is read-only; no parameters are required.
+#[cfg(test)]
 fn handle_ax_session_info(_args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    use crate::mcp::security::SecurityMode;
+    handle_ax_session_info_with_mode(_args, registry, SecurityMode::Normal)
+}
 
+fn handle_ax_session_info_with_mode(
+    _args: &Value,
+    registry: &Arc<AppRegistry>,
+    security_mode: SecurityMode,
+) -> ToolCallResult {
     let connected_apps = registry.connected_names();
-    let tool_count =
-        crate::mcp::tools::all_tools().len() + crate::mcp::tools_extended::extended_tools().len();
-    let security_mode = match SecurityMode::from_env() {
-        SecurityMode::Normal => "normal",
-        SecurityMode::Safe => "safe",
-        SecurityMode::Sandboxed => "sandboxed",
-    };
+    let tool_count = crate::mcp::tools::tools_for_mode(security_mode).len();
 
     ToolCallResult::ok(
         json!({
             "connected_apps": connected_apps,
             "tool_count":     tool_count,
-            "security_mode":  security_mode,
+            "security_mode":  security_mode_name(security_mode),
             "version":        env!("CARGO_PKG_VERSION")
         })
         .to_string(),
     )
+}
+
+fn security_mode_name(security_mode: SecurityMode) -> &'static str {
+    match security_mode {
+        SecurityMode::Normal => "normal",
+        SecurityMode::Safe => "safe",
+        SecurityMode::Sandboxed => "sandboxed",
+    }
 }
 
 // ---------------------------------------------------------------------------

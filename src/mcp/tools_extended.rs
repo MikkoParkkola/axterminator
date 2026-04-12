@@ -27,6 +27,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::mcp::protocol::{Tool, ToolCallResult};
+use crate::mcp::security::SecurityMode;
 use crate::mcp::tools::AppRegistry;
 
 // Re-export public camera helpers used by resources.rs.
@@ -102,6 +103,17 @@ pub fn call_tool_extended<W: Write>(
     registry: &Arc<AppRegistry>,
     out: &mut W,
 ) -> Option<ToolCallResult> {
+    call_tool_extended_with_mode(name, args, registry, SecurityMode::Normal, out)
+}
+
+/// Dispatch a Phase 3 tool call using an explicit security mode.
+pub fn call_tool_extended_with_mode<W: Write>(
+    name: &str,
+    args: &Value,
+    registry: &Arc<AppRegistry>,
+    security_mode: SecurityMode,
+    out: &mut W,
+) -> Option<ToolCallResult> {
     match name {
         "ax_scroll" => Some(crate::mcp::tools_gui::handle_scroll(args, registry)),
         "ax_key_press" => Some(crate::mcp::tools_gui::handle_key_press(args, registry)),
@@ -155,9 +167,13 @@ pub fn call_tool_extended<W: Write>(
         // extended dispatcher.  These are dispatched by the server's handle_tools_call
         // via the Server::call_watch_tool helper instead.
         _ => {
-            if let Some(result) =
-                crate::mcp::tools_innovation::call_tool_innovation(name, args, registry, out)
-            {
+            if let Some(result) = crate::mcp::tools_innovation::call_tool_innovation_with_mode(
+                name,
+                args,
+                registry,
+                security_mode,
+                out,
+            ) {
                 return Some(result);
             }
             None

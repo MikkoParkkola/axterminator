@@ -39,7 +39,7 @@ use crate::mcp::protocol::{
     JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestId, RpcError, TaskInfo,
     ToolCallResult,
 };
-use crate::mcp::security::SecurityGuard;
+use crate::mcp::security::{SecurityGuard, SecurityMode};
 use crate::mcp::tools::AppRegistry;
 
 // ---------------------------------------------------------------------------
@@ -130,13 +130,21 @@ pub(super) struct Server {
 
 impl Server {
     pub(super) fn new() -> Self {
+        Self::with_security(SecurityGuard::new())
+    }
+
+    pub(super) fn new_with_security_mode(mode: SecurityMode) -> Self {
+        Self::with_security(SecurityGuard::with_mode(mode))
+    }
+
+    fn with_security(security: SecurityGuard) -> Self {
         Self {
             registry: Arc::new(AppRegistry::default()),
             phase: Phase::Uninitialized,
             workflows: Arc::new(Mutex::new(HashMap::new())),
             subscriptions: Arc::new(Mutex::new(HashSet::new())),
             tasks: Arc::new(Mutex::new(HashMap::new())),
-            security: SecurityGuard::new(),
+            security,
             client_supports_sampling: false,
             #[cfg(feature = "watch")]
             watch_state: Arc::new(crate::mcp::tools_watch::WatchState::new()),
@@ -282,6 +290,12 @@ impl ServerHandle {
     #[must_use]
     pub fn new() -> Self {
         Self(Server::new())
+    }
+
+    /// Create a new, uninitialised server handle with an explicit security mode.
+    #[must_use]
+    pub fn new_with_security_mode(mode: SecurityMode) -> Self {
+        Self(Server::new_with_security_mode(mode))
     }
 
     /// Route one JSON-RPC message through the server.

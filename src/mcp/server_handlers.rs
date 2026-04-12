@@ -22,7 +22,7 @@ use crate::mcp::protocol::{
     ToolsCapability,
 };
 use crate::mcp::security::SecurityMode;
-use crate::mcp::tools::call_tool;
+use crate::mcp::tools::{call_tool_with_mode, tools_for_mode};
 
 use super::server::{next_task_id, Phase, Server, TaskEntry};
 
@@ -77,14 +77,7 @@ impl Server {
     // -----------------------------------------------------------------------
 
     pub(super) fn handle_tools_list(&self, id: RequestId) -> JsonRpcResponse {
-        let all = crate::mcp::tools::all_tools();
-        let tools = if self.security.mode() == SecurityMode::Sandboxed {
-            all.into_iter()
-                .filter(|t| self.security.mode().is_tool_allowed(t.name))
-                .collect()
-        } else {
-            all
-        };
+        let tools = tools_for_mode(self.security.mode());
         let result = ToolListResult { tools };
         JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
     }
@@ -163,6 +156,7 @@ impl Server {
         let registry = Arc::clone(&self.registry);
         let workflows = Arc::clone(&self.workflows);
         let subscriptions = Arc::clone(&self.subscriptions);
+        let security_mode = self.security.mode();
         let name = tool_name.to_owned();
 
         std::thread::spawn(move || {
@@ -176,6 +170,7 @@ impl Server {
                 &registry,
                 &workflows,
                 &subscriptions,
+                security_mode,
                 &mut sink,
             );
 
@@ -567,7 +562,7 @@ impl Server {
             }
             r
         } else {
-            let r = call_tool(name, args, &self.registry, out);
+            let r = call_tool_with_mode(name, args, &self.registry, self.security.mode(), out);
             if !r.is_error {
                 self.notify_subscribed(name, args, out);
             }
@@ -686,6 +681,7 @@ fn execute_tool_background<W: Write>(
         std::sync::Mutex<std::collections::HashMap<String, super::server::WorkflowState>>,
     >,
     subscriptions: &std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    security_mode: SecurityMode,
     out: &mut W,
 ) -> crate::mcp::protocol::ToolCallResult {
     if let Some(result) =
@@ -694,7 +690,7 @@ fn execute_tool_background<W: Write>(
         notify_subscribed_bg(name, args, subscriptions, out);
         return result;
     }
-    let result = call_tool(name, args, registry, out);
+    let result = call_tool_with_mode(name, args, registry, security_mode, out);
     if !result.is_error {
         notify_subscribed_bg(name, args, subscriptions, out);
     }

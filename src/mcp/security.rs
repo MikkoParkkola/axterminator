@@ -133,6 +133,7 @@ fn is_read_only_tool(name: &str) -> bool {
             | "ax_query"
             | "ax_analyze"
             | "ax_app_profile"
+            | "ax_session_info"
             | "ax_watch_start"
             | "ax_watch_stop"
             | "ax_watch_status"
@@ -160,6 +161,7 @@ pub fn is_mutating_tool(name: &str) -> bool {
             | "ax_query"
             | "ax_analyze"
             | "ax_app_profile"
+            | "ax_session_info"
             | "ax_watch_status"
     )
 }
@@ -395,8 +397,15 @@ impl SecurityGuard {
     /// Initialise from environment and config file.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_mode(SecurityMode::from_env())
+    }
+
+    /// Initialise with an explicit security mode while loading the normal
+    /// app-policy, rate limiter, and audit-log backends.
+    #[must_use]
+    pub fn with_mode(mode: SecurityMode) -> Self {
         Self {
-            mode: SecurityMode::from_env(),
+            mode,
             app_policy: AppPolicy::load(),
             rate_limiter: Mutex::new(RateLimiter::new()),
             audit: Mutex::new(AuditLog::open()),

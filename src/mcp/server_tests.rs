@@ -5,6 +5,8 @@
 use super::*;
 use serde_json::json;
 
+use crate::mcp::security::SecurityMode;
+
 fn make_request(id: i64, method: &str, params: Option<Value>) -> JsonRpcRequest {
     JsonRpcRequest {
         jsonrpc: "2.0".into(),
@@ -1359,28 +1361,8 @@ fn resources_subscribe_missing_params_returns_error() {
 
 #[test]
 fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
-    // GIVEN: sandboxed mode server — the env var is set before constructing
-    // the server so SecurityGuard::from_env() picks it up.
-    //
-    // Safety: `set_var` is unsafe in Rust 2024 because env mutations are not
-    // thread-safe. This test is deliberately isolated (no shared state with
-    // other tests) and the var is restored immediately after Server::new().
-    // The test passes `AXTERMINATOR_SECURITY_MODE` only for the narrow window
-    // of Server construction.
-    //
-    // IMPORTANT: do NOT run this test in parallel with other tests that also
-    // set AXTERMINATOR_SECURITY_MODE. The standard `cargo test` runner
-    // serialises tests within a process on a per-module basis, so the risk of
-    // interference with other *server_tests.rs* tests is low.
-    #[allow(unsafe_code)]
-    unsafe {
-        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
-    }
-    let mut s = Server::new();
-    #[allow(unsafe_code)]
-    unsafe {
-        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
-    }
+    // GIVEN: sandboxed mode server
+    let mut s = Server::new_with_security_mode(SecurityMode::Sandboxed);
     initialize_server(&mut s);
 
     // WHEN: tools/list in sandboxed mode
@@ -1418,6 +1400,7 @@ fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
         "ax_query",
         "ax_analyze",
         "ax_app_profile",
+        "ax_session_info",
         "ax_watch_start",
         "ax_watch_stop",
         "ax_watch_status",
@@ -1429,6 +1412,55 @@ fn security_mode_sandboxed_filters_tools_list_to_read_only_set() {
             "sandboxed tools/list contains non-read-only tool '{name}'"
         );
     }
+}
+
+#[test]
+fn security_mode_safe_filters_tools_list_to_non_script_tools() {
+    // GIVEN: safe mode server
+    let mut s = Server::new_with_security_mode(SecurityMode::Safe);
+    initialize_server(&mut s);
+
+    // WHEN: tools/list in safe mode
+    let v = send(&mut s, 131, "tools/list", None);
+    let tools = v["result"]["tools"].as_array().unwrap();
+    let names: std::collections::HashSet<&str> = tools
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+
+    // THEN: scripting is filtered but non-script tools remain
+    assert!(!names.contains("ax_run_script"));
+    assert!(names.contains("ax_clipboard"));
+}
+
+#[test]
+fn security_mode_sandboxed_session_info_matches_tools_list() {
+    // GIVEN: sandboxed mode server
+    let mut s = Server::new_with_security_mode(SecurityMode::Sandboxed);
+    initialize_server(&mut s);
+
+    // WHEN: reading tools/list and ax_session_info from the same server
+    let tools_list = send(&mut s, 132, "tools/list", None);
+    let listed_tools = tools_list["result"]["tools"].as_array().unwrap();
+    let session_info = send(
+        &mut s,
+        133,
+        "tools/call",
+        Some(json!({ "name": "ax_session_info", "arguments": {} })),
+    );
+    let payload: Value = serde_json::from_str(
+        session_info["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+
+    // THEN: session_info reflects the same security mode and visible tool count
+    assert_eq!(payload["security_mode"], "sandboxed");
+    assert_eq!(
+        payload["tool_count"].as_u64().unwrap() as usize,
+        listed_tools.len()
+    );
 }
 
 // -----------------------------------------------------------------------
