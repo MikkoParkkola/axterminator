@@ -353,6 +353,13 @@ impl HeuristicSync {
     /// * `hasher` - Hasher to accumulate hash values
     /// * `depth` - Current depth in tree (limits recursion to prevent infinite loops)
     fn hash_element(&self, element: AXUIElementRef, hasher: &mut DefaultHasher, depth: usize) {
+        // Null element guard — prevents SIGSEGV when called with a null
+        // AXUIElementRef (e.g. when an app has no accessibility tree yet,
+        // or in tests using mock null pointers).
+        if element.is_null() {
+            return;
+        }
+
         // Limit depth to prevent infinite recursion on cyclic structures
         const MAX_DEPTH: usize = 20;
         if depth >= MAX_DEPTH {
