@@ -4,6 +4,7 @@
 //! |------|---------|
 //! | `ax_listen`        | Capture audio and optionally transcribe |
 //! | `ax_speak`         | Synthesize and play text as speech |
+//! | `ax_audio_voices`  | List installed macOS text-to-speech voices |
 //! | `ax_audio_devices` | List available audio input/output devices |
 //!
 //! All functions are gated behind `#[cfg(feature = "audio")]`.
@@ -24,7 +25,12 @@ use crate::mcp::protocol::{Tool, ToolCallResult};
 /// All audio tools registered when the `audio` feature is active.
 #[cfg(feature = "audio")]
 pub(crate) fn audio_tools() -> Vec<Tool> {
-    vec![tool_ax_listen(), tool_ax_speak(), tool_ax_audio_devices()]
+    vec![
+        tool_ax_listen(),
+        tool_ax_speak(),
+        tool_ax_audio_voices(),
+        tool_ax_audio_devices(),
+    ]
 }
 
 #[cfg(feature = "audio")]
@@ -153,19 +159,28 @@ fn tool_ax_speak() -> Tool {
         name: "ax_speak",
         title: "Synthesize and play text as speech",
         description: "Speak `text` through the default system audio output using \
-            NSSpeechSynthesizer (on-device, no network). Blocks until synthesis \
-            completes and returns the elapsed duration.\n\
+            NSSpeechSynthesizer (on-device, no network). Pass `voice` to select a \
+            specific installed macOS voice identifier from `ax_audio_voices`. \
+            Blocks until synthesis completes and returns the elapsed duration.\n\
             \n\
             Useful for: testing VoiceOver integrations, verifying audio feedback, \
             injecting voice prompts into the agent workflow.\n\
             \n\
-            Example: `{\"text\": \"Test complete\"}`",
+            Example: `{\"text\": \"Test complete\"}`\n\
+            \n\
+            Example with a specific voice: \
+            `{\"text\": \"System ready\", \"voice\": \"com.apple.speech.synthesis.voice.Alex\"}`",
         input_schema: json!({
             "type": "object",
             "properties": {
                 "text": {
                     "type": "string",
                     "description": "Text to synthesize and speak"
+                },
+                "voice": {
+                    "type": "string",
+                    "description": "Optional macOS speech voice identifier from `ax_audio_voices`. \
+                        When omitted, the current system default voice is used."
                 }
             },
             "required": ["text"],
@@ -175,11 +190,36 @@ fn tool_ax_speak() -> Tool {
             "type": "object",
             "properties": {
                 "spoken":      { "type": "boolean" },
-                "duration_ms": { "type": "integer" }
+                "duration_ms": { "type": "integer" },
+                "voice_used":  { "type": "string" }
             },
-            "required": ["spoken", "duration_ms"]
+            "required": ["spoken", "duration_ms", "voice_used"]
         }),
         annotations: annotations::ACTION,
+    }
+}
+
+#[cfg(feature = "audio")]
+fn tool_ax_audio_voices() -> Tool {
+    Tool {
+        name: "ax_audio_voices",
+        title: "List installed macOS speech voices",
+        description: "Enumerate the macOS `NSSpeechSynthesizer` voice identifiers \
+            available on this machine. Use these identifiers with `ax_speak.voice` \
+            to request a specific system voice.",
+        input_schema: json!({ "type": "object", "additionalProperties": false }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {
+                "voice_count": { "type": "integer" },
+                "voices": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                }
+            },
+            "required": ["voice_count", "voices"]
+        }),
+        annotations: annotations::READ_ONLY,
     }
 }
 
@@ -335,15 +375,42 @@ pub(crate) fn handle_ax_speak(args: &Value) -> ToolCallResult {
     let Some(text) = args["text"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: text");
     };
+    let voice = match args["voice"].as_str() {
+        Some(candidate) if candidate.trim().is_empty() => {
+            return ToolCallResult::error(
+                json!({
+                    "error": "Voice identifier must not be empty when provided",
+                    "error_code": "invalid_voice"
+                })
+                .to_string(),
+            );
+        }
+        Some(candidate) => Some(candidate.trim().to_string()),
+        None => None,
+    };
 
-    match crate::audio::speak(&text) {
+    match crate::audio::speak_with_voice(&text, voice.as_deref()) {
         Ok(elapsed) => ToolCallResult::ok(
             json!({
                 "spoken":      true,
                 "duration_ms": elapsed.as_millis() as u64,
+                "voice_used":  voice.unwrap_or_else(|| "system-default".to_string()),
             })
             .to_string(),
         ),
+        Err(e) => ToolCallResult::error(
+            json!({ "error": e.to_string(), "error_code": e.code() }).to_string(),
+        ),
+    }
+}
+
+/// Handle `ax_audio_voices` — enumerate installed macOS speech voices.
+#[cfg(feature = "audio")]
+pub(crate) fn handle_ax_audio_voices() -> ToolCallResult {
+    match crate::audio::list_speech_voices() {
+        Ok(voices) => {
+            ToolCallResult::ok(json!({ "voice_count": voices.len(), "voices": voices }).to_string())
+        }
         Err(e) => ToolCallResult::error(
             json!({ "error": e.to_string(), "error_code": e.code() }).to_string(),
         ),
@@ -372,15 +439,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn audio_tools_returns_three_tools() {
+    fn audio_tools_returns_four_tools() {
         // GIVEN: audio feature is enabled
         // WHEN: audio_tools() is called
-        // THEN: exactly three tools are returned
+        // THEN: exactly four tools are returned
         let tools = audio_tools();
-        assert_eq!(tools.len(), 3);
+        assert_eq!(tools.len(), 4);
         let names: Vec<&str> = tools.iter().map(|t| t.name).collect();
         assert!(names.contains(&"ax_listen"));
         assert!(names.contains(&"ax_speak"));
+        assert!(names.contains(&"ax_audio_voices"));
         assert!(names.contains(&"ax_audio_devices"));
     }
 
@@ -389,9 +457,13 @@ mod tests {
         // GIVEN: audio feature is active
         let tools = crate::mcp::tools_extended::extended_tools();
         let names: Vec<&str> = tools.iter().map(|t| t.name).collect();
-        // THEN: all three audio tools are registered
+        // THEN: all four audio tools are registered
         assert!(names.contains(&"ax_listen"), "ax_listen missing");
         assert!(names.contains(&"ax_speak"), "ax_speak missing");
+        assert!(
+            names.contains(&"ax_audio_voices"),
+            "ax_audio_voices missing"
+        );
         assert!(
             names.contains(&"ax_audio_devices"),
             "ax_audio_devices missing"
@@ -415,6 +487,24 @@ mod tests {
         let required = tool.input_schema["required"].as_array().unwrap();
         let req_names: Vec<&str> = required.iter().map(|v| v.as_str().unwrap()).collect();
         assert!(req_names.contains(&"text"), "text must be required");
+    }
+
+    #[test]
+    fn ax_speak_tool_includes_optional_voice_field() {
+        let tool = tool_ax_speak();
+        assert!(
+            tool.input_schema["properties"]["voice"].is_object(),
+            "voice property missing from schema"
+        );
+    }
+
+    #[test]
+    fn ax_audio_voices_tool_has_empty_input_schema() {
+        let tool = tool_ax_audio_voices();
+        assert!(
+            tool.input_schema["properties"].is_null()
+                || tool.input_schema.get("properties").is_none()
+        );
     }
 
     #[test]
@@ -455,6 +545,28 @@ mod tests {
     }
 
     #[test]
+    fn handle_ax_speak_empty_voice_returns_invalid_voice() {
+        let args = json!({ "text": "hello", "voice": "   " });
+        let result = handle_ax_speak(&args);
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_voice");
+    }
+
+    #[test]
+    fn handle_ax_audio_voices_returns_valid_json_with_required_keys() {
+        let result = handle_ax_audio_voices();
+        assert!(
+            !result.is_error,
+            "unexpected error: {}",
+            result.content[0].text
+        );
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert!(v["voice_count"].is_number());
+        assert!(v["voices"].is_array());
+    }
+
+    #[test]
     fn handle_ax_audio_devices_returns_valid_json_with_required_keys() {
         // GIVEN: running macOS system
         // WHEN: ax_audio_devices is called
@@ -486,6 +598,24 @@ mod tests {
         );
         // THEN: the audio tool is dispatched (returns Some, not None)
         assert!(result.is_some(), "ax_audio_devices should dispatch");
+        let r = result.unwrap();
+        assert!(!r.is_error, "unexpected error: {}", r.content[0].text);
+    }
+
+    #[test]
+    fn call_tool_extended_ax_audio_voices_dispatches() {
+        use crate::mcp::tools::AppRegistry;
+        use std::sync::Arc;
+
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        let result = crate::mcp::tools_extended::call_tool_extended(
+            "ax_audio_voices",
+            &json!({}),
+            &registry,
+            &mut out,
+        );
+        assert!(result.is_some(), "ax_audio_voices should dispatch");
         let r = result.unwrap();
         assert!(!r.is_error, "unexpected error: {}", r.content[0].text);
     }

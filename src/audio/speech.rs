@@ -215,13 +215,56 @@ fn transcribe_parakeet_engine(
 /// speak("Verification complete").expect("speak failed");
 /// ```
 pub fn speak(text: &str) -> Result<Duration, AudioError> {
+    speak_with_voice(text, None)
+}
+
+/// Synthesize `text` as speech using an optional macOS voice identifier.
+///
+/// `voice` should be one of the identifiers returned by [`list_speech_voices`],
+/// for example `com.apple.speech.synthesis.voice.Alex`.
+pub fn speak_with_voice(text: &str, voice: Option<&str>) -> Result<Duration, AudioError> {
     if text.is_empty() {
         return Err(AudioError::Synthesis(
             "Cannot speak empty string".to_string(),
         ));
     }
-    debug!(chars = text.len(), "speaking text");
-    speak_with_ns_speech_synthesizer(text)
+    let voice = voice
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty());
+    debug!(
+        chars = text.len(),
+        voice = voice.unwrap_or("system-default"),
+        "speaking text"
+    );
+    speak_with_ns_speech_synthesizer(text, voice)
+}
+
+/// Return the installed macOS speech voice identifiers.
+pub fn list_speech_voices() -> Result<Vec<String>, AudioError> {
+    let cls = objc_class("NSSpeechSynthesizer");
+    if cls.is_null() {
+        return Err(AudioError::Synthesis(
+            "NSSpeechSynthesizer unavailable".to_string(),
+        ));
+    }
+
+    let voices: *mut Object = unsafe { msg_send![cls, availableVoices] };
+    if voices.is_null() {
+        return Err(AudioError::Synthesis(
+            "NSSpeechSynthesizer returned no voices".to_string(),
+        ));
+    }
+
+    let count: usize = unsafe { msg_send![voices, count] };
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let voice: *mut Object = unsafe { msg_send![voices, objectAtIndex: i] };
+        if !voice.is_null() {
+            out.push(ns_string_to_rust(voice));
+        }
+    }
+
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -589,9 +632,11 @@ fn nsurl_from_path(path: &str) -> Option<*mut Object> {
 // ---------------------------------------------------------------------------
 
 /// Perform TTS via `NSSpeechSynthesizer`.
-fn speak_with_ns_speech_synthesizer(text: &str) -> Result<Duration, AudioError> {
-    let synth = create_ns_speech_synthesizer()
-        .ok_or_else(|| AudioError::Synthesis("NSSpeechSynthesizer unavailable".to_string()))?;
+fn speak_with_ns_speech_synthesizer(
+    text: &str,
+    voice: Option<&str>,
+) -> Result<Duration, AudioError> {
+    let synth = create_ns_speech_synthesizer(voice)?;
 
     let started = Instant::now();
     let ns_text = ns_string_from_str(text);
@@ -625,20 +670,28 @@ fn speak_with_ns_speech_synthesizer(text: &str) -> Result<Duration, AudioError> 
     Ok(elapsed)
 }
 
-/// Create an `NSSpeechSynthesizer` instance with the default voice.
-fn create_ns_speech_synthesizer() -> Option<*mut Object> {
+/// Create an `NSSpeechSynthesizer` instance with the requested voice.
+fn create_ns_speech_synthesizer(voice: Option<&str>) -> Result<*mut Object, AudioError> {
     let cls = objc_class("NSSpeechSynthesizer");
     if cls.is_null() {
-        return None;
+        return Err(AudioError::Synthesis(
+            "NSSpeechSynthesizer unavailable".to_string(),
+        ));
     }
+    let voice_id = voice.map(ns_string_from_str);
     let synth: *mut Object = unsafe {
         let obj: *mut Object = msg_send![cls, alloc];
-        msg_send![obj, initWithVoice: std::ptr::null_mut::<Object>()]
+        msg_send![obj, initWithVoice: voice_id.unwrap_or(std::ptr::null_mut::<Object>())]
     };
     if synth.is_null() {
-        None
+        Err(AudioError::Synthesis(match voice {
+            Some(voice_name) => {
+                format!("Speech voice \"{voice_name}\" is unavailable on this system")
+            }
+            None => "NSSpeechSynthesizer unavailable".to_string(),
+        }))
     } else {
-        Some(synth)
+        Ok(synth)
     }
 }
 
@@ -766,6 +819,16 @@ mod tests {
         let err = speak("").unwrap_err();
         // THEN: synthesis_error code (not a panic or framework error)
         assert_eq!(err.code(), "synthesis_error");
+    }
+
+    #[test]
+    fn list_speech_voices_returns_non_empty_ids() {
+        let voices = list_speech_voices().unwrap();
+        assert!(
+            !voices.is_empty(),
+            "expected at least one installed macOS voice"
+        );
+        assert!(voices.iter().all(|voice| !voice.is_empty()));
     }
 
     // -----------------------------------------------------------------------

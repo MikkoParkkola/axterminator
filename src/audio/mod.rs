@@ -12,7 +12,10 @@
 //! ## Quick start
 //!
 //! ```ignore
-//! use axterminator::audio::{capture_microphone, capture_system_audio, transcribe, speak, list_audio_devices};
+//! use axterminator::audio::{
+//!     capture_microphone, capture_system_audio, transcribe, speak, list_audio_devices,
+//!     list_speech_voices,
+//! };
 //!
 //! // Capture 5 seconds of microphone audio
 //! let audio = capture_microphone(5.0)?;
@@ -26,6 +29,10 @@
 //!
 //! // Speak a line
 //! speak("Verification complete")?;
+//!
+//! // Inspect the installed macOS voices
+//! let voices = list_speech_voices()?;
+//! assert!(!voices.is_empty());
 //!
 //! // Enumerate devices
 //! let devices = list_audio_devices();
@@ -71,7 +78,9 @@ mod speech;
 
 pub use capture::{capture_microphone, capture_system_audio, validate_duration};
 pub use devices::{check_microphone_permission, list_audio_devices, AudioDevice};
-pub use speech::{speak, transcribe, transcribe_with_engine, AudioEngine};
+pub use speech::{
+    list_speech_voices, speak, speak_with_voice, transcribe, transcribe_with_engine, AudioEngine,
+};
 
 // ---------------------------------------------------------------------------
 // Constants

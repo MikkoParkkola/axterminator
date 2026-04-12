@@ -600,8 +600,9 @@ mod tests {
         let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
         // `watch` implies `audio` and `camera`, so these are additive.
-        // audio: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
-        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
+        // audio: ax_listen + ax_speak + ax_audio_voices + ax_audio_devices (4)
+        // + capture tools (4) = 8
+        let extra_audio: usize = if cfg!(feature = "audio") { 8 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
         let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
         let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };

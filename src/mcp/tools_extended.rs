@@ -12,7 +12,7 @@
 //! |--------|---------|
 //! | [`tools_gui`]    | scroll, key_press, get_attributes, get_tree, list_apps, drag, assert |
 //! | [`tools_spaces`] | ax_list_spaces, ax_create_space, ax_move_to_space, ax_switch_space, ax_destroy_space (feature `spaces`) |
-//! | [`tools_audio`]  | ax_listen, ax_speak, ax_audio_devices (feature `audio`) |
+//! | [`tools_audio`]  | ax_listen, ax_speak, ax_audio_voices, ax_audio_devices (feature `audio`) |
 //! | [`tools_camera`] | ax_camera_capture, ax_gesture_detect, ax_gesture_listen (feature `camera`) |
 //!
 //! # Progress notifications
@@ -127,6 +127,8 @@ pub fn call_tool_extended<W: Write>(
         #[cfg(feature = "audio")]
         "ax_speak" => Some(crate::mcp::tools_audio::handle_ax_speak(args)),
         #[cfg(feature = "audio")]
+        "ax_audio_voices" => Some(crate::mcp::tools_audio::handle_ax_audio_voices()),
+        #[cfg(feature = "audio")]
         "ax_audio_devices" => Some(crate::mcp::tools_audio::handle_ax_audio_devices()),
         #[cfg(feature = "audio")]
         "ax_start_capture" => Some(crate::mcp::tools_capture::handle_ax_start_capture(args)),
@@ -194,8 +196,9 @@ mod tests {
         let context_base = 1usize; // system_context (always on); clipboard is in innovation
         let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-        // audio feature: ax_listen + ax_speak + ax_audio_devices (3) + capture tools (4) = 7
-        let extra_audio: usize = if cfg!(feature = "audio") { 7 } else { 0 };
+        // audio feature: ax_listen + ax_speak + ax_audio_voices + ax_audio_devices (4)
+        // + capture tools (4) = 8
+        let extra_audio: usize = if cfg!(feature = "audio") { 8 } else { 0 };
         let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
         let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
         let extra_docker: usize = if cfg!(feature = "docker") { 2 } else { 0 };
