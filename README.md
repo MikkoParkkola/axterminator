@@ -9,6 +9,8 @@
 [![Rust](https://img.shields.io/badge/rust-stable-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/axterminator?style=for-the-badge)](LICENSE-MIT)
 [![Discussions](https://img.shields.io/github/discussions/MikkoParkkola/axterminator?style=for-the-badge&color=blue)](https://github.com/MikkoParkkola/axterminator/discussions)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0078d4?style=for-the-badge&logo=visualstudiocode)](https://insiders.vscode.dev/redirect/mcp/install?name=axterminator&config=%7B%22command%22%3A%22axterminator%22%2C%22args%22%3A%5B%22mcp%22%2C%22serve%22%5D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_MCP-black?style=for-the-badge&logo=cursor)](cursor://anysphere.cursor-deeplink/mcp/install?name=axterminator&config=%7B%22command%22%3A%22axterminator%22%2C%22args%22%3A%5B%22mcp%22%2C%22serve%22%5D%7D)
 
 **MCP server that gives AI agents the ability to see and control macOS applications.**
 
