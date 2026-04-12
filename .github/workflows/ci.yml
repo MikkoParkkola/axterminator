@@ -36,6 +36,16 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
   clippy:
     runs-on: macos-latest
     steps:
