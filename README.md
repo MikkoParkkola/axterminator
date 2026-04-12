@@ -51,11 +51,16 @@ cargo build --release --features cli
 
 ```bash
 axterminator mcp install                       # Claude Desktop (default)
+axterminator mcp install --client claude-code  # Claude Code
 axterminator mcp install --client cursor       # Cursor
 axterminator mcp install --client windsurf     # Windsurf
-axterminator mcp install --client claude-code  # Claude Code
+axterminator mcp install --client codex        # OpenAI Codex CLI
+axterminator mcp install --client vscode       # VS Code Copilot
+axterminator mcp install --client zed          # Zed
 axterminator mcp install --dry-run             # Preview without writing
 ```
+
+Also supported: `gemini`, `amazon-q`, `lm-studio`.
 
 **Manual** -- add to your MCP client config (Claude Desktop, Cursor, Windsurf, etc.):
 

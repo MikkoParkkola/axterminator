@@ -165,6 +165,8 @@ enum McpSubcommand {
         /// MCP client to configure.
         #[arg(long, default_value = "claude-desktop", value_parser = [
             "claude-desktop", "claude", "cursor", "windsurf", "claude-code",
+            "codex", "vscode", "vs-code", "copilot", "gemini", "amazon-q",
+            "q", "zed", "lm-studio",
         ])]
         client: String,
 
@@ -329,10 +331,48 @@ fn client_config_path(client: &str) -> Result<std::path::PathBuf> {
         "cursor" => Ok(home.join(".cursor/mcp.json")),
         "windsurf" => Ok(home.join(".codeium/windsurf/mcp_config.json")),
         "claude-code" => Ok(home.join(".claude.json")),
+        "codex" => Ok(home.join(".codex/config.toml")),
+        "vscode" | "vs-code" | "copilot" => Ok(PathBuf::from(".vscode/mcp.json")),
+        "gemini" => Ok(home.join(".gemini/settings.json")),
+        "amazon-q" | "q" => Ok(home.join(".aws/amazonq/mcp.json")),
+        "zed" => {
+            if cfg!(target_os = "macos") {
+                Ok(home.join("Library/Application Support/Zed/settings.json"))
+            } else {
+                Ok(home.join(".config/zed/settings.json"))
+            }
+        }
+        "lm-studio" => Ok(home.join(".lm-studio/mcp.json")),
         _ => anyhow::bail!(
-            "unknown client {client:?} (supported: claude-desktop, cursor, windsurf, claude-code)"
+            "unknown client {client:?}\n\n\
+             Supported clients:\n  \
+             claude-desktop  Claude Desktop (default)\n  \
+             claude-code     Claude Code\n  \
+             cursor          Cursor\n  \
+             windsurf        Windsurf\n  \
+             codex           OpenAI Codex CLI\n  \
+             vscode          VS Code Copilot\n  \
+             gemini          Gemini CLI\n  \
+             amazon-q        Amazon Q Developer\n  \
+             zed             Zed\n  \
+             lm-studio       LM Studio"
         ),
     }
+}
+
+/// JSON key for MCP server entries. Most clients use `mcpServers`, but
+/// VS Code Copilot uses `servers` and Zed uses `context_servers`.
+fn mcp_config_key(client: &str) -> &'static str {
+    match client {
+        "vscode" | "vs-code" | "copilot" => "servers",
+        "zed" => "context_servers",
+        _ => "mcpServers",
+    }
+}
+
+/// Whether the client uses TOML config (Codex).
+fn is_toml_client(client: &str) -> bool {
+    client == "codex"
 }
 
 /// Return the absolute path to the currently-running binary.
@@ -353,6 +393,13 @@ fn cmd_mcp_install(client: &str, force: bool, dry_run: bool) -> Result<()> {
     let cfg_path = client_config_path(client)?;
     let binary = self_binary_path()?;
 
+    // Codex uses TOML, not JSON.
+    if is_toml_client(client) {
+        return cmd_mcp_install_toml(&cfg_path, &binary, client, force, dry_run);
+    }
+
+    let key = mcp_config_key(client);
+
     // Load existing config or start fresh.
     let mut cfg: serde_json::Map<String, serde_json::Value> = if cfg_path.exists() {
         let data = std::fs::read_to_string(&cfg_path)
@@ -371,13 +418,13 @@ fn cmd_mcp_install(client: &str, force: bool, dry_run: bool) -> Result<()> {
         serde_json::Map::new()
     };
 
-    // Ensure mcpServers section exists.
+    // Ensure MCP servers section exists (key varies by client).
     let servers = cfg
-        .entry("mcpServers")
+        .entry(key)
         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
     let servers = servers
         .as_object_mut()
-        .context("mcpServers is not a JSON object")?;
+        .with_context(|| format!("{key} is not a JSON object"))?;
 
     // Check for existing entry.
     if servers.contains_key("axterminator") && !force {
@@ -426,6 +473,80 @@ fn cmd_mcp_install(client: &str, force: bool, dry_run: bool) -> Result<()> {
     }
 
     std::fs::write(&cfg_path, &out)
+        .with_context(|| format!("write config {}", cfg_path.display()))?;
+
+    println!("Installed axterminator as MCP server for {client}.");
+    println!("  config: {}", cfg_path.display());
+    println!("  binary: {}", binary.display());
+    println!();
+    println!("Restart your client to pick up the change.");
+    Ok(())
+}
+
+/// Install into a TOML config file (Codex).
+fn cmd_mcp_install_toml(
+    cfg_path: &std::path::Path,
+    binary: &std::path::Path,
+    client: &str,
+    force: bool,
+    dry_run: bool,
+) -> Result<()> {
+    let existing = if cfg_path.exists() {
+        std::fs::read_to_string(cfg_path)
+            .with_context(|| format!("read {}", cfg_path.display()))?
+    } else {
+        String::new()
+    };
+
+    if existing.contains("[mcp_servers.axterminator]") && !force {
+        if dry_run {
+            println!(
+                "axterminator is already installed in {}\n  would not change (use --force to overwrite)",
+                cfg_path.display()
+            );
+        } else {
+            println!(
+                "axterminator is already installed in {}\nUse --force to overwrite.",
+                cfg_path.display()
+            );
+        }
+        return Ok(());
+    }
+
+    let binary_str = binary.to_string_lossy();
+    let block = format!(
+        "\n[mcp_servers.axterminator]\ncommand = \"{binary_str}\"\nargs = [\"mcp\", \"serve\"]\n",
+    );
+
+    let out = if existing.contains("[mcp_servers.axterminator]") {
+        let start = existing.find("[mcp_servers.axterminator]").unwrap();
+        let rest = &existing[start + "[mcp_servers.axterminator]".len()..];
+        let end = rest
+            .find("\n[")
+            .map_or(existing.len(), |i| start + "[mcp_servers.axterminator]".len() + i);
+        format!("{}{}{}", &existing[..start], block.trim(), &existing[end..])
+    } else {
+        format!("{}{}", existing.trim_end(), block)
+    };
+
+    if dry_run {
+        println!("Would write to {}:\n\n{out}", cfg_path.display());
+        return Ok(());
+    }
+
+    if let Some(parent) = cfg_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create config directory {}", parent.display()))?;
+    }
+
+    if cfg_path.exists() {
+        let backup = cfg_path.with_extension("axterminator.bak");
+        if let Ok(data) = std::fs::read(cfg_path) {
+            let _ = std::fs::write(&backup, data);
+        }
+    }
+
+    std::fs::write(cfg_path, out)
         .with_context(|| format!("write config {}", cfg_path.display()))?;
 
     println!("Installed axterminator as MCP server for {client}.");
@@ -1104,7 +1225,17 @@ mod tests {
 
     #[test]
     fn mcp_install_rejects_unknown_client() {
-        assert!(parse(&["mcp", "install", "--client", "vscode"]).is_err());
+        assert!(parse(&["mcp", "install", "--client", "not-a-real-client"]).is_err());
+    }
+
+    #[test]
+    fn mcp_install_accepts_new_clients() {
+        for client in &["vscode", "codex", "gemini", "amazon-q", "zed", "lm-studio"] {
+            assert!(
+                parse(&["mcp", "install", "--client", client]).is_ok(),
+                "should accept {client}"
+            );
+        }
     }
 
     // -- mcp install logic tests --
