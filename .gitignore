@@ -17,6 +17,10 @@
 EspressoMacSDK/.build/
 EspressoMacSDK/Package.resolved
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
 # Temporary
 *.tmp
 *.bak

@@ -299,6 +299,9 @@ pub fn read_resource(
 ) -> Result<ResourceReadResult, ResourceError> {
     use super::resources_read as read;
 
+    #[cfg(test)]
+    let _guard = resource_read_test_lock();
+
     debug!(uri, "reading resource");
 
     match uri {
@@ -322,6 +325,13 @@ pub fn read_resource(
         "axterminator://capture/status" => read::read_capture_status(uri),
         other => read::read_dynamic(other, registry),
     }
+}
+
+#[cfg(test)]
+fn resource_read_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: once_cell::sync::Lazy<std::sync::Mutex<()>> =
+        once_cell::sync::Lazy::new(|| std::sync::Mutex::new(()));
+    LOCK.lock().unwrap()
 }
 
 // ---------------------------------------------------------------------------

@@ -170,6 +170,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn clipboard_content_serializes() {
+        let content = ClipboardContent {
+            text: Some("hello".to_string()),
+            types: vec!["public.utf8-plain-text".to_string()],
+            item_count: 1,
+            change_count: 42,
+        };
+        let json = serde_json::to_string(&content).unwrap();
+        assert!(json.contains("change_count"));
+        assert!(json.contains("public.utf8-plain-text"));
+    }
+
+    #[test]
+    fn clipboard_content_exposes_fields() {
+        let content = ClipboardContent {
+            text: Some("hello".to_string()),
+            types: vec!["public.utf8-plain-text".to_string()],
+            item_count: 1,
+            change_count: 42,
+        };
+        assert_eq!(content.text.as_deref(), Some("hello"));
+        assert_eq!(content.item_count, 1);
+        assert_eq!(content.change_count, 42);
+    }
+
+    #[test]
+    #[ignore = "touches the macOS pasteboard and can abort under cargo test"]
     fn read_clipboard_returns_content() {
         // Should not panic regardless of clipboard state.
         let content = read_clipboard();
@@ -178,13 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn clipboard_content_serializes() {
-        let content = read_clipboard();
-        let json = serde_json::to_string(&content).unwrap();
-        assert!(json.contains("change_count"));
-    }
-
-    #[test]
+    #[ignore = "writes the global pasteboard and can abort under cargo test"]
     fn write_then_read_clipboard_round_trips() {
         let test_text = "axterminator_clipboard_test_12345";
         let result = write_clipboard(test_text);

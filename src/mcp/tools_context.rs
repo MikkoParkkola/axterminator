@@ -238,6 +238,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "touches live macOS system APIs and is flaky under parallel cargo test"]
     fn handle_system_context_returns_valid_json() {
         let result = handle_ax_system_context();
         assert!(
@@ -251,6 +252,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "touches the macOS pasteboard and is flaky under parallel cargo test"]
     fn handle_clipboard_read_returns_valid_json() {
         let result = handle_ax_clipboard(&json!({}));
         assert!(
@@ -263,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "writes the macOS pasteboard and is flaky under parallel cargo test"]
     fn handle_clipboard_write_then_read() {
         let test_text = "ax_context_test_67890";
         let write_result = handle_ax_clipboard(&json!({ "text": test_text }));

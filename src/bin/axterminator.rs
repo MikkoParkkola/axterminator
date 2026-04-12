@@ -16,7 +16,8 @@
 
 #![allow(clippy::pedantic)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
@@ -388,6 +389,68 @@ fn self_binary_path() -> Result<PathBuf> {
     anyhow::bail!("cannot locate axterminator binary")
 }
 
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create config directory {}", parent.display()))?;
+    }
+    Ok(())
+}
+
+fn backup_existing_file(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let backup = path.with_extension("axterminator.bak");
+    std::fs::copy(path, &backup).with_context(|| {
+        format!(
+            "backup existing config {} -> {}",
+            path.display(),
+            backup.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn write_file_atomically(path: &Path, contents: &str) -> Result<()> {
+    let file_name = path
+        .file_name()
+        .context("config path is missing a file name")?
+        .to_string_lossy();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock before unix epoch")?
+        .as_nanos();
+    let tmp_path = path.with_file_name(format!(
+        ".{file_name}.axterminator.tmp.{nonce}.{}",
+        std::process::id()
+    ));
+
+    std::fs::write(&tmp_path, contents)
+        .with_context(|| format!("write temp config {}", tmp_path.display()))?;
+
+    #[cfg(windows)]
+    if path.exists() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("remove existing config {}", path.display()))?;
+    }
+
+    std::fs::rename(&tmp_path, path)
+        .inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp_path);
+        })
+        .with_context(|| format!("replace config {}", path.display()))?;
+
+    Ok(())
+}
+
+fn write_config_file(path: &Path, contents: &str) -> Result<()> {
+    ensure_parent_dir(path)?;
+    backup_existing_file(path)?;
+    write_file_atomically(path, contents)
+}
+
 /// Install axterminator into the target client's MCP config.
 fn cmd_mcp_install(client: &str, force: bool, dry_run: bool) -> Result<()> {
     let cfg_path = client_config_path(client)?;
@@ -458,22 +521,7 @@ fn cmd_mcp_install(client: &str, force: bool, dry_run: bool) -> Result<()> {
         return Ok(());
     }
 
-    // Create parent directory if missing.
-    if let Some(parent) = cfg_path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("create config directory {}", parent.display()))?;
-    }
-
-    // Backup existing file.
-    if cfg_path.exists() {
-        let backup = cfg_path.with_extension("axterminator.bak");
-        if let Ok(data) = std::fs::read(&cfg_path) {
-            let _ = std::fs::write(&backup, data);
-        }
-    }
-
-    std::fs::write(&cfg_path, &out)
-        .with_context(|| format!("write config {}", cfg_path.display()))?;
+    write_config_file(&cfg_path, &out)?;
 
     println!("Installed axterminator as MCP server for {client}.");
     println!("  config: {}", cfg_path.display());
@@ -533,20 +581,7 @@ fn cmd_mcp_install_toml(
         return Ok(());
     }
 
-    if let Some(parent) = cfg_path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("create config directory {}", parent.display()))?;
-    }
-
-    if cfg_path.exists() {
-        let backup = cfg_path.with_extension("axterminator.bak");
-        if let Ok(data) = std::fs::read(cfg_path) {
-            let _ = std::fs::write(&backup, data);
-        }
-    }
-
-    std::fs::write(cfg_path, out)
-        .with_context(|| format!("write config {}", cfg_path.display()))?;
+    write_config_file(cfg_path, &out)?;
 
     println!("Installed axterminator as MCP server for {client}.");
     println!("  config: {}", cfg_path.display());
@@ -897,9 +932,17 @@ fn cmd_completions(shell: &str) -> Result<()> {
 mod tests {
     use super::*;
     use clap::Parser;
+    use tempfile::TempDir;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
         Cli::try_parse_from(std::iter::once("axterminator").chain(args.iter().copied()))
+    }
+
+    fn temp_test_dir() -> TempDir {
+        tempfile::Builder::new()
+            .prefix("axterminator-tests-")
+            .tempdir()
+            .unwrap()
     }
 
     #[test]
@@ -1340,10 +1383,8 @@ mod tests {
     #[test]
     fn mcp_install_dry_run_fresh_config() {
         // Write to a temp dir to test the full flow.
-        let dir = std::env::temp_dir().join("axterminator_test_install");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cfg_path = dir.join("test_config.json");
+        let dir = temp_test_dir();
+        let cfg_path = dir.path().join("test_config.json");
 
         // Simulate cmd_mcp_install logic inline to avoid needing real $HOME.
         let mut cfg: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
@@ -1362,8 +1403,6 @@ mod tests {
         let entry = &written["mcpServers"]["axterminator"];
         assert_eq!(entry["command"], "axterminator");
         assert_eq!(entry["args"], serde_json::json!(["mcp", "serve"]));
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1391,10 +1430,8 @@ mod tests {
 
     #[test]
     fn toml_install_fresh_creates_section() {
-        let dir = std::env::temp_dir().join("ax_test_toml_fresh");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cfg = dir.join("config.toml");
+        let dir = temp_test_dir();
+        let cfg = dir.path().join("config.toml");
         let binary = PathBuf::from("/usr/bin/axterminator");
 
         let result = cmd_mcp_install_toml(&cfg, &binary, "codex", false, false);
@@ -1413,31 +1450,23 @@ mod tests {
             content.contains("args = [\"mcp\", \"serve\"]"),
             "got: {content}"
         );
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn toml_install_dry_run_does_not_write() {
-        let dir = std::env::temp_dir().join("ax_test_toml_dry");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cfg = dir.join("config.toml");
+        let dir = temp_test_dir();
+        let cfg = dir.path().join("config.toml");
         let binary = PathBuf::from("/usr/bin/axterminator");
 
         let result = cmd_mcp_install_toml(&cfg, &binary, "codex", false, true);
         assert!(result.is_ok());
         assert!(!cfg.exists(), "dry-run should not create the file");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn toml_install_skips_existing_without_force() {
-        let dir = std::env::temp_dir().join("ax_test_toml_skip");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cfg = dir.join("config.toml");
+        let dir = temp_test_dir();
+        let cfg = dir.path().join("config.toml");
         let binary = PathBuf::from("/usr/bin/axterminator");
 
         std::fs::write(&cfg, "[mcp_servers.axterminator]\ncommand = \"old\"\n").unwrap();
@@ -1449,16 +1478,12 @@ mod tests {
             content.contains("command = \"old\""),
             "should not overwrite without --force"
         );
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn toml_install_force_overwrites() {
-        let dir = std::env::temp_dir().join("ax_test_toml_force");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cfg = dir.join("config.toml");
+        let dir = temp_test_dir();
+        let cfg = dir.path().join("config.toml");
         let binary = PathBuf::from("/usr/bin/axterminator");
 
         std::fs::write(&cfg, "[mcp_servers.axterminator]\ncommand = \"old\"\n").unwrap();
@@ -1470,8 +1495,24 @@ mod tests {
             content.contains("command = \"/usr/bin/axterminator\""),
             "should overwrite with --force"
         );
+    }
 
-        let _ = std::fs::remove_dir_all(&dir);
+    #[test]
+    fn toml_install_force_creates_backup() {
+        let dir = temp_test_dir();
+        let cfg = dir.path().join("config.toml");
+        let backup = cfg.with_extension("axterminator.bak");
+        let binary = PathBuf::from("/usr/bin/axterminator");
+
+        std::fs::write(&cfg, "[mcp_servers.axterminator]\ncommand = \"old\"\n").unwrap();
+        let result = cmd_mcp_install_toml(&cfg, &binary, "codex", true, false);
+        assert!(result.is_ok());
+
+        let backup_content = std::fs::read_to_string(&backup).unwrap();
+        assert!(
+            backup_content.contains("command = \"old\""),
+            "backup should preserve the previous config"
+        );
     }
 
     // ── integration: JSON key paths (vscode/zed) ────────────────────────

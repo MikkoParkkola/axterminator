@@ -11,7 +11,23 @@ documentation = "https://github.com/MikkoParkkola/axterminator#readme"
 readme = "README.md"
 keywords = ["macos", "gui", "testing", "accessibility", "automation"]
 categories = ["development-tools::testing", "gui", "os::macos-apis"]
-exclude = [".claude/", ".github/", "docs/", "tests/", "benches/", "examples/"]
+exclude = [
+    ".claude/",
+    ".github/",
+    ".venv/",
+    "__pycache__/",
+    "docs/",
+    "tests/",
+    "benches/",
+    "examples/",
+    "browser-extension/",
+    "demo/",
+    "EspressoMacSDK/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "mkdocs.yml",
+    "uv.lock",
+]
 
 [lib]
 name = "axterminator"
