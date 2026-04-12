@@ -30,3 +30,5 @@ EspressoMacSDK/Package.resolved
 
 # Claude Code
 .claude/
+docs/internal/
+docs/launch/
