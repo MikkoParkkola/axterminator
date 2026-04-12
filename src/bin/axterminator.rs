@@ -1271,6 +1271,74 @@ mod tests {
     }
 
     #[test]
+    fn client_config_path_codex() {
+        let path = client_config_path("codex").unwrap();
+        assert!(path.to_string_lossy().contains(".codex/config.toml"));
+    }
+
+    #[test]
+    fn client_config_path_vscode() {
+        let path = client_config_path("vscode").unwrap();
+        assert!(path.to_string_lossy().contains(".vscode/mcp.json"));
+    }
+
+    #[test]
+    fn client_config_path_gemini() {
+        let path = client_config_path("gemini").unwrap();
+        assert!(path.to_string_lossy().contains(".gemini/settings.json"));
+    }
+
+    #[test]
+    fn client_config_path_amazon_q() {
+        let path = client_config_path("amazon-q").unwrap();
+        assert!(path.to_string_lossy().contains("amazonq/mcp.json"));
+    }
+
+    #[test]
+    fn client_config_path_amazon_q_alias() {
+        let path = client_config_path("q").unwrap();
+        assert!(path.to_string_lossy().contains("amazonq/mcp.json"));
+    }
+
+    #[test]
+    fn client_config_path_zed() {
+        let path = client_config_path("zed").unwrap();
+        assert!(path.to_string_lossy().contains("settings.json"));
+    }
+
+    #[test]
+    fn client_config_path_lm_studio() {
+        let path = client_config_path("lm-studio").unwrap();
+        assert!(path.to_string_lossy().contains(".lm-studio/mcp.json"));
+    }
+
+    #[test]
+    fn mcp_config_key_defaults() {
+        assert_eq!(mcp_config_key("claude-desktop"), "mcpServers");
+        assert_eq!(mcp_config_key("cursor"), "mcpServers");
+        assert_eq!(mcp_config_key("codex"), "mcpServers");
+    }
+
+    #[test]
+    fn mcp_config_key_vscode_uses_servers() {
+        assert_eq!(mcp_config_key("vscode"), "servers");
+        assert_eq!(mcp_config_key("vs-code"), "servers");
+        assert_eq!(mcp_config_key("copilot"), "servers");
+    }
+
+    #[test]
+    fn mcp_config_key_zed_uses_context_servers() {
+        assert_eq!(mcp_config_key("zed"), "context_servers");
+    }
+
+    #[test]
+    fn is_toml_only_codex() {
+        assert!(is_toml_client("codex"));
+        assert!(!is_toml_client("cursor"));
+        assert!(!is_toml_client("vscode"));
+    }
+
+    #[test]
     fn mcp_install_dry_run_fresh_config() {
         // Write to a temp dir to test the full flow.
         let dir = std::env::temp_dir().join("axterminator_test_install");
