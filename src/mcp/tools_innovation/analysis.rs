@@ -2,7 +2,7 @@
 //!
 //! Extracted from `mod.rs` to keep the tools_innovation module under 800 LOC.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 // ---------------------------------------------------------------------------
 
@@ -396,4 +396,3 @@ pub(super) fn pattern_to_json(p: &UiPattern) -> Value {
 pub(super) fn suggestion_to_json(s: &Suggestion) -> Value {
     json!({ "action": s.action, "tool": s.tool, "query": s.query })
 }
-

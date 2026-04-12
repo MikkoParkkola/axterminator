@@ -956,8 +956,8 @@ mod analysis;
 use analysis::*;
 
 mod workflow;
-use workflow::*;
 pub(crate) use workflow::workflow_tracking_data;
+use workflow::*;
 
 /// Handle `ax_analyze` — detect patterns, infer state, and suggest actions.
 ///

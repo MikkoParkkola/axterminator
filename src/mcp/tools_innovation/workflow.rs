@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::mcp::server::WorkflowState;
 
@@ -128,7 +128,9 @@ fn handle_workflow_stats() -> ToolCallResult {
 /// Panics when the tracker mutex is poisoned, which only occurs if a previous
 /// holder panicked while holding the lock — an unrecoverable state.
 pub(crate) fn workflow_tracking_data() -> serde_json::Value {
-    let tracker = super::WORKFLOW_TRACKER.lock().unwrap_or_else(|e| e.into_inner());
+    let tracker = super::WORKFLOW_TRACKER
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let stats = tracker.stats();
     let workflows = tracker.detect_workflows(2);
 

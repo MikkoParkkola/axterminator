@@ -492,8 +492,7 @@ fn cmd_mcp_install_toml(
     dry_run: bool,
 ) -> Result<()> {
     let existing = if cfg_path.exists() {
-        std::fs::read_to_string(cfg_path)
-            .with_context(|| format!("read {}", cfg_path.display()))?
+        std::fs::read_to_string(cfg_path).with_context(|| format!("read {}", cfg_path.display()))?
     } else {
         String::new()
     };
@@ -521,9 +520,9 @@ fn cmd_mcp_install_toml(
     let out = if existing.contains("[mcp_servers.axterminator]") {
         let start = existing.find("[mcp_servers.axterminator]").unwrap();
         let rest = &existing[start + "[mcp_servers.axterminator]".len()..];
-        let end = rest
-            .find("\n[")
-            .map_or(existing.len(), |i| start + "[mcp_servers.axterminator]".len() + i);
+        let end = rest.find("\n[").map_or(existing.len(), |i| {
+            start + "[mcp_servers.axterminator]".len() + i
+        });
         format!("{}{}{}", &existing[..start], block.trim(), &existing[end..])
     } else {
         format!("{}{}", existing.trim_end(), block)
@@ -1386,5 +1385,140 @@ mod tests {
         assert!(servers.contains_key("other-tool"));
         assert!(servers.contains_key("axterminator"));
         assert_eq!(servers.len(), 2);
+    }
+
+    // ── integration: TOML install path ──────────────────────────────────
+
+    #[test]
+    fn toml_install_fresh_creates_section() {
+        let dir = std::env::temp_dir().join("ax_test_toml_fresh");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        let binary = PathBuf::from("/usr/bin/axterminator");
+
+        let result = cmd_mcp_install_toml(&cfg, &binary, "codex", false, false);
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(&cfg).unwrap();
+        assert!(
+            content.contains("[mcp_servers.axterminator]"),
+            "got: {content}"
+        );
+        assert!(
+            content.contains("command = \"/usr/bin/axterminator\""),
+            "got: {content}"
+        );
+        assert!(
+            content.contains("args = [\"mcp\", \"serve\"]"),
+            "got: {content}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn toml_install_dry_run_does_not_write() {
+        let dir = std::env::temp_dir().join("ax_test_toml_dry");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        let binary = PathBuf::from("/usr/bin/axterminator");
+
+        let result = cmd_mcp_install_toml(&cfg, &binary, "codex", false, true);
+        assert!(result.is_ok());
+        assert!(!cfg.exists(), "dry-run should not create the file");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn toml_install_skips_existing_without_force() {
+        let dir = std::env::temp_dir().join("ax_test_toml_skip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        let binary = PathBuf::from("/usr/bin/axterminator");
+
+        std::fs::write(&cfg, "[mcp_servers.axterminator]\ncommand = \"old\"\n").unwrap();
+        let result = cmd_mcp_install_toml(&cfg, &binary, "codex", false, false);
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(&cfg).unwrap();
+        assert!(
+            content.contains("command = \"old\""),
+            "should not overwrite without --force"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn toml_install_force_overwrites() {
+        let dir = std::env::temp_dir().join("ax_test_toml_force");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        let binary = PathBuf::from("/usr/bin/axterminator");
+
+        std::fs::write(&cfg, "[mcp_servers.axterminator]\ncommand = \"old\"\n").unwrap();
+        let result = cmd_mcp_install_toml(&cfg, &binary, "codex", true, false);
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(&cfg).unwrap();
+        assert!(
+            content.contains("command = \"/usr/bin/axterminator\""),
+            "should overwrite with --force"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── integration: JSON key paths (vscode/zed) ────────────────────────
+
+    #[test]
+    fn json_install_vscode_uses_servers_key() {
+        let key = mcp_config_key("vscode");
+        let mut root = serde_json::Map::new();
+        let servers = root
+            .entry(key)
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        servers.as_object_mut().unwrap().insert(
+            "axterminator".to_string(),
+            serde_json::json!({"command": "axterminator", "args": ["mcp", "serve"]}),
+        );
+        let out = serde_json::to_string_pretty(&root).unwrap();
+
+        assert!(
+            out.contains("\"servers\""),
+            "VSCode should use 'servers' key, got: {out}"
+        );
+        assert!(
+            !out.contains("\"mcpServers\""),
+            "should NOT contain mcpServers"
+        );
+    }
+
+    #[test]
+    fn json_install_zed_uses_context_servers_key() {
+        let key = mcp_config_key("zed");
+        let mut root = serde_json::Map::new();
+        let servers = root
+            .entry(key)
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        servers.as_object_mut().unwrap().insert(
+            "axterminator".to_string(),
+            serde_json::json!({"command": "axterminator", "args": ["mcp", "serve"]}),
+        );
+        let out = serde_json::to_string_pretty(&root).unwrap();
+
+        assert!(
+            out.contains("\"context_servers\""),
+            "Zed should use 'context_servers', got: {out}"
+        );
+        assert!(
+            !out.contains("\"mcpServers\""),
+            "should NOT contain mcpServers"
+        );
     }
 }
