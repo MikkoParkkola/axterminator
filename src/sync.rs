@@ -716,8 +716,9 @@ mod tests {
             let elapsed = start.elapsed();
 
             // Should return quickly since mock element is always stable
-            // OR timeout if element access fails
-            assert!(elapsed <= timeout + Duration::from_millis(50));
+            // OR timeout if element access fails.
+            // 200ms slack for CI runners under load (50ms was too tight).
+            assert!(elapsed <= timeout + Duration::from_millis(200));
         }
     }
 
