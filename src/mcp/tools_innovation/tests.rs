@@ -1,8 +1,14 @@
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use serde_json::json;
 
     use crate::mcp::tools::AppRegistry;
+
+    /// Mutex to serialize tests that mutate `AXTERMINATOR_SECURITY_MODE`.
+    /// `std::env::set_var` / `remove_var` is not thread-safe — concurrent
+    /// tests that read/write the same env var produce non-deterministic
+    /// failures depending on execution order.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     // -----------------------------------------------------------------------
     // innovation_tools descriptor invariants
@@ -1703,8 +1709,10 @@
 
     #[test]
     fn ax_clipboard_write_without_text_returns_error() {
+        // Hold the env mutex — set_var/remove_var is not thread-safe.
+        let _lock = ENV_MUTEX.lock().unwrap();
         // GIVEN: action=write but no text field, not sandboxed
-        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+        unsafe { std::env::remove_var("AXTERMINATOR_SECURITY_MODE") };
         // WHEN: dispatching
         let result = super::handle_ax_clipboard(&json!({"action": "write"}));
         // THEN: error payload about missing text
@@ -1714,15 +1722,17 @@
 
     #[test]
     fn ax_clipboard_write_blocked_in_sandboxed_mode() {
+        // Hold the env mutex — set_var/remove_var is not thread-safe.
+        let _lock = ENV_MUTEX.lock().unwrap();
         // GIVEN: sandboxed mode
-        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+        unsafe { std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed") };
         // WHEN: dispatching a write
         let result = super::handle_ax_clipboard(&json!({"action": "write", "text": "hello"}));
         // THEN: error payload about sandboxed mode
         assert!(result.is_error);
         assert!(result.content[0].text.contains("sandboxed"));
         // cleanup
-        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+        unsafe { std::env::remove_var("AXTERMINATOR_SECURITY_MODE") };
     }
 
     #[test]
@@ -1755,8 +1765,10 @@
 
     #[test]
     fn ax_session_info_security_mode_reflects_env() {
+        // Hold the env mutex — set_var/remove_var is not thread-safe.
+        let _lock = ENV_MUTEX.lock().unwrap();
         // GIVEN: sandboxed mode set in the environment
-        std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed");
+        unsafe { std::env::set_var("AXTERMINATOR_SECURITY_MODE", "sandboxed") };
         let registry = Arc::new(AppRegistry::default());
         // WHEN: calling the handler
         let result = super::handle_ax_session_info(&json!({}), &registry);
@@ -1764,7 +1776,7 @@
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["security_mode"], "sandboxed");
         // cleanup
-        std::env::remove_var("AXTERMINATOR_SECURITY_MODE");
+        unsafe { std::env::remove_var("AXTERMINATOR_SECURITY_MODE") };
     }
 
     #[test]
