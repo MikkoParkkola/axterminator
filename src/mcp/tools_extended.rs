@@ -359,6 +359,92 @@ mod tests {
         assert!(result.is_error);
     }
 
+    // -----------------------------------------------------------------------
+    // ax_get_tree compact mode
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn get_tree_compact_unconnected_app_returns_error() {
+        // GIVEN: no app connected under alias "Ghost"
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        // WHEN: compact mode requested for an unconnected app
+        let result = super::call_tool_extended(
+            "ax_get_tree",
+            &json!({"app": "Ghost", "compact": true}),
+            &registry,
+            &mut out,
+        )
+        .unwrap();
+        // THEN: error returned (not connected)
+        assert!(result.is_error, "should error for unconnected app");
+        assert!(result.content[0].text.contains("not connected"));
+    }
+
+    #[test]
+    fn get_tree_compact_false_behaves_like_default() {
+        // GIVEN: compact explicitly set to false, app not connected
+        let registry = Arc::new(AppRegistry::default());
+        let mut out = Vec::<u8>::new();
+        // WHEN: dispatching with compact: false
+        let result = super::call_tool_extended(
+            "ax_get_tree",
+            &json!({"app": "Ghost", "compact": false}),
+            &registry,
+            &mut out,
+        )
+        .unwrap();
+        // THEN: falls through to normal path → same "not connected" error
+        assert!(result.is_error);
+        assert!(result.content[0].text.contains("not connected"));
+    }
+
+    #[test]
+    fn get_tree_compact_schema_includes_compact_and_max_depth_params() {
+        // GIVEN: the tool declaration
+        let tools = super::extended_tools();
+        let tree_tool = tools.iter().find(|t| t.name == "ax_get_tree").unwrap();
+        // WHEN: inspecting the input schema
+        let props = &tree_tool.input_schema["properties"];
+        // THEN: compact and max_depth are present
+        assert!(
+            props["compact"].is_object(),
+            "compact property must be in schema"
+        );
+        assert_eq!(
+            props["compact"]["type"].as_str(),
+            Some("boolean"),
+            "compact must be boolean"
+        );
+        assert!(
+            props["max_depth"].is_object(),
+            "max_depth property must be in schema"
+        );
+        assert_eq!(
+            props["max_depth"]["type"].as_str(),
+            Some("integer"),
+            "max_depth must be integer"
+        );
+    }
+
+    #[test]
+    fn get_tree_compact_output_schema_includes_metadata_fields() {
+        // GIVEN: the tool declaration
+        let tools = super::extended_tools();
+        let tree_tool = tools.iter().find(|t| t.name == "ax_get_tree").unwrap();
+        // WHEN: inspecting the output schema
+        let out_props = &tree_tool.output_schema["properties"];
+        // THEN: element_count and total_scanned are declared
+        assert!(
+            out_props["element_count"].is_object(),
+            "output schema must include element_count"
+        );
+        assert!(
+            out_props["total_scanned"].is_object(),
+            "output schema must include total_scanned"
+        );
+    }
+
     #[test]
     fn call_tool_extended_drag_missing_from_query_returns_error() {
         let registry = Arc::new(AppRegistry::default());

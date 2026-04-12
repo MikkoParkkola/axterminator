@@ -182,6 +182,13 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
             Depth 1 returns only immediate children; depth 3 (default) covers most UIs.\n\
             Emits progress notifications while scanning each depth layer.\n\
             \n\
+            When `compact` is `true`, only interactive elements are returned \
+            (buttons, links, text fields, menu items, checkboxes, radio buttons, \
+            pop-up buttons, sliders, text areas, combo boxes). Tree traversal is \
+            limited to `max_depth` levels (default 5). Response includes \
+            `element_count` and `total_scanned` metadata. Use compact mode to \
+            reduce token usage when you only need actionable controls.\n\
+            \n\
             When `format` is `\"llm\"`, returns a token-optimised plain-text summary of the \
             application state (app name, selection, navigation, content) built from the \
             CopilotState snapshot instead of the raw element tree. Use this when you want \
@@ -210,6 +217,20 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
                     "description": "Output format. \"llm\" returns a token-optimised CopilotState \
                         summary; \"default\" (or omitted) returns the full element tree.",
                     "default": "default"
+                },
+                "compact": {
+                    "type": "boolean",
+                    "description": "When true, returns only interactive elements (buttons, links, \
+                        inputs, menus) up to max_depth levels. Reduces token usage significantly.",
+                    "default": false
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Maximum depth when compact is true (default 5, range 1-10). \
+                        Ignored unless compact is true.",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 10
                 }
             },
             "required": ["app"],
@@ -226,6 +247,14 @@ pub(crate) fn tool_ax_get_tree() -> Tool {
                 "llm_summary": {
                     "type": "string",
                     "description": "Token-optimised plain-text summary (llm format)"
+                },
+                "element_count": {
+                    "type": "integer",
+                    "description": "Number of interactive elements returned (compact mode only)"
+                },
+                "total_scanned": {
+                    "type": "integer",
+                    "description": "Total elements visited during traversal (compact mode only)"
                 }
             },
             "required": ["found"]
@@ -463,6 +492,13 @@ pub(crate) fn handle_get_tree<W: Write>(
         return handle_get_tree_llm_format(&app_name, registry);
     }
 
+    // Compact mode: return only interactive elements up to max_depth.
+    if args["compact"].as_bool().unwrap_or(false) {
+        let max_depth = args["max_depth"].as_u64().unwrap_or(5).clamp(1, 10) as usize;
+        let query = args["query"].as_str().map(str::to_string);
+        return handle_get_tree_compact(&app_name, query, max_depth, registry);
+    }
+
     let depth = args["depth"].as_u64().unwrap_or(3).clamp(1, 10) as usize;
     let query = args["query"].as_str().map(str::to_string);
 
@@ -492,6 +528,39 @@ pub(crate) fn handle_get_tree<W: Write>(
 
             let tree = build_app_root_tree(root_element, depth, &mut reporter);
             ToolCallResult::ok(json!({"found": true, "tree": tree}).to_string())
+        })
+        .unwrap_or_else(ToolCallResult::error)
+}
+
+/// Handle `ax_get_tree` in compact mode: only interactive elements, depth-limited.
+fn handle_get_tree_compact(
+    app_name: &str,
+    query: Option<String>,
+    max_depth: usize,
+    registry: &Arc<AppRegistry>,
+) -> ToolCallResult {
+    registry
+        .with_app(app_name, |app| {
+            let root_element = if let Some(ref q) = query {
+                match app.find_native(q, Some(100)) {
+                    Ok(el) => el.element,
+                    Err(_) => return ToolCallResult::ok(json!({"found": false}).to_string()),
+                }
+            } else {
+                app.element
+            };
+
+            let mut stats = CompactStats::default();
+            let nodes = collect_compact_nodes(root_element, max_depth, 0, &mut stats);
+            ToolCallResult::ok(
+                json!({
+                    "found":         true,
+                    "tree":          nodes,
+                    "element_count": stats.matched,
+                    "total_scanned": stats.scanned,
+                })
+                .to_string(),
+            )
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -713,6 +782,96 @@ fn build_tree_node<W: Write>(
 }
 
 // ---------------------------------------------------------------------------
+// Private helpers — compact tree
+// ---------------------------------------------------------------------------
+
+/// Roles considered interactive / actionable for compact mode.
+const ACTIONABLE_ROLES: &[&str] = &[
+    crate::accessibility::roles::AX_BUTTON,
+    "AXLink",
+    crate::accessibility::roles::AX_TEXT_FIELD,
+    crate::accessibility::roles::AX_MENU_ITEM,
+    crate::accessibility::roles::AX_CHECKBOX,
+    crate::accessibility::roles::AX_RADIO_BUTTON,
+    "AXPopUpButton",
+    crate::accessibility::roles::AX_SLIDER,
+    crate::accessibility::roles::AX_TEXT_AREA,
+    "AXComboBox",
+];
+
+/// Returns `true` when `role` is one of the actionable roles for compact mode.
+fn is_actionable_role(role: &Option<String>) -> bool {
+    role.as_deref()
+        .map(|r| ACTIONABLE_ROLES.contains(&r))
+        .unwrap_or(false)
+}
+
+/// Mutable counters threaded through the compact tree traversal.
+#[derive(Default)]
+struct CompactStats {
+    /// Elements whose role matched an actionable role.
+    matched: usize,
+    /// Total elements visited (including non-interactive).
+    scanned: usize,
+}
+
+/// Recursively collect actionable elements up to `max_depth`.
+///
+/// Returns a flat `Vec` of leaf-style JSON nodes; each matched node is
+/// emitted without a `children` key (the list is already flat by role).
+/// Traversal still recurses into non-matching nodes to find nested
+/// interactive elements, as long as `current_depth < max_depth`.
+fn collect_compact_nodes(
+    element: crate::accessibility::AXUIElementRef,
+    max_depth: usize,
+    current_depth: usize,
+    stats: &mut CompactStats,
+) -> Vec<serde_json::Value> {
+    stats.scanned += 1;
+
+    let role = crate::accessibility::get_string_attribute_value(
+        element,
+        crate::accessibility::attributes::AX_ROLE,
+    );
+    let title = crate::accessibility::get_string_attribute_value(
+        element,
+        crate::accessibility::attributes::AX_TITLE,
+    );
+    let value = crate::accessibility::get_string_attribute_value(
+        element,
+        crate::accessibility::attributes::AX_VALUE,
+    );
+    let enabled = crate::accessibility::get_bool_attribute_value(
+        element,
+        crate::accessibility::attributes::AX_ENABLED,
+    );
+
+    let mut nodes: Vec<serde_json::Value> = Vec::new();
+
+    if is_actionable_role(&role) {
+        stats.matched += 1;
+        nodes.push(json!({
+            "role":    role,
+            "title":   title,
+            "value":   value,
+            "enabled": enabled,
+        }));
+    }
+
+    // Recurse into children unless we have hit the depth limit.
+    if current_depth < max_depth {
+        let children = crate::accessibility::get_children(element).unwrap_or_default();
+        for child in children {
+            let child_nodes = collect_compact_nodes(child, max_depth, current_depth + 1, stats);
+            nodes.extend(child_nodes);
+            crate::accessibility::release_cf(child as core_foundation::base::CFTypeRef);
+        }
+    }
+
+    nodes
+}
+
+// ---------------------------------------------------------------------------
 // Private helpers — element geometry
 // ---------------------------------------------------------------------------
 
@@ -737,3 +896,99 @@ use crate::mcp::tools_gui_events::{parse_and_post_key_event, post_drag_event, po
 
 // Tests live in tools_extended_tests, which has access to both the public API
 // (extended_tools / call_tool_extended) and the private helpers via pub(crate).
+
+// ---------------------------------------------------------------------------
+// Tests — compact mode pure-logic helpers
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // is_actionable_role
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_actionable_role_matches_all_interactive_roles() {
+        // GIVEN: the full set of roles compact mode should keep
+        let interactive = [
+            "AXButton",
+            "AXLink",
+            "AXTextField",
+            "AXMenuItem",
+            "AXCheckBox",
+            "AXRadioButton",
+            "AXPopUpButton",
+            "AXSlider",
+            "AXTextArea",
+            "AXComboBox",
+        ];
+        // WHEN / THEN: every role is recognised as actionable
+        for role in interactive {
+            assert!(
+                is_actionable_role(&Some(role.to_string())),
+                "{role} should be actionable"
+            );
+        }
+    }
+
+    #[test]
+    fn is_actionable_role_rejects_non_interactive_roles() {
+        // GIVEN: structural / static roles that compact mode should drop
+        let non_interactive = [
+            "AXGroup",
+            "AXStaticText",
+            "AXWindow",
+            "AXApplication",
+            "AXScrollArea",
+            "AXTable",
+            "AXList",
+        ];
+        // WHEN / THEN: none are considered actionable
+        for role in non_interactive {
+            assert!(
+                !is_actionable_role(&Some(role.to_string())),
+                "{role} should NOT be actionable"
+            );
+        }
+    }
+
+    #[test]
+    fn is_actionable_role_returns_false_for_none() {
+        // GIVEN: element with no role attribute
+        // WHEN / THEN: treated as non-interactive
+        assert!(!is_actionable_role(&None));
+    }
+
+    // -----------------------------------------------------------------------
+    // compact_stats default
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn compact_stats_default_starts_at_zero() {
+        let s = CompactStats::default();
+        assert_eq!(s.matched, 0);
+        assert_eq!(s.scanned, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // tool_ax_get_tree schema
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tool_ax_get_tree_compact_param_defaults_to_false() {
+        let tool = tool_ax_get_tree();
+        let compact = &tool.input_schema["properties"]["compact"];
+        assert_eq!(compact["default"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn tool_ax_get_tree_max_depth_param_defaults_to_five() {
+        let tool = tool_ax_get_tree();
+        let max_depth = &tool.input_schema["properties"]["max_depth"];
+        assert_eq!(max_depth["default"].as_u64(), Some(5));
+        assert_eq!(max_depth["minimum"].as_u64(), Some(1));
+        assert_eq!(max_depth["maximum"].as_u64(), Some(10));
+    }
+}
