@@ -877,7 +877,7 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
-    fn test_system_wide_element_integration() {
+    fn live_system_wide_element() {
         let _guard = ax_element_test_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -907,7 +907,7 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
-    fn test_get_children_integration() {
+    fn live_get_children() {
         let _guard = ax_element_test_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());

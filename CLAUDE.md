@@ -14,7 +14,7 @@ cargo fmt --check && cargo clippy --all-features -- -D warnings -A unexpected_cf
 
 CI runs: `fmt --check`, `clippy --all-features`, `test --all-features`, `check --all-features` on macOS.
 
-Tests requiring Accessibility permissions are skipped in CI (`--skip accessibility --skip integration`).
+CI skips tests that use the `live_` prefix (`cargo test --all-features -- --skip live_`).
 
 ## Architecture
 

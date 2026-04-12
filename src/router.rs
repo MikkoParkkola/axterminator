@@ -726,10 +726,10 @@ mod tests {
         assert!(!has_webview(999999));
     }
 
-    // Integration test for CDP connection (requires running Electron app)
+    // Live test for CDP connection (requires running Electron app)
     #[test]
     #[ignore] // Only run with: cargo test -- --ignored
-    fn test_cdp_connection_integration() {
+    fn live_cdp_connection() {
         // This test requires a running Electron app with --remote-debugging-port=9222
         // Example: /Applications/Visual\ Studio\ Code.app/Contents/MacOS/Electron --remote-debugging-port=9222
 

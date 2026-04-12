@@ -46,13 +46,13 @@ Try these steps:
 
 ### Running in CI/CD
 
-GitHub Actions macOS runners don't have GUI access. Use environment variables to skip integration tests:
+GitHub Actions macOS runners don't have GUI access. AXTerminator keeps live macOS tests behind a `live_` prefix and skips them in CI:
 
 ```yaml
-env:
-  CI: true
-  SKIP_INTEGRATION: true
+- run: cargo test --all-features -- --skip live_
 ```
+
+Tests that are safe to probe without permissions still run and return early when accessibility is unavailable.
 
 ## Security Note
 

@@ -24,8 +24,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # Skip tests that require accessibility permissions (not available in CI)
-      - run: cargo test --all-features -- --skip accessibility --skip integration
+      # Skip live macOS session tests; permission probes that self-skip still run in CI.
+      - run: cargo test --all-features -- --skip live_
 
   fmt:
     runs-on: macos-latest
