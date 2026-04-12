@@ -1,0 +1,9 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction:
+    - axterminator
+    - mcp
+    - serve
