@@ -148,6 +148,25 @@ enum Commands {
         #[arg(value_parser = ["bash", "zsh", "fish", "elvish", "powershell"])]
         shell: String,
     },
+
+    /// Check for version upgrades and run post-upgrade migrations.
+    ///
+    /// Reads `~/.axterminator/version.stamp`, compares it with the current
+    /// binary version, prints what's new, and updates the stamp.
+    ///
+    /// Examples:
+    ///   axterminator upgrade           # check and apply
+    ///   axterminator upgrade --dry-run # show what would happen
+    ///   axterminator upgrade --quiet   # silent (exit code only)
+    Upgrade {
+        /// Print what would happen without writing the stamp or running migrations.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Suppress all non-error output.
+        #[arg(long)]
+        quiet: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -280,6 +299,7 @@ fn dispatch(cmd: Commands) -> Result<()> {
         Commands::Apps => cmd_apps(),
         Commands::Check => cmd_check(),
         Commands::Completions { shell } => cmd_completions(&shell),
+        Commands::Upgrade { dry_run, quiet } => cmd_upgrade(dry_run, quiet),
     }
 }
 
@@ -924,6 +944,13 @@ fn cmd_completions(shell: &str) -> Result<()> {
     Ok(())
 }
 
+fn cmd_upgrade(dry_run: bool, quiet: bool) -> Result<()> {
+    use axterminator::upgrade::{check_upgrade, UpgradeOptions};
+    let opts = UpgradeOptions { dry_run, quiet };
+    check_upgrade(&opts)?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tests — CLI parsing only (no macOS API needed)
 // ---------------------------------------------------------------------------
@@ -1175,6 +1202,64 @@ mod tests {
         match cli.command {
             Commands::Completions { shell } => assert_eq!(shell, "zsh"),
             _ => panic!(),
+        }
+    }
+
+    // ── upgrade CLI parsing ──────────────────────────────────────────────
+
+    #[test]
+    fn parses_upgrade_defaults_to_no_flags() {
+        // GIVEN: bare upgrade command
+        let cli = parse(&["upgrade"]).unwrap();
+        // THEN: both flags false
+        match cli.command {
+            Commands::Upgrade { dry_run, quiet } => {
+                assert!(!dry_run);
+                assert!(!quiet);
+            }
+            _ => panic!("expected Upgrade variant"),
+        }
+    }
+
+    #[test]
+    fn parses_upgrade_dry_run() {
+        // GIVEN: --dry-run flag
+        let cli = parse(&["upgrade", "--dry-run"]).unwrap();
+        // THEN: dry_run true, quiet false
+        match cli.command {
+            Commands::Upgrade { dry_run, quiet } => {
+                assert!(dry_run);
+                assert!(!quiet);
+            }
+            _ => panic!("expected Upgrade variant"),
+        }
+    }
+
+    #[test]
+    fn parses_upgrade_quiet() {
+        // GIVEN: --quiet flag
+        let cli = parse(&["upgrade", "--quiet"]).unwrap();
+        // THEN: quiet true, dry_run false
+        match cli.command {
+            Commands::Upgrade { dry_run, quiet } => {
+                assert!(!dry_run);
+                assert!(quiet);
+            }
+            _ => panic!("expected Upgrade variant"),
+        }
+    }
+
+    #[test]
+    fn parses_upgrade_dry_run_and_quiet_together() {
+        // GIVEN: both flags
+        let cli = parse(&["upgrade", "--dry-run", "--quiet"]).unwrap();
+        // THEN: both true
+        match cli.command {
+            Commands::Upgrade { dry_run, quiet } => {
+                assert!(dry_run);
+                assert!(quiet);
+            }
+            _ => panic!("expected Upgrade variant"),
         }
     }
 
