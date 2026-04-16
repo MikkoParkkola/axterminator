@@ -24,32 +24,21 @@ Up to 34+ MCP tools (27 core + optional audio, camera, spaces). Background inter
 
 ## Deploy
 
+**Tell your AI assistant** (recommended):
+
+> Read https://github.com/MikkoParkkola/axterminator and install axterminator as my macOS GUI automation MCP server
+
+Your agent will install the binary, wire itself up, and request accessibility permissions. Works in Claude Code, Cursor, Windsurf, and any AI with terminal access.
+
+**Or install manually:**
+
 ```bash
 brew install MikkoParkkola/tap/axterminator
 ```
 
 Grant accessibility permissions: **System Settings > Privacy & Security > Accessibility** (add your terminal app).
 
-<details>
-<summary>Build from source</summary>
-
-```bash
-cargo install axterminator --features cli
-```
-
-Or clone and build manually:
-
-```bash
-git clone https://github.com/MikkoParkkola/axterminator
-cd axterminator
-cargo build --release --features cli
-```
-
-</details>
-
-### Connect your AI agent
-
-**Automatic** (recommended):
+`axterminator mcp install` auto-detects your AI client. Specify one with `--client`:
 
 ```bash
 axterminator mcp install                       # Claude Desktop (default)
@@ -64,18 +53,23 @@ axterminator mcp install --dry-run             # Preview without writing
 
 Also supported: `gemini`, `amazon-q`, `lm-studio`.
 
-**Manual** -- add to your MCP client config (Claude Desktop, Cursor, Windsurf, etc.):
+<details>
+<summary>More install options</summary>
 
-```json
-{
-  "mcpServers": {
-    "axterminator": {
-      "command": "axterminator",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
+```bash
+# From crates.io
+cargo install axterminator --features cli
+
+# Build from source
+git clone https://github.com/MikkoParkkola/axterminator
+cd axterminator
+cargo build --release --features cli
+
+# Manual JSON (Claude Desktop, Cursor, Windsurf, etc.)
+# { "mcpServers": { "axterminator": { "command": "axterminator", "args": ["mcp", "serve"] } } }
 ```
+
+</details>
 
 <details>
 <summary>Codex config</summary>
