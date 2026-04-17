@@ -5,6 +5,12 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-04-16
+
+### Changed
+- `axterminator upgrade` command for seamless binary updates
+- README rewritten with agent-first install as the recommended setup path
+
 ## [0.8.0] - 2026-03-22
 
 ### Breaking
