@@ -269,7 +269,7 @@ impl CrossAppTracker {
             }
         }
 
-        results.sort_by(|a, b| b.frequency.cmp(&a.frequency));
+        results.sort_by_key(|b| std::cmp::Reverse(b.frequency));
         results
     }
 
@@ -413,11 +413,7 @@ impl CrossAppTracker {
             }
         }
 
-        if count == 0 {
-            0
-        } else {
-            total / count
-        }
+        total.checked_div(count).unwrap_or(0)
     }
 }
 
