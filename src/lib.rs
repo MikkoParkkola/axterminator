@@ -22,9 +22,9 @@ pub mod capture;
 pub mod context;
 pub mod display;
 pub mod mcp;
-pub mod upgrade;
 #[cfg(feature = "spaces")]
 pub mod spaces;
+pub mod upgrade;
 #[cfg(feature = "watch")]
 pub mod watch;
 

@@ -131,7 +131,9 @@ fn print_whats_new(from: SemVer, current: SemVer) {
 /// Path to the version stamp file.
 pub fn stamp_path() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("$HOME not set")?;
-    Ok(PathBuf::from(home).join(".axterminator").join("version.stamp"))
+    Ok(PathBuf::from(home)
+        .join(".axterminator")
+        .join("version.stamp"))
 }
 
 /// Read the version string from the stamp file.
@@ -151,8 +153,7 @@ pub fn write_stamp(path: &Path, version: &str) -> Result<()> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("create stamp directory {}", parent.display()))?;
     }
-    std::fs::write(path, version)
-        .with_context(|| format!("write stamp {}", path.display()))
+    std::fs::write(path, version).with_context(|| format!("write stamp {}", path.display()))
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +234,11 @@ pub enum UpgradeOutcome {
 // Handlers
 // ---------------------------------------------------------------------------
 
-fn handle_fresh_install(path: &Path, current: &str, opts: &UpgradeOptions) -> Result<UpgradeOutcome> {
+fn handle_fresh_install(
+    path: &Path,
+    current: &str,
+    opts: &UpgradeOptions,
+) -> Result<UpgradeOutcome> {
     if !opts.dry_run {
         write_stamp(path, current)?;
     }
@@ -309,7 +314,9 @@ fn print_outcome_summary(outcome: &UpgradeOutcome, current: &str) {
         UpgradeOutcome::FreshInstall => {
             println!("axterminator v{current} — fresh install, stamp created.");
         }
-        UpgradeOutcome::UpToDate | UpgradeOutcome::Downgrade { .. } | UpgradeOutcome::CorruptStamp => {}
+        UpgradeOutcome::UpToDate
+        | UpgradeOutcome::Downgrade { .. }
+        | UpgradeOutcome::CorruptStamp => {}
         UpgradeOutcome::Upgraded { from, to } => {
             println!("axterminator upgraded v{from} → v{to}");
         }
@@ -418,11 +425,17 @@ mod tests {
     // ── check_upgrade scenarios ──────────────────────────────────────────
 
     fn opts_quiet_dry() -> UpgradeOptions {
-        UpgradeOptions { dry_run: true, quiet: true }
+        UpgradeOptions {
+            dry_run: true,
+            quiet: true,
+        }
     }
 
     fn opts_quiet() -> UpgradeOptions {
-        UpgradeOptions { dry_run: false, quiet: true }
+        UpgradeOptions {
+            dry_run: false,
+            quiet: true,
+        }
     }
 
     /// Invoke `check_upgrade` against a specific stamp path (not `~/.axterminator`).
