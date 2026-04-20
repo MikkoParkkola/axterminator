@@ -22,6 +22,8 @@
 
 Up to 34+ MCP tools (27 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture, camera input, virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
+**Platform scope.** AX-first-with-vision-fallback is **macOS-only**. iOS/iPadOS support is tracked in [#43](https://github.com/MikkoParkkola/axterminator/issues/43) as a future capability and, when shipped, will be **screenshot + vision only** — the `idevice`/RPPairing surface does not expose AX trees for third-party apps, and UIAutomation would require an on-device test runner (breaks the "mac-only agent, no on-device prereqs" contract). Reported screenshot latency via CoreDeviceProxy: **~350ms USB, ~700ms WiFi** (credit [@m13v](https://github.com/MikkoParkkola/axterminator/issues/43#issuecomment-4274488358)). tvOS is **unverified** — the RSD surface is narrower than `idevice`'s tvOS target suggests; please open an issue with device evidence if you've tested. See [#42](https://github.com/MikkoParkkola/axterminator/issues/42) for the AX-first-vs-vision-first positioning rationale.
+
 ## Deploy
 
 **Tell your AI assistant** (recommended):
@@ -164,6 +166,15 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 | Drag, system dialogs | No | Require cursor control / always grab focus |
 | Gesture recognition | Yes | Verified: thumbs_up at 88.8% confidence |
 | Speech transcription | Yes | Verified: on-device, requires Dictation enabled |
+
+**Platform coverage** (see [#43](https://github.com/MikkoParkkola/axterminator/issues/43)):
+
+| Platform | AX tree | Screenshot | App launch | Status |
+|----------|:-------:|:----------:|:----------:|--------|
+| macOS 12+ | ✅ | ✅ | ✅ | Shipped; sub-ms AX path |
+| iOS / iPadOS | ❌ (third-party apps) | ✅ (~350ms USB / ~700ms WiFi) | ✅ | **Planned, screenshot + vision only** — no AX semantics |
+| tvOS | ❔ | ❔ | ❔ | **Unverified** — RSD surface narrower than `idevice` suggests |
+| visionOS / watchOS | ❌ | ❌ | ❌ | Out of scope |
 
 ## Troubleshooting
 
