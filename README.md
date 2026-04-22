@@ -14,7 +14,7 @@
 
 **MCP server that gives AI agents the ability to see and control macOS applications.**
 
-[Deploy](#deploy) · [MCP Tools](#mcp-tools) · [CLI](#cli) · [Query Syntax](#query-syntax) · [Troubleshooting](#troubleshooting) · [Wiki](https://github.com/MikkoParkkola/axterminator/wiki) · [Known Limitations](#known-limitations)
+[Deploy](#deploy) · [MCP Tools](#mcp-tools) · [CLI](#cli) · [Query Syntax](#query-syntax) · [AX-first vs Vision-first](#ax-first-vs-vision-first) · [FAQ](#faq) · [Troubleshooting](#troubleshooting) · [Wiki](https://github.com/MikkoParkkola/axterminator/wiki) · [Known Limitations](#known-limitations)
 
 </div>
 
@@ -156,6 +156,50 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 379us per element access (Criterion, M1 MacBook Pro). Appium needs 500ms for the same thing.
 
 7-strategy self-healing locators survive UI changes: data_testid, aria_label, identifier, title, xpath, position, visual_vlm.
+
+## AX-first vs Vision-first
+
+OpenAI Codex computer use, Anthropic Claude Computer Use, Google Gemini Operator, and Perplexity Personal Computer all use the same paradigm: **screenshot → vision LLM → pixel coordinates → cursor click**. The vendor changes; the paradigm does not.
+
+axterminator uses the opposite default: **AX semantic tree → element reference → action**. Vision is a fallback for the rare surfaces the AX tree cannot reach (canvas apps, games, OpenGL/Metal renderers).
+
+| Dimension | Vision-first (Codex CU / Claude CU / Gemini / …) | AX-first (axterminator) |
+|-----------|---------------------------------------------------|-------------------------|
+| **Speed** | seconds per action (vision round-trip + LLM) | ~379 µs per action (measured, Criterion) |
+| **Cost** | vision tokens on every action | ~free (AX API call) |
+| **Reliability** | pixel-brittle — breaks on theme, font, layout changes | element-stable — semantic addressing survives UI changes |
+| **Background** | visible cursor movement | truly background — no visible cursor |
+| **Dense / labeled UIs** | struggles with small targets | reads labels directly from the AX tree |
+| **Canvas / games / OpenGL** | works (universal fallback) | needs vision fallback (`ax_find_visual`) |
+| **Cross-platform** | anywhere a screenshot works | macOS only (see [#43](https://github.com/MikkoParkkola/axterminator/issues/43) for iOS roadmap) |
+
+**The key insight:** axterminator is not a competitor to those agents — it is a layer *underneath* them. Any agent that can call an MCP tool (Claude Code, Codex CLI, Cursor, Windsurf, VS Code Copilot, Gemini CLI) can use axterminator as its hands. They provide reasoning; axterminator provides reliable, cheap, background-safe action.
+
+> **Coverage gate.** Before investing heavily in vision-fallback features, run the AX coverage audit below for one week on your actual app surface. If >95% of your actions resolve via AX, vision fallback is a nice-to-have. If <80%, expand the vision fallback path first. See [benches/probes/README.md](benches/probes/README.md) for the audit harness.
+
+## FAQ
+
+**Why use this instead of Codex computer use / Claude Computer Use / Gemini Operator?**
+
+You probably use *both*. Those agents call axterminator as an MCP tool. axterminator gives them AX-semantic actions that are ~1,000× faster and cost nothing per call. The vision model stays for tasks that genuinely need it (canvas apps, games), not for clicking a Save button in TextEdit.
+
+**Isn't vision-first simpler — no setup, works everywhere?**
+
+It works everywhere vision works: foreground, focused, slow, expensive. axterminator works in the background, costs nothing, and is sub-millisecond. For automation of native macOS apps — the majority of business software — AX is strictly better. Vision is the escape hatch, not the default.
+
+**What app surfaces does axterminator cover?**
+
+Any macOS app that exposes the Accessibility API: all native AppKit/SwiftUI apps, Electron apps, web apps in Chrome/Safari/Firefox, terminal apps. Canvas-only surfaces (Figma canvas, game renderers, video players) use `ax_find_visual` — the built-in vision fallback that tries AX first and falls back to VLM automatically.
+
+**Does it work with agents that are already doing computer use?**
+
+Yes. Add `axterminator mcp install --client codex` (or `--client claude-code`, etc.) and the agent gains 34 semantic tools it can call instead of pixel-clicking. It doesn't replace the agent's vision; it gives the agent a faster, cheaper path for the 90%+ of actions that don't need vision.
+
+**Who is it for beyond developers?**
+
+- **Executive assistants:** file triage, calendar entry, copy-paste between apps — all in the background while you work
+- **Sales ops:** CRM entry, proposal generation across native apps, screen scraping structured data from dense UIs
+- **Event coordinators:** spreadsheet-to-calendar sync, venue research across multiple apps, confirmation email drafts — reliable because it reads labels semantically, not by pixel position
 
 ## Known Limitations
 
