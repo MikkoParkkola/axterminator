@@ -359,8 +359,8 @@ fn request_speech_authorization() -> Result<(), AudioError> {
 /// Perform on-device transcription via `SFSpeechRecognizer`.
 ///
 /// Ensures speech recognition permission is obtained before attempting
-/// transcription.  Writes a temporary WAV file in `/tmp`, runs the
-/// recognizer, then deletes it.
+/// transcription. Writes a private temporary WAV file, runs the recognizer,
+/// then lets the temp file clean itself up.
 fn transcribe_with_sf_speech(audio: &AudioData, locale: &str) -> Result<String, AudioError> {
     // Ensure authorization is present — this is the fix for BUG #26.
     // When status is NotDetermined the system dialog is shown and we block
@@ -370,42 +370,24 @@ fn transcribe_with_sf_speech(audio: &AudioData, locale: &str) -> Result<String, 
 
     let wav_bytes = audio.to_wav_bytes();
 
-    let tmp_path = write_temp_wav(&wav_bytes)
+    let tmp_file = write_temp_wav(&wav_bytes)
         .map_err(|e| AudioError::Framework(format!("Temp file write failed: {e}")))?;
+    let tmp_path = tmp_file.path().to_string_lossy().into_owned();
 
-    let result = run_sf_speech_recognizer(&tmp_path, locale);
-
-    // Always delete the temp file, even on error.
-    let _ = std::fs::remove_file(&tmp_path);
-
-    result
+    run_sf_speech_recognizer(&tmp_path, locale)
 }
 
-/// Write `bytes` to a `0600`-permissioned temp file under `/tmp`.
-///
-/// Each call produces a unique path by combining the process ID with the
-/// current time in nanoseconds, making concurrent calls safe within the
-/// same process.
-fn write_temp_wav(bytes: &[u8]) -> Result<String, std::io::Error> {
-    use std::os::unix::fs::OpenOptionsExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    let path = format!(
-        "/tmp/axterminator_audio_{}_{}.wav",
-        std::process::id(),
-        nanos
-    );
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&path)?;
-    std::io::Write::write_all(&mut file, bytes)?;
-    Ok(path)
+/// Write `bytes` to a unique `0600`-permissioned temp WAV file.
+fn write_temp_wav(bytes: &[u8]) -> Result<tempfile::NamedTempFile, std::io::Error> {
+    use std::io::Write as _;
+
+    let mut file = tempfile::Builder::new()
+        .prefix("axterminator_audio_")
+        .suffix(".wav")
+        .tempfile()?;
+    file.write_all(bytes)?;
+    file.flush()?;
+    Ok(file)
 }
 
 /// Run `SFSpeechRecognizer` on a WAV file at `path`.
@@ -839,8 +821,8 @@ mod tests {
     fn write_temp_wav_creates_readable_file() {
         use std::os::unix::fs::PermissionsExt;
         let bytes = encode_wav_pcm16(&[], SAMPLE_RATE, CHANNELS);
-        let path = write_temp_wav(&bytes).unwrap();
-        let meta = std::fs::metadata(&path).unwrap();
+        let file = write_temp_wav(&bytes).unwrap();
+        let meta = std::fs::metadata(file.path()).unwrap();
         let mode = meta.permissions().mode();
         // File must be owner-only (0600)
         assert_eq!(
@@ -849,7 +831,6 @@ mod tests {
             "expected mode 0600, got {:o}",
             mode & 0o777
         );
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -857,22 +838,21 @@ mod tests {
         // GIVEN: 16 silence samples
         let samples: Vec<f32> = vec![0.0; 16];
         let bytes = encode_wav_pcm16(&samples, SAMPLE_RATE, CHANNELS);
-        let path = write_temp_wav(&bytes).unwrap();
-        let content = std::fs::read(&path).unwrap();
+        let file = write_temp_wav(&bytes).unwrap();
+        let content = std::fs::read(file.path()).unwrap();
         // THEN: file starts with RIFF magic
         assert_eq!(&content[0..4], b"RIFF");
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn write_temp_wav_paths_are_unique_across_calls() {
         // GIVEN: two rapid successive calls
         let bytes = encode_wav_pcm16(&[], SAMPLE_RATE, CHANNELS);
-        let p1 = write_temp_wav(&bytes).unwrap();
-        let p2 = write_temp_wav(&bytes).unwrap();
+        let f1 = write_temp_wav(&bytes).unwrap();
+        let f2 = write_temp_wav(&bytes).unwrap();
+        let p1 = f1.path().to_path_buf();
+        let p2 = f2.path().to_path_buf();
         // THEN: different paths (no clobbering)
         assert_ne!(p1, p2);
-        let _ = std::fs::remove_file(&p1);
-        let _ = std::fs::remove_file(&p2);
     }
 }

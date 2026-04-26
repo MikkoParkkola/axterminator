@@ -1,6 +1,6 @@
 # AXTerminator Design Document
 
-**Status**: Implemented | **Version**: 0.6.1 | **Last Updated**: 2026-03-21
+**Status**: Implemented | **Version**: 0.9.1 | **Last Updated**: 2026-04-26
 
 ## Overview
 
@@ -35,10 +35,10 @@ Action overhead:       20 us    (Criterion, perform_action_overhead)
 +-----------------------------------------------------------------+
 |                                                                 |
 |  +-----------------------------------------------------------+ |
-|  |                    Python API (PyO3)                       | |
-|  |  import axterminator as ax                                 | |
-|  |  app = ax.app("Safari")                                    | |
-|  |  app.find("Save").click()  # Background by default         | |
+|  |                    CLI + MCP Interfaces                    | |
+|  |  axterminator find Safari "Save"                           | |
+|  |  axterminator click Safari "Save"                          | |
+|  |  axterminator mcp serve                                    | |
 |  +-----------------------------------------------------------+ |
 |                              |                                  |
 |                              v                                  |

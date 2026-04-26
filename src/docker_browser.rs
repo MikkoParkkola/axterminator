@@ -120,7 +120,7 @@ pub struct NekoConfig {
     pub cdp_port: u16,
     /// Host port mapped to the container's VNC endpoint.
     pub vnc_port: u16,
-    /// Optional Neko admin password (defaults to `"admin"`).
+    /// Optional Neko admin password.
     pub admin_password: String,
     /// Container name prefix (defaults to `"neko"`).
     pub name_prefix: String,
@@ -166,7 +166,7 @@ impl NekoConfig {
             height: 1080,
             cdp_port: base_cdp,
             vnc_port: base_vnc,
-            admin_password: "admin".into(),
+            admin_password: generated_admin_password(),
             name_prefix: "neko".into(),
         }
     }
@@ -688,9 +688,9 @@ fn build_docker_args(config: &NekoConfig, name: &str) -> Vec<String> {
         "--label".into(),
         "axterminator.neko=1".into(),
         "--publish".into(),
-        format!("{}:9222", config.cdp_port),
+        format!("127.0.0.1:{}:9222", config.cdp_port),
         "--publish".into(),
-        format!("{}:5900", config.vnc_port),
+        format!("127.0.0.1:{}:5900", config.vnc_port),
         "--shm-size".into(),
         "2g".into(),
         "--env".into(),
@@ -701,6 +701,27 @@ fn build_docker_args(config: &NekoConfig, name: &str) -> Vec<String> {
         "NEKO_REMOTE_DEBUGGING_PORT=9222".into(),
         config.browser.docker_image(),
     ]
+}
+
+/// Generate a random default Neko admin password.
+///
+/// Docker browser endpoints are bound to loopback, but a non-fixed password
+/// still avoids the footgun of a well-known credential if users override port
+/// publishing or attach their own container network.
+fn generated_admin_password() -> String {
+    use rand::Rng as _;
+
+    let mut bytes = [0u8; 24];
+    rand::rng().fill_bytes(&mut bytes);
+    format!("axt-{}", encode_hex(&bytes))
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    bytes.iter().fold(String::new(), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+        s
+    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -828,7 +849,9 @@ mod tests {
         assert_eq!(cfg.height, 1080);
         assert_eq!(cfg.cdp_port, 9222);
         assert_eq!(cfg.vnc_port, 5900);
-        assert_eq!(cfg.admin_password, "admin");
+        assert!(cfg.admin_password.starts_with("axt-"));
+        assert_eq!(cfg.admin_password.len(), 52);
+        assert_ne!(cfg.admin_password, "admin");
         assert_eq!(cfg.name_prefix, "neko");
     }
 
@@ -1013,8 +1036,8 @@ mod tests {
         assert!(args.contains(&"2g".into()));
         assert!(args.contains(&"--label".into()));
         assert!(args.contains(&"axterminator.neko=1".into()));
-        assert!(args.iter().any(|a| a.contains("9222:9222")));
-        assert!(args.iter().any(|a| a.contains("5900:5900")));
+        assert!(args.iter().any(|a| a == "127.0.0.1:9222:9222"));
+        assert!(args.iter().any(|a| a == "127.0.0.1:5900:5900"));
         assert!(args
             .iter()
             .any(|a| a.contains("ghcr.io/m1k1o/neko/chromium")));
@@ -1032,8 +1055,8 @@ mod tests {
         // WHEN
         let args = build_docker_args(&cfg, "neko-firefox-9500");
         // THEN
-        assert!(args.iter().any(|a| a.contains("9500:9222")));
-        assert!(args.iter().any(|a| a.contains("5950:5900")));
+        assert!(args.iter().any(|a| a == "127.0.0.1:9500:9222"));
+        assert!(args.iter().any(|a| a == "127.0.0.1:5950:5900"));
         assert!(args.iter().any(|a| a.contains("1280x720")));
         assert!(args
             .iter()

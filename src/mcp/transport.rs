@@ -151,7 +151,7 @@ fn serve_stdio() -> anyhow::Result<()> {
 mod http {
     use std::convert::Infallible;
     use std::net::SocketAddr;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     use axum::extract::{ConnectInfo, State};
@@ -178,9 +178,14 @@ mod http {
     const SSE_KEEPALIVE: Duration = Duration::from_secs(15);
 
     /// Shared state injected into every request handler.
-    #[derive(Clone)]
     pub(super) struct AppState {
         validator: BearerValidator,
+        /// Persistent MCP session state shared by all HTTP requests.
+        ///
+        /// MCP lifecycle, connected apps, tasks, workflows, and subscriptions
+        /// all live inside `ServerHandle`; recreating it per request breaks the
+        /// initialize -> initialized -> tools/call sequence used by clients.
+        server: Mutex<crate::mcp::server::ServerHandle>,
         /// Broadcast channel for server-initiated notifications.
         sse_tx: broadcast::Sender<SseEvent>,
     }
@@ -197,7 +202,11 @@ mod http {
     impl AppState {
         pub fn new(validator: BearerValidator) -> Self {
             let (sse_tx, _) = broadcast::channel(SSE_CHANNEL_CAPACITY);
-            Self { validator, sse_tx }
+            Self {
+                validator,
+                server: Mutex::new(crate::mcp::server::ServerHandle::new()),
+                sse_tx,
+            }
         }
     }
 
@@ -284,13 +293,12 @@ mod http {
         };
 
         let mut sink = Vec::<u8>::new();
-        let maybe_resp = {
-            // Server state is not shared across HTTP requests in Phase 4 —
-            // each request gets its own ephemeral server instance. Stateful
-            // sessions (connected apps persisting across requests) are a
-            // Phase 5 feature. This keeps Phase 4 correct and simple.
-            let mut server = crate::mcp::server::ServerHandle::new();
-            server.handle(&rpc_req, &mut sink)
+        let maybe_resp = match state.server.lock() {
+            Ok(mut server) => server.handle(&rpc_req, &mut sink),
+            Err(e) => {
+                error!("MCP HTTP server state lock poisoned: {e}");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         };
 
         // Forward any SSE notifications that were written to the sink.
@@ -453,6 +461,85 @@ mod http {
     async fn shutdown_signal() {
         let _ = tokio::signal::ctrl_c().await;
         info!("shutdown signal received");
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::net::{IpAddr, Ipv4Addr};
+
+        use axum::body::to_bytes;
+        use serde_json::json;
+
+        use crate::mcp::auth::AuthConfig;
+
+        use super::*;
+
+        async fn post_json(state: Arc<AppState>, body: Value) -> (StatusCode, Value) {
+            let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 49152);
+            let response = post_mcp(
+                ConnectInfo(peer),
+                State(state),
+                HeaderMap::new(),
+                Json(body),
+            )
+            .await;
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let value = if body.is_empty() {
+                Value::Null
+            } else {
+                serde_json::from_slice(&body).unwrap()
+            };
+            (status, value)
+        }
+
+        #[tokio::test]
+        async fn post_mcp_reuses_server_state_across_requests() {
+            let validator = BearerValidator::new(AuthConfig::localhost_only());
+            let state = Arc::new(AppState::new(validator));
+
+            let (status, init) = post_json(
+                Arc::clone(&state),
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "http-test", "version": "1"}
+                    }
+                }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(init["result"]["protocolVersion"], "2025-11-05");
+
+            let (status, notification) = post_json(
+                Arc::clone(&state),
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized"
+                }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+            assert_eq!(notification, Value::Null);
+
+            let (status, tools) = post_json(
+                Arc::clone(&state),
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/list"
+                }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert!(tools["result"]["tools"]
+                .as_array()
+                .is_some_and(|tools| !tools.is_empty()));
+        }
     }
 }
 

@@ -148,8 +148,9 @@ impl SceneGraph {
     }
 
     /// Append a node and return its assigned [`NodeId`].
-    pub(crate) fn push(&mut self, node: SceneNode) -> NodeId {
+    pub(crate) fn push(&mut self, mut node: SceneNode) -> NodeId {
         let id = NodeId(self.nodes.len());
+        node.id = id;
         self.nodes.push(node);
         id
     }
@@ -204,33 +205,85 @@ pub fn scan_scene_bounded(root_element: AXUIElementRef, max_nodes: usize) -> AXR
     }
 
     let mut graph = SceneGraph::default();
-    let mut queue: VecDeque<(AXUIElementRef, Option<NodeId>, usize)> = VecDeque::new();
-    queue.push_back((root_element, None, 0));
+    let mut queue: VecDeque<QueuedElement> = VecDeque::new();
+    queue.push_back(QueuedElement::borrowed(root_element, None, 0));
 
-    while let Some((elem_ref, parent_id, depth)) = queue.pop_front() {
-        if graph.len() >= max_nodes {
+    while graph.len() < max_nodes {
+        let Some(queued) = queue.pop_front() else {
             break;
-        }
+        };
 
-        let node = snapshot_element(elem_ref, parent_id, depth);
+        let node = snapshot_element(queued.element, queued.parent, queued.depth);
         let node_id = graph.push(node);
 
         // Register this child with its parent
-        if let Some(pid) = parent_id {
+        if let Some(pid) = queued.parent {
             if let Some(parent) = graph.get_mut(pid) {
                 parent.children.push(node_id);
             }
         }
 
-        // Enqueue children — release each retained ref after enqueue
-        if let Ok(children) = accessibility::get_children(elem_ref) {
+        // Enqueue children. get_children() returns +1 retained refs; the queue
+        // tracks ownership so each child is released after it is snapshotted.
+        if let Ok(children) = accessibility::get_children(queued.element) {
             for child_ref in children {
-                queue.push_back((child_ref, Some(node_id), depth + 1));
+                queue.push_back(QueuedElement::owned(
+                    child_ref,
+                    Some(node_id),
+                    queued.depth + 1,
+                ));
             }
+        }
+
+        queued.release_if_owned();
+    }
+
+    release_queued_elements(queue);
+
+    Ok(graph)
+}
+
+/// Work item for [`scan_scene_bounded`].
+///
+/// The root element is borrowed from the caller. Child refs returned by
+/// `accessibility::get_children` are retained and must be released after use.
+struct QueuedElement {
+    element: AXUIElementRef,
+    parent: Option<NodeId>,
+    depth: usize,
+    owned: bool,
+}
+
+impl QueuedElement {
+    fn borrowed(element: AXUIElementRef, parent: Option<NodeId>, depth: usize) -> Self {
+        Self {
+            element,
+            parent,
+            depth,
+            owned: false,
         }
     }
 
-    Ok(graph)
+    fn owned(element: AXUIElementRef, parent: Option<NodeId>, depth: usize) -> Self {
+        Self {
+            element,
+            parent,
+            depth,
+            owned: true,
+        }
+    }
+
+    fn release_if_owned(self) {
+        if self.owned {
+            accessibility::release_cf(self.element.cast());
+        }
+    }
+}
+
+fn release_queued_elements(queue: VecDeque<QueuedElement>) {
+    for queued in queue {
+        queued.release_if_owned();
+    }
 }
 
 /// Snapshot a single element into a [`SceneNode`] without retaining any CF refs.
@@ -403,11 +456,13 @@ mod tests {
     fn scene_graph_push_assigns_sequential_ids() {
         // GIVEN: Two nodes
         let mut graph = SceneGraph::empty();
-        let id0 = graph.push(make_button(0, "OK"));
-        let id1 = graph.push(make_button(1, "Cancel"));
+        let id0 = graph.push(make_button(99, "OK"));
+        let id1 = graph.push(make_button(42, "Cancel"));
         // THEN: IDs are 0 and 1
         assert_eq!(id0, NodeId(0));
         assert_eq!(id1, NodeId(1));
+        assert_eq!(graph.get(id0).unwrap().id, NodeId(0));
+        assert_eq!(graph.get(id1).unwrap().id, NodeId(1));
     }
 
     #[test]

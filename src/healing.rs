@@ -617,11 +617,19 @@ fn capture_window_screenshot(root: AXUIElementRef) -> Option<Vec<u8>> {
 
     let window_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    // Capture screenshot to temp file
-    let temp_path = format!("/tmp/axterminator_vlm_screenshot_{}.png", pid);
+    // Capture screenshot to a private temp directory.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("axterminator_vlm_screenshot_")
+        .tempdir()
+        .ok()?;
+    let temp_path = temp_dir.path().join("capture.png");
 
     let capture_result = Command::new("screencapture")
-        .args(["-l", &window_id, "-o", "-x", &temp_path])
+        .arg("-l")
+        .arg(&window_id)
+        .arg("-o")
+        .arg("-x")
+        .arg(&temp_path)
         .output()
         .ok()?;
 
@@ -631,7 +639,6 @@ fn capture_window_screenshot(root: AXUIElementRef) -> Option<Vec<u8>> {
 
     // Read the screenshot data
     let data = std::fs::read(&temp_path).ok()?;
-    let _ = std::fs::remove_file(&temp_path);
 
     Some(data)
 }

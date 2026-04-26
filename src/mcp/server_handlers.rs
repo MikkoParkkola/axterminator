@@ -531,6 +531,12 @@ impl Server {
                 }
             }
         }
+        if name == "ax_click_at" && !self.security.app_policy_is_permissive() {
+            return crate::mcp::protocol::ToolCallResult::error(
+                "Tool 'ax_click_at' is blocked while an app allow/deny policy is configured \
+                 because coordinate clicks cannot be scoped to an allowed app",
+            );
+        }
 
         // Execute.
         #[cfg(feature = "watch")]
@@ -791,5 +797,29 @@ Use prompts/get for detailed guidance:\n\
 - 'automate-workflow' — tracked workflow planning guidance\n\
 - 'analyze-app' — comprehensive UI analysis\n\
 - 'test-app' / 'navigate-to' / 'extract-data' / 'accessibility-audit'",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::mcp::security::AppPolicy;
+
+    use super::*;
+
+    #[test]
+    fn coordinate_click_is_blocked_when_app_policy_is_configured() {
+        let mut server = Server::new();
+        server.security.app_policy = AppPolicy::parse("allowed = [\"Calculator\"]");
+
+        let mut out = Vec::new();
+        let result = server.dispatch_tool("ax_click_at", &json!({"x": 0, "y": 0}), &mut out);
+
+        assert!(result.is_error);
+        assert!(result.content[0]
+            .text
+            .contains("cannot be scoped to an allowed app"));
+        assert!(out.is_empty());
     }
 }

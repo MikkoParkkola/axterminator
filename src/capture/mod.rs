@@ -679,10 +679,17 @@ fn capture_primary_display_png() -> Result<(String, u32, u32, Vec<u8>), String> 
     let width = bounds.size.width as u32;
     let height = bounds.size.height as u32;
 
-    // Capture to a temp file; -x suppresses the shutter sound.
-    let tmp = format!("/tmp/axterminator_capture_{}.png", std::process::id());
+    // Capture to a private temp directory; -x suppresses the shutter sound.
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("axterminator_capture_")
+        .tempdir()
+        .map_err(|e| format!("failed to create capture temp directory: {e}"))?;
+    let tmp = tmp_dir.path().join("capture.png");
     let output = Command::new("screencapture")
-        .args(["-x", "-D", "1", &tmp])
+        .arg("-x")
+        .arg("-D")
+        .arg("1")
+        .arg(&tmp)
         .output()
         .map_err(|e| format!("screencapture failed to launch: {e}"))?;
 
@@ -694,7 +701,6 @@ fn capture_primary_display_png() -> Result<(String, u32, u32, Vec<u8>), String> 
     }
 
     let png_bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read capture file: {e}"))?;
-    let _ = std::fs::remove_file(&tmp);
 
     let png_base64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
     Ok((png_base64, width, height, png_bytes))
