@@ -22,7 +22,7 @@ AXTerminator is a different paradigm: **AX semantic tree → element reference �
 
 ### Coverage gate
 
-Before expanding the vision-fallback path, run a one-week AX coverage audit on your actual app surface (see [benches/probes/README.md](../benches/probes/README.md)):
+Before expanding the vision-fallback path, run a one-week AX coverage audit on your actual app surface (see [benches/probes/README.md](https://github.com/MikkoParkkola/axterminator/blob/main/benches/probes/README.md)):
 
 - **>95% AX-resolvable** → ship positioning and benchmark numbers first; vision fallback is nice-to-have
 - **<80% AX-resolvable** → expand the vision-fallback path before competitive positioning work
