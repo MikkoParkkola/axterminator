@@ -133,13 +133,9 @@ fn bench_ax_resolution(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     for probe in &ax_probes {
-        group.bench_with_input(
-            BenchmarkId::new("resolve", &probe.id),
-            probe,
-            |b, probe| {
-                b.iter(|| ax_resolve(probe));
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("resolve", &probe.id), probe, |b, probe| {
+            b.iter(|| ax_resolve(probe));
+        });
     }
     group.finish();
 
@@ -168,7 +164,10 @@ fn bench_ax_resolution(c: &mut Criterion) {
                 ax_rate * 100.0
             );
         } else {
-            eprintln!("GATE PASS: AX-first success rate {:.1}% ≥ 80%.", ax_rate * 100.0);
+            eprintln!(
+                "GATE PASS: AX-first success rate {:.1}% ≥ 80%.",
+                ax_rate * 100.0
+            );
         }
     } else {
         eprintln!(

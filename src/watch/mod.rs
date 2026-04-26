@@ -279,6 +279,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unused_assignments)] // mutation exists to prove clone() is independent
     fn watch_config_clone_is_independent() {
         let mut cfg = WatchConfig::default();
         let cfg2 = cfg.clone();
