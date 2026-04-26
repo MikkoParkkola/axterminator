@@ -2,6 +2,31 @@
 
 How AXTerminator compares to other macOS GUI automation tools.
 
+## AX-first vs Vision-first Paradigm
+
+Modern vision-first computer-use agents (OpenAI Codex computer use, Anthropic Claude Computer Use, Google Gemini Operator, Perplexity Personal Computer) all share the same paradigm: **screenshot → vision LLM → pixel coordinates → cursor click**. The agent and model differ; the paradigm does not.
+
+AXTerminator is a different paradigm: **AX semantic tree → element reference → action**. Vision is the fallback, not the default.
+
+| Dimension | Vision-first (Codex CU / Claude CU / Gemini / Perplexity) | AX-first (AXTerminator) |
+|-----------|-----------------------------------------------------------|-------------------------|
+| **Per-action cost** | Vision tokens every call | ~free (AX API) |
+| **Latency** | 1–5 s (LLM round-trip) | ~379 µs (measured) |
+| **Reliability** | Pixel-brittle; breaks on theme/font/layout change | Semantic; stable across visual changes |
+| **Background operation** | Cursor visible; requires foreground | Truly headless; no cursor movement |
+| **Dense / labeled UIs** | Struggles with small / overlapping targets | Reads labels directly from AX tree |
+| **Canvas / game / OpenGL surfaces** | Works (universal) | Needs `ax_find_visual` fallback |
+| **Architecture role** | Agent reasoning + acting | Acts as hands under any reasoning agent |
+
+**Not competitors — layers.** Any vision-first agent that can invoke MCP tools can call AXTerminator as its action layer. This gives the agent AX-semantic speed for the 90%+ of tasks that are native UI, and falls back to vision for the remainder.
+
+### Coverage gate
+
+Before expanding the vision-fallback path, run a one-week AX coverage audit on your actual app surface (see [benches/probes/README.md](https://github.com/MikkoParkkola/axterminator/blob/main/benches/probes/README.md)):
+
+- **>95% AX-resolvable** → ship positioning and benchmark numbers first; vision fallback is nice-to-have
+- **<80% AX-resolvable** → expand the vision-fallback path before competitive positioning work
+
 ## Performance Comparison
 
 | Tool | Element Access | Click | Focus Stealing | Language |
