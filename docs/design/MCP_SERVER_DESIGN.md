@@ -1,8 +1,8 @@
 # AXTerminator MCP Server Design Document
 
-**Status**: Draft | **Version**: 3.0 | **Date**: 2026-03-19
-**Protocol**: MCP 2025-11-25 | **SDK**: `rmcp` 1.2.0 (official Rust MCP SDK)
-**Runtime**: Pure Rust (unified `axterminator` binary) | **Deprecates**: `server.py` (Python)
+**Status**: Implemented | **Version**: 3.1 | **Date**: 2026-04-26
+**Protocol**: MCP 2025-11-05 | **SDK**: Hand-rolled Rust protocol layer
+**Runtime**: Pure Rust (unified `axterminator` binary) | **Python API**: Historical design, not shipped in the current crate
 **Author**: Mikko Parkkola
 
 ---
@@ -35,8 +35,9 @@ macOS.
    push UI state changes to agents. Agents react to events rather than polling.
 6. **Composable operations**: Complex multi-step workflows compose from atomic tools
    with transaction semantics, rollback on failure, and macro recording/replay.
-7. **Pure Rust, three interfaces**: One Rust core exposes CLI, MCP server, and Python
-   API. No Python in the hot path.
+7. **Pure Rust, two shipped interfaces**: One Rust core exposes CLI and MCP server
+   entry points. Historical Python/PyO3 design notes remain in this document for
+   context, but the current crate ships a Rust library plus CLI/MCP binary.
 
 ### What This Enables
 
@@ -63,12 +64,12 @@ macOS.
               +---------------------+---------------------+
               |                     |                     |
     +---------+---------+ +--------+--------+ +----------+---------+
-    | CLI (clap)        | | MCP Server      | | Python API (pyo3)  |
-    | axterminator find | | axterminator    | | import axterminator|
-    | axterminator click| |   mcp serve     | | ax.app("Safari")   |
+    | CLI (clap)        | | MCP Server      | | Rust Library       |
+    | axterminator find | | axterminator    | | axterminator::     |
+    | axterminator click| |   mcp serve     | |   app::AXApp       |
     +---------+---------+ +--------+--------+ +----------+---------+
               |                     |                     |
-        Human / shell          AI agents            Python scripts
+        Human / shell          AI agents            Rust consumers
 ```
 
 The `axterminator` binary is the single entry point:
@@ -3114,7 +3115,9 @@ For remote HTTP:
 
 ## Appendix A: MCP Protocol Capability Matrix
 
-Complete mapping of every MCP 2025-11-25 capability to our implementation decision.
+Complete mapping of implemented MCP 2025-11-05 behavior. Tool/resource
+annotations additionally follow the semantic hint fields documented in the
+2025-11-25 draft.
 
 | MCP Capability | Use? | Phase | Notes |
 |----------------|:----:|:-----:|-------|
@@ -3152,9 +3155,11 @@ Complete mapping of every MCP 2025-11-25 capability to our implementation decisi
 | **Session management** | YES | 4 | MCP-Session-Id for HTTP transport |
 | **Resumability** | YES | 4 | SSE event IDs, Last-Event-ID reconnection |
 
-## Appendix B: Rust MCP SDK Landscape (as of 2026-03-19)
+## Appendix B: Rust MCP SDK Landscape (historical, as of 2026-03-19)
 
-Research summary of all Rust MCP crates evaluated. See Section 2A for the selection rationale.
+Research summary of Rust MCP crates evaluated during the original design phase.
+The current implementation uses a hand-rolled Rust protocol layer instead of an
+SDK dependency.
 
 | Crate | Version | Downloads | Repository | Notes |
 |-------|---------|-----------|------------|-------|
@@ -3167,8 +3172,9 @@ Research summary of all Rust MCP crates evaluated. See Section 2A for the select
 | `mcp-kit` | 0.4.0 | 118 | github.com/KSD-CO/mcp-kit | Plugin system. Too early. |
 | `mcp-gateway` | 2.7.3 | 105 | github.com/MikkoParkkola/mcp-gateway | Meta-MCP multiplexer (our own). |
 
-**Decision**: `rmcp` 1.2.0 is the only viable choice. Official, 5.7M downloads,
-full protocol, used by our Windows counterpart (mediar-ai/terminator).
+**Current implementation note**: this SDK survey is retained as historical
+context. The shipped crate uses local protocol structs and transport handlers so
+the MCP layer remains dependency-light and tightly controlled.
 
 ## Appendix C: Wire Protocol Examples
 

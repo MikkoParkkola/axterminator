@@ -224,10 +224,18 @@ impl AXApp {
     /// primary method fails.
     fn capture_screenshot(&self) -> AXResult<Vec<u8>> {
         let wid = self.cg_window_id()?;
-        let temp_path = format!("/tmp/axterminator_screenshot_{}.png", self.pid);
+        let temp_dir = tempfile::Builder::new()
+            .prefix("axterminator_screenshot_")
+            .tempdir()
+            .map_err(|e| AXError::SystemError(e.to_string()))?;
+        let temp_path = temp_dir.path().join("capture.png");
 
         let output = Command::new("screencapture")
-            .args(["-l", &wid.to_string(), "-o", "-x", &temp_path])
+            .arg("-l")
+            .arg(wid.to_string())
+            .arg("-o")
+            .arg("-x")
+            .arg(&temp_path)
             .output()
             .map_err(|e| AXError::SystemError(e.to_string()))?;
 
@@ -236,7 +244,6 @@ impl AXApp {
         }
 
         let data = std::fs::read(&temp_path).map_err(|e| AXError::SystemError(e.to_string()))?;
-        let _ = std::fs::remove_file(&temp_path);
         Ok(data)
     }
 
@@ -354,10 +361,17 @@ impl AXApp {
             .bounds()
             .ok_or_else(|| AXError::SystemError("Window has no bounds".into()))?;
 
-        let temp_path = format!("/tmp/axterminator_screenshot_{}.png", self.pid);
+        let temp_dir = tempfile::Builder::new()
+            .prefix("axterminator_screenshot_")
+            .tempdir()
+            .map_err(|e| AXError::SystemError(e.to_string()))?;
+        let temp_path = temp_dir.path().join("capture.png");
         let region = format!("{},{},{},{}", x as i32, y as i32, w as i32, h as i32);
         let output = Command::new("screencapture")
-            .args(["-R", &region, "-x", &temp_path])
+            .arg("-R")
+            .arg(&region)
+            .arg("-x")
+            .arg(&temp_path)
             .output()
             .map_err(|e| AXError::SystemError(e.to_string()))?;
 
@@ -368,7 +382,6 @@ impl AXApp {
         }
 
         let data = std::fs::read(&temp_path).map_err(|e| AXError::SystemError(e.to_string()))?;
-        let _ = std::fs::remove_file(&temp_path);
         Ok(data)
     }
 

@@ -438,7 +438,7 @@ Here's a troubleshooting guide based on common AXTerminator issues:\n\
 ## Screenshot fails silently\n\
 1. ax_screenshot uses a window-id lookup that may fail on some apps\n\
 2. Fallback: use screencapture CLI with region coordinates from ax_list_windows\n\
-3. Example: screencapture -R\"x,y,w,h\" -x /tmp/shot.png\n\
+3. Example: tmp=$(mktemp \"${TMPDIR:-/tmp}/axterminator-shot.XXXXXX.png\"); screencapture -R\"x,y,w,h\" -x \"$tmp\"\n\
 \n\
 ## App not found\n\
 1. Run ax_list_apps to see exact running app names\n\

@@ -358,21 +358,21 @@ impl AXElement {
 
         // Use CGWindowListCreateImage to capture the region
         // For simplicity, use screencapture command with region
-        let temp_path = format!(
-            "/tmp/axterminator_element_screenshot_{}.png",
-            std::process::id()
+        let temp_dir = tempfile::Builder::new()
+            .prefix("axterminator_element_screenshot_")
+            .tempdir()
+            .map_err(|e| AXError::SystemError(e.to_string()))?;
+        let temp_path = temp_dir.path().join("capture.png");
+        let region = format!(
+            "{},{},{},{}",
+            x as i32, y as i32, width as i32, height as i32
         );
 
         let output = Command::new("screencapture")
-            .args([
-                "-R",
-                &format!(
-                    "{},{},{},{}",
-                    x as i32, y as i32, width as i32, height as i32
-                ),
-                "-x",
-                &temp_path,
-            ])
+            .arg("-R")
+            .arg(&region)
+            .arg("-x")
+            .arg(&temp_path)
             .output()
             .map_err(|e| AXError::SystemError(e.to_string()))?;
 
@@ -381,7 +381,6 @@ impl AXElement {
         }
 
         let data = std::fs::read(&temp_path).map_err(|e| AXError::SystemError(e.to_string()))?;
-        let _ = std::fs::remove_file(&temp_path);
 
         Ok(data)
     }

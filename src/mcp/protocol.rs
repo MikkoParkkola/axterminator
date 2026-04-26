@@ -1,4 +1,4 @@
-//! MCP 2025-11-05 protocol types.
+//! MCP 2025-11-25 protocol types (wire-compatible with 2025-11-05).
 //!
 //! Covers the wire types for Phase 1, Phase 2, and Phase 5 (Tasks API):
 //! - `initialize` handshake with resources + prompts + tasks capabilities
@@ -299,7 +299,8 @@ pub struct Tool {
     pub annotations: ToolAnnotations,
 }
 
-/// Semantic hints for MCP clients (MCP 2025-11-05 §6.3).
+/// Semantic hints for MCP clients (MCP 2025-11-25 §6.3; four hint fields
+/// are unchanged from 2025-11-05).
 ///
 /// These four boolean fields are a direct serialisation of the MCP wire format —
 /// each maps to a distinct JSON property. Refactoring into an enum would break

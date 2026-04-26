@@ -254,9 +254,9 @@ impl Server {
 
 /// A public wrapper around [`Server`] for use by the HTTP transport layer.
 ///
-/// Each HTTP request creates its own `ServerHandle` (stateless per-request
-/// in Phase 4). Stateful HTTP sessions — where connected apps persist across
-/// requests — are deferred to Phase 5.
+/// The HTTP transport stores one `ServerHandle` in its shared application state
+/// so MCP lifecycle, connected apps, workflow state, and subscriptions persist
+/// across the request sequence for a server process.
 ///
 /// # Examples
 ///

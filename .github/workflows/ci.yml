@@ -55,3 +55,16 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
       - run: cargo clippy --all-features -- -D warnings -A unexpected_cfgs
+
+  bench-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+      # Type-check benchmarks in CI so performance-critical paths keep building.
+      # Full Criterion runs still belong on an interactive macOS host because
+      # Accessibility and WindowServer availability vary on hosted runners.
+      # All-features coverage is handled by the check/test/clippy jobs; keeping
+      # this as `cargo check` avoids release/LTO link cost on every PR.
+      - run: cargo check --benches

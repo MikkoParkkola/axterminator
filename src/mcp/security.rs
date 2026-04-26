@@ -210,6 +210,12 @@ impl AppPolicy {
         self.allowed.is_empty() || self.allowed.contains(app_id)
     }
 
+    /// Return true when no allow/deny policy is configured.
+    #[must_use]
+    pub fn is_permissive(&self) -> bool {
+        self.allowed.is_empty() && self.denied.is_empty()
+    }
+
     /// A permissive policy that allows every application.
     #[must_use]
     pub fn permissive() -> Self {
@@ -227,7 +233,7 @@ impl AppPolicy {
     /// allowed = ["Calculator", "com.apple.Safari"]
     /// denied  = ["com.apple.Keychain-Access"]
     /// ```
-    fn parse(content: &str) -> Self {
+    pub(crate) fn parse(content: &str) -> Self {
         let mut allowed = HashSet::new();
         let mut denied = HashSet::new();
 
@@ -446,6 +452,12 @@ impl SecurityGuard {
         }
     }
 
+    /// Return true when no app allow/deny policy is configured.
+    #[must_use]
+    pub fn app_policy_is_permissive(&self) -> bool {
+        self.app_policy.is_permissive()
+    }
+
     /// Append an audit record for a completed mutating tool call.
     ///
     /// No-op for read-only tools (determined by [`is_mutating_tool`]).
@@ -624,6 +636,7 @@ mod tests {
         let policy = AppPolicy::permissive();
         assert!(policy.is_app_allowed("Calculator"));
         assert!(policy.is_app_allowed("com.apple.Keychain-Access"));
+        assert!(policy.is_permissive());
     }
 
     #[test]
@@ -634,6 +647,7 @@ mod tests {
         assert!(!policy.is_app_allowed("1Password"));
         // THEN: others still allowed
         assert!(policy.is_app_allowed("Calculator"));
+        assert!(!policy.is_permissive());
     }
 
     #[test]
@@ -644,6 +658,7 @@ mod tests {
         assert!(policy.is_app_allowed("Calculator"));
         // THEN: Safari blocked
         assert!(!policy.is_app_allowed("Safari"));
+        assert!(!policy.is_permissive());
     }
 
     #[test]
