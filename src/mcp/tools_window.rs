@@ -149,7 +149,7 @@ fn handle_window_move(args: &Value) -> ToolCallResult {
     tell process "{app}"
         repeat with w in windows
             if name of w contains "{title}" then
-                set position of w to {{"{"}{x}, {y}{"}"}}
+                set position of w to {{{x}, {y}}}
                 exit repeat
             end if
         end repeat
@@ -170,7 +170,7 @@ fn handle_window_resize(args: &Value) -> ToolCallResult {
     tell process "{app}"
         repeat with w in windows
             if name of w contains "{title}" then
-                set size of w to {{"{"}{w}, {h}{"}"}}
+                set size of w to {{{w}, {h}}}
                 exit repeat
             end if
         end repeat
