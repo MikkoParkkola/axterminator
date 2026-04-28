@@ -117,6 +117,7 @@ pub fn all_tools() -> Vec<Tool> {
         tool_ax_wait_idle(),
     ];
     tools.extend(crate::mcp::tools_extended::extended_tools());
+    tools.extend(crate::mcp::tools_system::system_tools());
     tools
 }
 
@@ -567,6 +568,9 @@ pub fn call_tool<W: std::io::Write>(
         "ax_click_at" => handle_click_at(args),
         "ax_find_visual" => handle_find_visual(args, registry),
         "ax_wait_idle" => handle_wait_idle(args, registry),
+        n if n.starts_with("ax_fs_") || n.starts_with("ax_process_") || n == "ax_exec" => {
+            crate::mcp::tools_system::call_system_tool(n, args, "")
+        }
         other => {
             if let Some(result) =
                 crate::mcp::tools_extended::call_tool_extended(other, args, registry, out)

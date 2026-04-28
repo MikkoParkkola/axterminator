@@ -58,6 +58,7 @@ pub(crate) mod tools_gui_events;
 pub(crate) mod tools_handlers;
 pub mod tools_innovation;
 pub mod tools_spaces;
+pub mod tools_system;
 #[cfg(feature = "watch")]
 pub mod tools_watch;
 pub mod transport;
