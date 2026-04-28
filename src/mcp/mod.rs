@@ -62,6 +62,7 @@ pub mod tools_system;
 pub mod tools_system_ext;
 pub mod tools_power;
 pub mod tools_term;
+pub mod tools_window;
 #[cfg(feature = "watch")]
 pub mod tools_watch;
 pub mod transport;

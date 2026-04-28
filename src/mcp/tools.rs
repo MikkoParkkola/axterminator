@@ -121,6 +121,7 @@ pub fn all_tools() -> Vec<Tool> {
     tools.extend(crate::mcp::tools_system_ext::extended_system_tools());
     tools.extend(crate::mcp::tools_power::power_tools());
     tools.extend(crate::mcp::tools_term::term_tools());
+    tools.extend(crate::mcp::tools_window::window_tools());
     tools
 }
 
@@ -583,6 +584,9 @@ pub fn call_tool<W: std::io::Write>(
         }
         n if n.starts_with("ax_term") => {
             crate::mcp::tools_term::call_term_tool(n, args, "")
+        }
+        n if n.starts_with("ax_window") => {
+            crate::mcp::tools_window::call_window_tool(n, args, "")
         }
         other => {
             if let Some(result) =
