@@ -118,6 +118,7 @@ pub fn all_tools() -> Vec<Tool> {
     ];
     tools.extend(crate::mcp::tools_extended::extended_tools());
     tools.extend(crate::mcp::tools_system::system_tools());
+    tools.extend(crate::mcp::tools_system_ext::extended_system_tools());
     tools
 }
 
@@ -570,6 +571,9 @@ pub fn call_tool<W: std::io::Write>(
         "ax_wait_idle" => handle_wait_idle(args, registry),
         n if n.starts_with("ax_fs_") || n.starts_with("ax_process_") || n == "ax_exec" => {
             crate::mcp::tools_system::call_system_tool(n, args, "")
+        }
+        n if n.starts_with("ax_system_") => {
+            crate::mcp::tools_system_ext::call_extended_system_tool(n, args, "")
         }
         other => {
             if let Some(result) =
