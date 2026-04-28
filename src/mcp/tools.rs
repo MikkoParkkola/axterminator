@@ -120,6 +120,7 @@ pub fn all_tools() -> Vec<Tool> {
     tools.extend(crate::mcp::tools_system::system_tools());
     tools.extend(crate::mcp::tools_system_ext::extended_system_tools());
     tools.extend(crate::mcp::tools_power::power_tools());
+    tools.extend(crate::mcp::tools_term::term_tools());
     tools
 }
 
@@ -579,6 +580,9 @@ pub fn call_tool<W: std::io::Write>(
         n if n.starts_with("ax_fs_edit") || n.starts_with("ax_fs_search") || n.starts_with("ax_fs_delete") 
             || n.starts_with("ax_http") || n.starts_with("ax_app") || n.starts_with("ax_notify") => {
             crate::mcp::tools_power::call_power_tool(n, args, "")
+        }
+        n if n.starts_with("ax_term") => {
+            crate::mcp::tools_term::call_term_tool(n, args, "")
         }
         other => {
             if let Some(result) =
