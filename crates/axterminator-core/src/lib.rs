@@ -57,3 +57,37 @@ mod tests {
         assert!(result == true || result == false);
     }
 }
+
+/// Application descriptor — name, bundle ID, PID.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AppInfo {
+    pub name: String,
+    pub bundle_id: Option<String>,
+    pub pid: i32,
+    pub is_accessible: bool,
+}
+
+/// Window descriptor — title, position, size, app.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WindowInfo {
+    pub title: String,
+    pub app_name: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub is_main: bool,
+}
+
+/// System context snapshot — battery, display, volume, etc.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SystemContext {
+    pub battery_pct: Option<f64>,
+    pub charging: Option<bool>,
+    pub dark_mode: bool,
+    pub screen_width: u32,
+    pub screen_height: u32,
+    pub volume: Option<f64>,
+    pub hostname: String,
+    pub uptime_secs: u64,
+}
