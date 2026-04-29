@@ -530,7 +530,7 @@ class Axterminator < Formula
   homepage "https://github.com/MikkoParkkola/axterminator"
   url "https://github.com/MikkoParkkola/axterminator/releases/download/v0.6.1/axterminator-0.6.1-aarch64-apple-darwin.tar.gz"
   sha256 "..."
-  license "MIT OR Apache-2.0"
+  license :cannot_represent
 
   def install
     bin.install "axterminator"

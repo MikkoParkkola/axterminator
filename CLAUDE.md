@@ -12,7 +12,7 @@ The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot
 
 ## Current Status
 
-- **v0.9.1** · Rust stable · macOS 12+ · MIT + Apache-2.0 dual license
+- **v0.9.1** · Rust stable · macOS 12+ · last MIT + Apache-2.0 dual-license release
 - **27 core tools** (default features) plus up to 34+ with `audio`, `camera`, `spaces`, `watch`, `context`, `docker`, `parakeet`, `http-transport` feature flags
 - **~1000 tests** on default features; full suite with `--all-features`; CI runs `test --all-features` on macOS
 - **Performance**: 379 us per element access, 7-strategy self-healing locators, ObjC FFI for CoreFoundation / CoreGraphics / AVFoundation
@@ -38,7 +38,7 @@ The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot
 | **Session state via `OnceLock<Mutex>` singleton** (`McpSession`) | Shared state across tool handlers; tests take `session_test_lock()` | Add parallel singletons; avoid per-tool mutable globals |
 | **Feature flags for optional modules** (audio / camera / spaces / watch / context / docker / parakeet / http-transport) | Keep default build lean; opt-in heavy deps | Promote feature-gated modules to default without explicit trade-off |
 | **No unsafe without `// SAFETY:`** | Discipline for ObjC FFI + CF bridging | Add unsafe blocks without the comment |
-| **License: MIT + Apache-2.0 dual** | Standard Rust ecosystem defaults | Relicense without explicit user direction |
+| **License: community + commercial for future releases** | Free personal/research/noncommercial OSS/free public-good use with attribution; business use by written commercial license | Revert to permissive licensing or accept meaningful external contributions without commercial relicensing permission |
 
 ## Anti-Patterns (things agents get wrong in this repo)
 

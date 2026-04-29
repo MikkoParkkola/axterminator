@@ -196,4 +196,7 @@ ax_find query="//AXButton[@AXTitle='Save']"
 ## Source
 
 - GitHub: https://github.com/MikkoParkkola/axterminator
-- License: MIT OR Apache-2.0
+- License: AXTerminator Community License + commercial license. Free for
+  personal, research, educational, noncommercial open-source, and free
+  public-good projects with attribution. Business use requires a written
+  commercial license. See `LICENSE.md` and `COMMERCIAL.md`.

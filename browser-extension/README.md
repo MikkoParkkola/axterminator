@@ -66,4 +66,7 @@ To modify the extension:
 
 ## License
 
-MIT - Part of the axterminator project.
+Part of the AXTerminator project. Free personal, research, educational,
+noncommercial open-source, and free public-good use requires attribution.
+Business use requires a written commercial license. See
+[`../LICENSE.md`](../LICENSE.md) and [`../COMMERCIAL.md`](../COMMERCIAL.md).

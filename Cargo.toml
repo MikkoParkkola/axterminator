@@ -5,12 +5,18 @@ edition = "2021"
 authors = ["Mikko Parkkola <mikko.parkkola@iki.fi>"]
 description = "macOS GUI testing framework with background testing, sub-millisecond element access, and self-healing locators"
 homepage = "https://mikkoparkkola.github.io/axterminator/"
-license = "MIT OR Apache-2.0"
+license-file = "LICENSE.md"
 repository = "https://github.com/MikkoParkkola/axterminator"
 documentation = "https://github.com/MikkoParkkola/axterminator#readme"
 readme = "README.md"
 keywords = ["macos", "gui", "testing", "accessibility", "automation"]
 categories = ["development-tools::testing", "gui", "os::macos-apis"]
+[workspace]
+members = [
+    "crates/axterminator-core",
+]
+resolver = "2"
+
 exclude = [
     ".claude/",
     ".github/",

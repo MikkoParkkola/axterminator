@@ -7,7 +7,7 @@
 [![Crates.io](https://img.shields.io/crates/v/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
 [![Downloads](https://img.shields.io/crates/d/axterminator?style=for-the-badge)](https://crates.io/crates/axterminator)
 [![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple)](https://github.com/MikkoParkkola/axterminator)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=for-the-badge)](https://github.com/MikkoParkkola/axterminator)
+[![License](https://img.shields.io/badge/license-community%20%2B%20commercial-blue?style=for-the-badge)](https://github.com/MikkoParkkola/axterminator/blob/main/LICENSE.md)
 
 </div>
 
@@ -164,4 +164,11 @@ Machine-readable installation guide: [`llms.txt`](https://raw.githubusercontent.
 
 ## License
 
-MIT OR Apache-2.0
+AXTerminator is free for personal, research, educational, noncommercial
+open-source, and free public-good use with attribution.
+
+Business use requires a written commercial license. See
+[`LICENSE.md`](../LICENSE.md) and [`COMMERCIAL.md`](../COMMERCIAL.md).
+
+Earlier releases published under `MIT OR Apache-2.0` remain under those earlier
+license grants for those earlier versions only.

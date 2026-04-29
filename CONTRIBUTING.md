@@ -89,4 +89,6 @@ Have questions? Use [GitHub Discussions](https://github.com/MikkoParkkola/axterm
 
 ## License
 
-By contributing, you agree that your contributions will be dual-licensed under MIT OR Apache-2.0.
+By contributing, you agree that your contributions may be distributed by the
+project owner under the AXTerminator Community License and under separate
+commercial licenses. Do not submit code you cannot license on those terms.
