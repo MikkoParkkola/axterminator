@@ -23,7 +23,9 @@ struct TermSession {
 
 pub(crate) fn get_term_sessions() -> TermSessions {
     static SESSIONS: std::sync::OnceLock<TermSessions> = std::sync::OnceLock::new();
-    SESSIONS.get_or_init(|| Arc::new(Mutex::new(HashMap::new()))).clone()
+    SESSIONS
+        .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+        .clone()
 }
 
 pub(crate) fn term_tools() -> Vec<Tool> {
@@ -84,7 +86,9 @@ pub(crate) fn call_term_tool(name: &str, args: &Value, _mode: &str) -> ToolCallR
 
 fn term_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
     format!("{:x}", t.as_nanos())
 }
 
@@ -119,16 +123,22 @@ fn handle_term_start(args: &Value) -> ToolCallResult {
     let sessions = get_term_sessions();
     sessions.lock().unwrap().insert(id.clone(), session);
 
-    ToolCallResult::ok(json!({
-        "session_id": id,
-        "command": cmd_str,
-        "pid": pid,
-        "started": now,
-    }).to_string())
+    ToolCallResult::ok(
+        json!({
+            "session_id": id,
+            "command": cmd_str,
+            "pid": pid,
+            "started": now,
+        })
+        .to_string(),
+    )
 }
 
 fn handle_term_send(args: &Value) -> ToolCallResult {
-    let sid = args.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
+    let sid = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let input = args.get("input").and_then(|v| v.as_str()).unwrap_or("");
 
     let sessions = get_term_sessions();
@@ -147,15 +157,24 @@ fn handle_term_send(args: &Value) -> ToolCallResult {
     // Read available output (non-blocking)
     let output = read_nonblocking(&mut session.child);
 
-    ToolCallResult::ok(json!({
-        "session_id": sid,
-        "output": output,
-    }).to_string())
+    ToolCallResult::ok(
+        json!({
+            "session_id": sid,
+            "output": output,
+        })
+        .to_string(),
+    )
 }
 
 fn handle_term_read(args: &Value) -> ToolCallResult {
-    let sid = args.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
-    let timeout_ms = args.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(1000) as u64;
+    let sid = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let timeout_ms = args
+        .get("timeout_ms")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1000) as u64;
 
     let sessions = get_term_sessions();
     let mut guard = sessions.lock().unwrap();
@@ -168,15 +187,24 @@ fn handle_term_read(args: &Value) -> ToolCallResult {
     std::thread::sleep(std::time::Duration::from_millis(timeout_ms.min(5000)));
     let output = read_nonblocking(&mut session.child);
 
-    ToolCallResult::ok(json!({
-        "session_id": sid,
-        "output": output,
-    }).to_string())
+    ToolCallResult::ok(
+        json!({
+            "session_id": sid,
+            "output": output,
+        })
+        .to_string(),
+    )
 }
 
 fn handle_term_close(args: &Value) -> ToolCallResult {
-    let sid = args.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
-    let signal = args.get("signal").and_then(|v| v.as_str()).unwrap_or("SIGTERM");
+    let sid = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let signal = args
+        .get("signal")
+        .and_then(|v| v.as_str())
+        .unwrap_or("SIGTERM");
 
     let sessions = get_term_sessions();
     let mut guard = sessions.lock().unwrap();
@@ -187,11 +215,16 @@ fn handle_term_close(args: &Value) -> ToolCallResult {
 
     // Kill the process
     match signal {
-        "SIGKILL" => { let _ = session.child.kill(); }
+        "SIGKILL" => {
+            let _ = session.child.kill();
+        }
         _ => {
             // Send SIGTERM via kill command
             let pid = session.child.id();
-            let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).output();
+            let _ = Command::new("kill")
+                .arg("-TERM")
+                .arg(pid.to_string())
+                .output();
         }
     }
 
@@ -206,22 +239,30 @@ fn handle_term_close(args: &Value) -> ToolCallResult {
 
     let output = read_nonblocking_remaining(&mut session.child);
 
-    ToolCallResult::ok(json!({
-        "session_id": sid,
-        "exit_code": exit_code,
-        "final_output": output,
-    }).to_string())
+    ToolCallResult::ok(
+        json!({
+            "session_id": sid,
+            "exit_code": exit_code,
+            "final_output": output,
+        })
+        .to_string(),
+    )
 }
 
 fn handle_term_list() -> ToolCallResult {
     let sessions = get_term_sessions();
     let guard = sessions.lock().unwrap();
-    let list: Vec<Value> = guard.iter().map(|(id, s)| json!({
-        "session_id": id,
-        "command": s.command,
-        "pid": s.child.id(),
-        "started": s.started,
-    })).collect();
+    let list: Vec<Value> = guard
+        .iter()
+        .map(|(id, s)| {
+            json!({
+                "session_id": id,
+                "command": s.command,
+                "pid": s.child.id(),
+                "started": s.started,
+            })
+        })
+        .collect();
     ToolCallResult::ok(json!({"sessions": list, "count": list.len()}).to_string())
 }
 
@@ -268,6 +309,9 @@ fn read_nonblocking_remaining(child: &mut Child) -> String {
 fn chrono_now() -> String {
     // Avoid chrono dep — use std
     use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
     format!("{secs}")
 }

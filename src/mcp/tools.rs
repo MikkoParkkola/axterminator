@@ -578,16 +578,17 @@ pub fn call_tool<W: std::io::Write>(
         n if n.starts_with("ax_system_") => {
             crate::mcp::tools_system_ext::call_extended_system_tool(n, args, "")
         }
-        n if n.starts_with("ax_fs_edit") || n.starts_with("ax_fs_search") || n.starts_with("ax_fs_delete") 
-            || n.starts_with("ax_http") || n.starts_with("ax_app") || n.starts_with("ax_notify") => {
+        n if n.starts_with("ax_fs_edit")
+            || n.starts_with("ax_fs_search")
+            || n.starts_with("ax_fs_delete")
+            || n.starts_with("ax_http")
+            || n.starts_with("ax_app")
+            || n.starts_with("ax_notify") =>
+        {
             crate::mcp::tools_power::call_power_tool(n, args, "")
         }
-        n if n.starts_with("ax_term") => {
-            crate::mcp::tools_term::call_term_tool(n, args, "")
-        }
-        n if n.starts_with("ax_window") => {
-            crate::mcp::tools_window::call_window_tool(n, args, "")
-        }
+        n if n.starts_with("ax_term") => crate::mcp::tools_term::call_term_tool(n, args, ""),
+        n if n.starts_with("ax_window") => crate::mcp::tools_window::call_window_tool(n, args, ""),
         other => {
             if let Some(result) =
                 crate::mcp::tools_extended::call_tool_extended(other, args, registry, out)

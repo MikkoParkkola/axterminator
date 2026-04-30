@@ -72,8 +72,11 @@ pub(crate) fn call_window_tool(name: &str, args: &Value, _mode: &str) -> ToolCal
 }
 
 fn handle_window_list(args: &Value) -> ToolCallResult {
-    let filter = args.get("app").and_then(|v| v.as_str()).map(|s| s.to_lowercase());
-    
+    let filter = args
+        .get("app")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_lowercase());
+
     // Use a combined approach: osascript for standard windows + CGWindowList for all
     let script = r#"
         tell application "System Events"
@@ -98,8 +101,14 @@ fn handle_window_list(args: &Value) -> ToolCallResult {
             if parts.len() >= 4 {
                 let app = parts[0].to_string();
                 let title = parts[1].to_string();
-                if let Some(ref f) = filter { if !app.to_lowercase().contains(f) { continue; } }
-                windows.push(json!({"app": app, "title": title, "bounds": parts[2], "size": parts[3]}));
+                if let Some(ref f) = filter {
+                    if !app.to_lowercase().contains(f) {
+                        continue;
+                    }
+                }
+                windows.push(
+                    json!({"app": app, "title": title, "bounds": parts[2], "size": parts[3]}),
+                );
             }
         }
     }
@@ -110,10 +119,11 @@ fn handle_window_list(args: &Value) -> ToolCallResult {
 fn handle_window_focus(args: &Value) -> ToolCallResult {
     let app = args.get("app").and_then(|v| v.as_str()).unwrap_or("");
     let title = args.get("title").and_then(|v| v.as_str());
-    
+
     let script = if let Some(t) = title {
         let escaped = t.replace('"', "\\\"");
-        format!(r#"tell app "{app}" to activate
+        format!(
+            r#"tell app "{app}" to activate
 tell application "System Events"
     tell process "{app}"
         set frontmost to true
@@ -124,7 +134,8 @@ tell application "System Events"
             end if
         end repeat
     end tell
-end tell"#)
+end tell"#
+        )
     } else {
         format!(r#"tell app "{app}" to activate"#)
     };
@@ -154,7 +165,8 @@ fn handle_window_move(args: &Value) -> ToolCallResult {
             end if
         end repeat
     end tell
-end tell"#);
+end tell"#
+    );
 
     run_script(&script, "move")
 }
@@ -175,7 +187,8 @@ fn handle_window_resize(args: &Value) -> ToolCallResult {
             end if
         end repeat
     end tell
-end tell"#);
+end tell"#
+    );
 
     run_script(&script, "resize")
 }
@@ -195,7 +208,8 @@ fn handle_window_minimize(args: &Value) -> ToolCallResult {
             end if
         end repeat
     end tell
-end tell"#)
+end tell"#
+        )
     } else {
         format!(
             r#"tell application "System Events"
@@ -204,7 +218,8 @@ end tell"#)
             set miniaturized of w to true
         end repeat
     end tell
-end tell"#)
+end tell"#
+        )
     };
 
     run_script(&script, "minimize")
@@ -212,18 +227,23 @@ end tell"#)
 
 fn handle_window_tile(args: &Value) -> ToolCallResult {
     let app = args.get("app").and_then(|v| v.as_str()).unwrap_or("");
-    let position = args.get("position").and_then(|v| v.as_str()).unwrap_or("full");
+    let position = args
+        .get("position")
+        .and_then(|v| v.as_str())
+        .unwrap_or("full");
 
     // Activate app then send keyboard shortcut for tiling
     let shortcut = match position {
-        "left" => "124",   // Ctrl+Cmd+Right (actually use built-in window menu)
-        "right" => "123",  // Ctrl+Cmd+Left  
-        "full" => "70",    // Ctrl+Cmd+F
+        "left" => "124",  // Ctrl+Cmd+Right (actually use built-in window menu)
+        "right" => "123", // Ctrl+Cmd+Left
+        "full" => "70",   // Ctrl+Cmd+F
         _ => return ToolCallResult::error("position must be left, right, or full"),
     };
 
     // Activate first
-    let _ = Command::new("osascript").args(["-e", &format!(r#"tell app "{app}" to activate"#)]).output();
+    let _ = Command::new("osascript")
+        .args(["-e", &format!(r#"tell app "{app}" to activate"#)])
+        .output();
     std::thread::sleep(std::time::Duration::from_millis(300));
 
     // Use the Window menu: Window > Tile Window to Left/Right, or Window > Zoom
@@ -239,7 +259,8 @@ fn handle_window_tile(args: &Value) -> ToolCallResult {
     tell process "{app}"
         click menu item "{menu_item}" of menu "Window" of menu bar 1
     end tell
-end tell"#);
+end tell"#
+    );
 
     run_script(&script, "tile")
 }

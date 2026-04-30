@@ -49,6 +49,9 @@ impl AXElement {
 
     /// Whether this element can receive text input.
     pub fn is_text_field(&self) -> bool {
-        matches!(self.role.as_str(), "AXTextField" | "AXTextArea" | "AXSearchField")
+        matches!(
+            self.role.as_str(),
+            "AXTextField" | "AXTextArea" | "AXSearchField"
+        )
     }
 }

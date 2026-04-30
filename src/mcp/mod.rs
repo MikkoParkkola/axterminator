@@ -57,14 +57,14 @@ pub mod tools_gui;
 pub(crate) mod tools_gui_events;
 pub(crate) mod tools_handlers;
 pub mod tools_innovation;
+pub mod tools_power;
 pub mod tools_spaces;
 pub mod tools_system;
 pub mod tools_system_ext;
-pub mod tools_power;
 pub mod tools_term;
-pub mod tools_window;
 #[cfg(feature = "watch")]
 pub mod tools_watch;
+pub mod tools_window;
 pub mod transport;
 #[cfg(feature = "watch")]
 pub(crate) mod watch_channel;
