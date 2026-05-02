@@ -238,7 +238,7 @@ pub(crate) fn handle_type(args: &Value, registry: &Arc<AppRegistry>) -> ToolCall
         Some(t) => t.to_string(),
         None => return ToolCallResult::error("Missing required field: text"),
     };
-    let mode_str = args["mode"].as_str().unwrap_or("focus");
+    let mode_str = args["mode"].as_str().unwrap_or("background");
     let mode = parse_action_mode(mode_str);
 
     let char_count = text.chars().count();
