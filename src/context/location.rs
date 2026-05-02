@@ -140,7 +140,7 @@ pub fn request_location(timeout: Duration) -> Result<Location, LocationError> {
             let _: () = msg_send![manager, requestWhenInUseAuthorization];
         }
         // Pump RunLoop briefly to allow the auth dialog to appear.
-        extern "C" {
+        unsafe extern "C" {
             fn CFRunLoopRunInMode(mode: *const Object, seconds: f64, ret: bool) -> i32;
             static kCFRunLoopDefaultMode: *const Object;
         }
@@ -166,7 +166,7 @@ pub fn request_location(timeout: Duration) -> Result<Location, LocationError> {
     }
 
     // Pump RunLoop and poll for location.
-    extern "C" {
+    unsafe extern "C" {
         fn CFRunLoopRunInMode(mode: *const Object, seconds: f64, ret: bool) -> i32;
         static kCFRunLoopDefaultMode: *const Object;
     }

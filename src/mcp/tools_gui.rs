@@ -753,7 +753,7 @@ fn build_tree_node<W: Write>(
     if let Some(d) = emitted.get_mut(current_depth) {
         if !*d {
             *d = true;
-            if let Some(ref mut rep) = reporter {
+            if let Some(rep) = reporter {
                 let layer = current_depth + 1;
                 let msg = format!("Scanning layer {layer}/{max_depth}…");
                 // Best-effort: silently ignore I/O errors in progress notifications.

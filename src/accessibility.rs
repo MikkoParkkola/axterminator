@@ -22,7 +22,7 @@ use crate::error::{AXError, AXResult};
 // External declarations for macOS Accessibility APIs
 #[link(name = "ApplicationServices", kind = "framework")]
 #[allow(dead_code)]
-extern "C" {
+unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;

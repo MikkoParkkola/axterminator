@@ -402,7 +402,7 @@ pub(crate) struct CGestureList {
     pub error_msg: *const CChar,
 }
 
-extern "C" {
+unsafe extern "C" {
     /// Returns `AVAuthorizationStatus` for `AVMediaTypeVideo` (0-3).
     /// Does NOT trigger a permission dialog.
     pub(crate) fn av_camera_authorization_status() -> i32;

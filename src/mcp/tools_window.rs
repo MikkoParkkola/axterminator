@@ -233,7 +233,7 @@ fn handle_window_tile(args: &Value) -> ToolCallResult {
         .unwrap_or("full");
 
     // Activate app then send keyboard shortcut for tiling
-    let shortcut = match position {
+    let _shortcut = match position {
         "left" => "124",  // Ctrl+Cmd+Right (actually use built-in window menu)
         "right" => "123", // Ctrl+Cmd+Left
         "full" => "70",   // Ctrl+Cmd+F

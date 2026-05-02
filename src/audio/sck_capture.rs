@@ -33,7 +33,7 @@ struct AXTSCKCaptureResult {
     error_msg: [u8; 256],
 }
 
-extern "C" {
+unsafe extern "C" {
     fn axt_sck_is_available() -> bool;
     fn axt_sck_capture_system_audio(duration_secs: f32) -> AXTSCKCaptureResult;
     fn axt_sck_free_result(result: *mut AXTSCKCaptureResult);

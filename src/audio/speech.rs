@@ -459,7 +459,7 @@ fn run_sf_speech_recognizer(wav_path: &str, locale: &str) -> Result<String, Audi
     // RunLoop.  We must pump the RunLoop while waiting, otherwise the
     // callback never fires and we time out.  This mirrors the Swift pattern:
     //   while !done { RunLoop.current.run(mode: .default, before: ...) }
-    extern "C" {
+    unsafe extern "C" {
         fn CFRunLoopRunInMode(mode: *const Object, seconds: f64, ret: bool) -> i32;
         static kCFRunLoopDefaultMode: *const Object;
     }

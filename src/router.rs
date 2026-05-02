@@ -633,7 +633,7 @@ unsafe fn cfstring_to_string(cf: CFTypeRef) -> Option<String> {
         return None;
     }
 
-    let cfstring = CFString::wrap_under_get_rule(cf.cast());
+    let cfstring = unsafe { CFString::wrap_under_get_rule(cf.cast()) };
     Some(cfstring.to_string())
 }
 

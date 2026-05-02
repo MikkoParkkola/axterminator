@@ -66,11 +66,11 @@ pub(super) const K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0;
 pub(super) const K_AUDIO_OBJECT_SYSTEM_OBJECT: u32 = 1;
 
 // ---------------------------------------------------------------------------
-// CoreAudio extern "C" bindings
+// CoreAudio unsafe extern "C" bindings
 // ---------------------------------------------------------------------------
 
 // CoreAudio.framework is linked via build.rs when the `audio` feature is enabled.
-extern "C" {
+unsafe extern "C" {
     pub(super) fn AudioObjectGetPropertyDataSize(
         object_id: u32,
         address: *const AudioObjectPropertyAddress,

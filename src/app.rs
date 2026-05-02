@@ -268,7 +268,7 @@ impl AXApp {
         use core_foundation::string::CFString;
 
         #[link(name = "CoreGraphics", kind = "framework")]
-        extern "C" {
+        unsafe extern "C" {
             fn CGWindowListCopyWindowInfo(
                 option: u32,
                 relative_to: u32,

@@ -40,7 +40,7 @@ type xpc_handler_t = *const fn(xpc_object_t);
 // XPC is a private framework - link dynamically at runtime
 // These are low-level FFI bindings; warnings are expected for unused/FFI-unsafe
 #[allow(improper_ctypes, dead_code)]
-extern "C" {
+unsafe extern "C" {
     fn xpc_connection_create_mach_service(
         name: *const i8,
         target_queue: *const std::ffi::c_void,
@@ -109,7 +109,7 @@ impl EspressoMacClient {
             }
 
             // Set up event handler (must be non-null, even if empty)
-            extern "C" fn event_handler(_event: xpc_object_t) {
+            unsafe extern "C" fn event_handler(_event: xpc_object_t) {
                 // Handle connection errors silently
             }
             let handler: xpc_handler_t = event_handler as *const fn(xpc_object_t);
