@@ -1,7 +1,8 @@
 [package]
 name = "axterminator-core"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.95.0"
 authors = ["Mikko Parkkola <mikko.parkkola@iki.fi>"]
 description = "macOS GUI automation core library — sub-millisecond AX element access"
 license = "PolyForm-Noncommercial-1.0.0"
