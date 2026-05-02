@@ -32,7 +32,7 @@ pub fn is_accessible() -> bool {
 }
 
 #[cfg(target_os = "macos")]
-extern "C" {
+unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
 }
 
