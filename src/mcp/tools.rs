@@ -617,7 +617,7 @@ mod tests {
         // WHEN: requesting all tools
         let tools = all_tools();
         // THEN: count is a deterministic function of active features
-        let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
+        let base = 61usize; // Phase 1 (12) + Phase 3 GUI (7) + terminal (4) + window (7) + innovation (17) + system (8) + filesystem (6)
         let context_base = 1usize; // system_context (always on); clipboard is in innovation
         let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
         let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };

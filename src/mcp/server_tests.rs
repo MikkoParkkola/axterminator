@@ -119,12 +119,10 @@ fn tools_list_returns_correct_count_for_feature_set() {
     let v: Value = serde_json::to_value(&resp).unwrap();
     // THEN: count is a deterministic function of active features
     let count = v["result"]["tools"].as_array().unwrap().len();
-    let base = 34usize; // Phase 1 (12) + Phase 3 GUI (7) + innovation (15)
+    let base = 61usize; // Phase 1 (12) + Phase 3 GUI (7) + terminal (4) + window (7) + innovation (17) + system (8) + filesystem (6)
     let context_base = 1usize; // system_context (always on); clipboard is in innovation
     let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
-    // audio: ax_listen + ax_speak + ax_audio_voices + ax_audio_devices (4)
-    // + capture tools (4) = 8
     let extra_audio: usize = if cfg!(feature = "audio") { 8 } else { 0 };
     let extra_camera: usize = if cfg!(feature = "camera") { 3 } else { 0 };
     let extra_watch: usize = if cfg!(feature = "watch") { 3 } else { 0 };
@@ -908,7 +906,7 @@ fn tools_list_returns_exactly_34_base_tools_with_default_features() {
     let v = send(&mut s, 100, "tools/list", None);
     // THEN: base tools (Phase 1 × 12 + Phase 3 GUI × 7 + innovation × 15 + context × 2) + features
     let tools = v["result"]["tools"].as_array().unwrap();
-    let base: usize = 35; // 34 original + 1 context (system_context); clipboard is in innovation
+    let base: usize = 62; // 61 base + 1 context (system_context); clipboard is in innovation
     let extra_context_location: usize = if cfg!(feature = "context") { 1 } else { 0 };
     let extra_spaces: usize = if cfg!(feature = "spaces") { 5 } else { 0 };
     // audio: ax_listen + ax_speak + ax_audio_voices + ax_audio_devices (4)
