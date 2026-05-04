@@ -27,7 +27,7 @@
 //! See `benches/probes/README.md` for probe format and corpus requirements.
 //! Probes are TOML files; add them to `benches/probes/` before the gate fires.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use serde::Deserialize;
 use std::path::Path;
 use std::time::Duration;

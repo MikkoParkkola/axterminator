@@ -15,7 +15,7 @@ use std::ptr;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use crate::accessibility::{get_attribute, AXUIElementRef};
+use crate::accessibility::{AXUIElementRef, get_attribute};
 use crate::error::AXResult;
 
 // XPC service identifiers for EspressoMac

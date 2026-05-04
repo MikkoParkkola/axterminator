@@ -39,9 +39,9 @@ use std::net::TcpStream;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::{debug, info};
-use tungstenite::{connect as ws_connect, stream::MaybeTlsStream, Message, WebSocket};
+use tungstenite::{Message, WebSocket, connect as ws_connect, stream::MaybeTlsStream};
 
 use crate::error::{AXError, AXResult};
 

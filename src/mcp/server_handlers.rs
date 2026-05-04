@@ -13,18 +13,17 @@ use serde_json::Value;
 use tracing::{debug, info};
 
 use crate::mcp::protocol::{
-    task_status, ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse,
-    LoggingCapability, PingResult, PromptGetParams, PromptsCapability, RequestId,
-    ResourceReadParams, ResourceSubscribeParams, ResourceSubscribeResult,
-    ResourceUnsubscribeParams, ResourcesCapability, RpcError, SamplingCapability,
-    ServerCapabilities, ServerInfo, TaskCancelParams, TaskCancelResult, TaskInfo, TaskResultParams,
-    TaskResultResponse, TasksCapability, TasksListResult, ToolCallParams, ToolListResult,
-    ToolsCapability,
+    ElicitationCapability, InitializeParams, InitializeResult, JsonRpcResponse, LoggingCapability,
+    PingResult, PromptGetParams, PromptsCapability, RequestId, ResourceReadParams,
+    ResourceSubscribeParams, ResourceSubscribeResult, ResourceUnsubscribeParams,
+    ResourcesCapability, RpcError, SamplingCapability, ServerCapabilities, ServerInfo,
+    TaskCancelParams, TaskCancelResult, TaskInfo, TaskResultParams, TaskResultResponse,
+    TasksCapability, TasksListResult, ToolCallParams, ToolListResult, ToolsCapability, task_status,
 };
 use crate::mcp::security::SecurityMode;
 use crate::mcp::tools::call_tool;
 
-use super::server::{next_task_id, Phase, Server, TaskEntry};
+use super::server::{Phase, Server, TaskEntry, next_task_id};
 
 impl Server {
     // -----------------------------------------------------------------------
@@ -410,7 +409,7 @@ impl Server {
                         RpcError::INVALID_PARAMS,
                         format!("Invalid tasks/result params: {e}"),
                     ),
-                )
+                );
             }
         };
 
@@ -467,7 +466,7 @@ impl Server {
                         RpcError::INVALID_PARAMS,
                         format!("Invalid tasks/cancel params: {e}"),
                     ),
-                )
+                );
             }
         };
 
@@ -817,9 +816,11 @@ mod tests {
         let result = server.dispatch_tool("ax_click_at", &json!({"x": 0, "y": 0}), &mut out);
 
         assert!(result.is_error);
-        assert!(result.content[0]
-            .text
-            .contains("cannot be scoped to an allowed app"));
+        assert!(
+            result.content[0]
+                .text
+                .contains("cannot be scoped to an allowed app")
+        );
         assert!(out.is_empty());
     }
 }

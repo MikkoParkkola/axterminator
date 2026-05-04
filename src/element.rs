@@ -4,11 +4,11 @@
 
 use std::time::Duration;
 
+use crate::ActionMode;
 use crate::accessibility::{
-    self, actions, attributes, get_attribute, perform_action, AXUIElementRef,
+    self, AXUIElementRef, actions, attributes, get_attribute, perform_action,
 };
 use crate::error::{AXError, AXResult};
-use crate::ActionMode;
 
 /// Wrapper for an accessibility element
 #[derive(Debug)]

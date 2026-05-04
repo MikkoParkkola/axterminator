@@ -11,7 +11,7 @@
 //! Uses CoreAudio and SFSpeechRecognizer — on-device, no cloud.
 
 #[cfg(feature = "audio")]
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[cfg(feature = "audio")]
 use crate::mcp::annotations;
@@ -539,9 +539,11 @@ mod tests {
         let args = json!({});
         let result = handle_ax_speak(&args);
         assert!(result.is_error);
-        assert!(result.content[0]
-            .text
-            .contains("Missing required field: text"));
+        assert!(
+            result.content[0]
+                .text
+                .contains("Missing required field: text")
+        );
     }
 
     #[test]

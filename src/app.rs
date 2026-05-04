@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::accessibility::{
-    self, attributes, create_application_element, get_attribute, AXUIElementRef,
+    self, AXUIElementRef, attributes, create_application_element, get_attribute,
 };
 use crate::element::AXElement;
 use crate::error::{AXError, AXResult};

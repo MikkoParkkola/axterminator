@@ -10,7 +10,7 @@
 //! JSON-RPC notifications.  The server loop drives this delivery; these tools
 //! only manage watcher lifecycle.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};

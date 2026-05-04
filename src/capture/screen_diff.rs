@@ -407,7 +407,7 @@ fn perceptual_score(a: &[f32; GRID_CELLS], b: &[f32; GRID_CELLS]) -> f32 {
     let changed = a
         .iter()
         .zip(b.iter())
-        .filter(|(&va, &vb)| (va - vb).abs() > CELL_DELTA_THRESHOLD)
+        .filter(|&(&va, &vb)| (va - vb).abs() > CELL_DELTA_THRESHOLD)
         .count();
     #[allow(clippy::cast_precision_loss)]
     let score = changed as f32 / GRID_CELLS as f32;

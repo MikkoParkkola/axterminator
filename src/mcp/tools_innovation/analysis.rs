@@ -2,7 +2,7 @@
 //!
 //! Extracted from `mod.rs` to keep the tools_innovation module under 800 LOC.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 // ---------------------------------------------------------------------------
 

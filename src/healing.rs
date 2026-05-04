@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
-use crate::accessibility::{attributes, get_attribute, AXUIElementRef};
+use crate::accessibility::{AXUIElementRef, attributes, get_attribute};
 use crate::element::AXElement;
 use crate::error::{AXError, AXResult};
 

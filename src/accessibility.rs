@@ -297,11 +297,7 @@ pub fn get_position_attribute(element: AXUIElementRef) -> Option<CGPoint> {
 
     release_cf(value);
 
-    if success {
-        Some(point)
-    } else {
-        None
-    }
+    if success { Some(point) } else { None }
 }
 
 /// Get size (`CGSize`) from `AXValue`
@@ -329,11 +325,7 @@ pub fn get_size_attribute(element: AXUIElementRef) -> Option<CGSize> {
 
     release_cf(value);
 
-    if success {
-        Some(size)
-    } else {
-        None
-    }
+    if success { Some(size) } else { None }
 }
 
 /// Set attribute value on an element
@@ -416,11 +408,7 @@ pub fn get_point_attribute(element: AXUIElementRef, attribute: &str) -> Option<C
 
     release_cf(value);
 
-    if success {
-        Some(point)
-    } else {
-        None
-    }
+    if success { Some(point) } else { None }
 }
 
 /// Get a size attribute (generic version)
@@ -450,11 +438,7 @@ pub fn get_size_attribute_generic(element: AXUIElementRef, attribute: &str) -> O
 
     release_cf(value);
 
-    if success {
-        Some(size)
-    } else {
-        None
-    }
+    if success { Some(size) } else { None }
 }
 
 /// Get children of an element

@@ -127,7 +127,7 @@ mod tests {
         buf.push("b");
         buf.push("c");
         buf.push("d"); // evicts "a"
-                       // THEN: len is still 3, oldest is "b"
+        // THEN: len is still 3, oldest is "b"
         assert_eq!(buf.len(), 3);
         let items = buf.drain_all();
         assert_eq!(items, vec!["b", "c", "d"]);
@@ -160,7 +160,7 @@ mod tests {
         buf.push(100u32);
         buf.push(200);
         buf.push(300); // evicts 100
-                       // THEN: latest is most recent
+        // THEN: latest is most recent
         assert_eq!(buf.latest(), Some(&300));
     }
 

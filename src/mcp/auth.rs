@@ -461,9 +461,10 @@ mod tests {
     #[test]
     fn localhost_only_allows_loopback_ipv6() {
         let v = localhost_validator();
-        assert!(v
-            .validate_source_ip(IpAddr::V6(Ipv6Addr::LOCALHOST))
-            .is_ok());
+        assert!(
+            v.validate_source_ip(IpAddr::V6(Ipv6Addr::LOCALHOST))
+                .is_ok()
+        );
     }
 
     #[test]

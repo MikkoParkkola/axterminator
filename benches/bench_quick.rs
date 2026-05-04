@@ -6,7 +6,7 @@ use std::process::Command;
 use std::time::Instant;
 
 #[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn AXUIElementCreateApplication(pid: i32) -> *mut std::ffi::c_void;
     fn AXUIElementCopyAttributeValue(
         element: *mut std::ffi::c_void,

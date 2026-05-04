@@ -36,7 +36,7 @@
 use std::cmp::Ordering;
 
 use crate::intent::{SceneGraph, SceneNode};
-use crate::intent_matching::{score_node, tokenise, MatchContext};
+use crate::intent_matching::{MatchContext, score_node, tokenise};
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -257,11 +257,7 @@ impl QueryHints {
             PositionHint::Left => cx < 400.0,
             PositionHint::Right => cx > 800.0,
         };
-        if matches {
-            POSITION_BONUS
-        } else {
-            0.0
-        }
+        if matches { POSITION_BONUS } else { 0.0 }
     }
 
     /// Compute a size bonus based on the node's bounding rect area.
@@ -277,11 +273,7 @@ impl QueryHints {
             SizeHint::Large => area > 4_000.0,
             SizeHint::Small => area < 600.0,
         };
-        if matches {
-            SIZE_BONUS
-        } else {
-            0.0
-        }
+        if matches { SIZE_BONUS } else { 0.0 }
     }
 }
 
@@ -310,7 +302,7 @@ fn build_match(node: &SceneNode, score: f64, reasoning: String) -> ElementMatch 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intent::{build_scene_from_nodes, NodeId, SceneNode};
+    use crate::intent::{NodeId, SceneNode, build_scene_from_nodes};
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

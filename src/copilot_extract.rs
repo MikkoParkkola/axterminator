@@ -8,7 +8,7 @@
 //! [`crate::copilot_state::read_copilot_state`] as the public entry point.
 
 use crate::accessibility::{
-    attributes, get_bool_attribute_value, get_children, get_string_attribute_value, AXUIElementRef,
+    AXUIElementRef, attributes, get_bool_attribute_value, get_children, get_string_attribute_value,
 };
 use crate::copilot_state::{AppContext, ContentContext, NavigationContext, SelectionContext};
 
@@ -278,11 +278,7 @@ fn collect_visible_text(
     let win = window_ref?;
     let kids = get_children(win).ok()?;
     let text = collect_text_in(kids.as_slice(), 256);
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }
 
 fn collect_text_in(elements: &[AXUIElementRef], budget: usize) -> String {

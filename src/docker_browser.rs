@@ -1038,9 +1038,10 @@ mod tests {
         assert!(args.contains(&"axterminator.neko=1".into()));
         assert!(args.iter().any(|a| a == "127.0.0.1:9222:9222"));
         assert!(args.iter().any(|a| a == "127.0.0.1:5900:5900"));
-        assert!(args
-            .iter()
-            .any(|a| a.contains("ghcr.io/m1k1o/neko/chromium")));
+        assert!(
+            args.iter()
+                .any(|a| a.contains("ghcr.io/m1k1o/neko/chromium"))
+        );
     }
 
     #[test]
@@ -1058,9 +1059,10 @@ mod tests {
         assert!(args.iter().any(|a| a == "127.0.0.1:9500:9222"));
         assert!(args.iter().any(|a| a == "127.0.0.1:5950:5900"));
         assert!(args.iter().any(|a| a.contains("1280x720")));
-        assert!(args
-            .iter()
-            .any(|a| a.contains("ghcr.io/m1k1o/neko/firefox")));
+        assert!(
+            args.iter()
+                .any(|a| a.contains("ghcr.io/m1k1o/neko/firefox"))
+        );
     }
 
     // ── base64_decode ─────────────────────────────────────────────────────

@@ -10,7 +10,7 @@
 //! Uses AVFoundation (capture) and Vision framework (detection) — on-device.
 
 #[cfg(feature = "camera")]
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[cfg(feature = "camera")]
 use crate::mcp::annotations;

@@ -82,11 +82,15 @@ use tracing::debug;
 #[derive(Debug, thiserror::Error)]
 pub enum CameraError {
     /// TCC permission denied. Direct the user to System Settings.
-    #[error("camera_denied: Camera permission denied — open System Settings > Privacy & Security > Camera and grant access")]
+    #[error(
+        "camera_denied: Camera permission denied — open System Settings > Privacy & Security > Camera and grant access"
+    )]
     PermissionDenied,
 
     /// No camera matching the requested device ID was found.
-    #[error("device_not_found: Camera device '{0}' not found — call ax_camera_devices to list available cameras")]
+    #[error(
+        "device_not_found: Camera device '{0}' not found — call ax_camera_devices to list available cameras"
+    )]
     DeviceNotFound(String),
 
     /// `duration_exceeded`: requested duration exceeds the 60-second cap.
@@ -94,7 +98,9 @@ pub enum CameraError {
     DurationExceeded(f64),
 
     /// Unknown gesture name supplied by the caller.
-    #[error("unknown_gesture: '{0}' is not a recognised gesture name — valid values: thumbs_up, thumbs_down, wave, stop, point, nod, shake")]
+    #[error(
+        "unknown_gesture: '{0}' is not a recognised gesture name — valid values: thumbs_up, thumbs_down, wave, stop, point, nod, shake"
+    )]
     UnknownGesture(String),
 
     /// Underlying system or FFI failure.

@@ -639,9 +639,11 @@ mod tests {
         let suggestions = copilot.evaluate();
 
         // THEN: the clipboard URL rule fires
-        assert!(suggestions
-            .iter()
-            .any(|s| s.rule_name == "clipboard_url_open_browser"));
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.rule_name == "clipboard_url_open_browser")
+        );
     }
 
     #[test]
@@ -656,9 +658,11 @@ mod tests {
         let suggestions = copilot.evaluate();
 
         // THEN: URL rule absent (other builtin rules may still fire for idle)
-        assert!(!suggestions
-            .iter()
-            .any(|s| s.rule_name == "clipboard_url_open_browser"));
+        assert!(
+            !suggestions
+                .iter()
+                .any(|s| s.rule_name == "clipboard_url_open_browser")
+        );
     }
 
     // -- Suggestion fields -----------------------------------------------

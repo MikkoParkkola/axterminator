@@ -1,5 +1,5 @@
 /// System MCP tools for filesystem, process, and command execution.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::process::Command;
 

@@ -17,7 +17,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::mcp::annotations;
 use crate::mcp::progress::ProgressReporter;
@@ -686,7 +686,7 @@ fn handle_ax_record(args: &Value) -> ToolCallResult {
                 other => {
                     return ToolCallResult::error(format!(
                         "Unknown action_type '{other}'. Expected: click, type, assert"
-                    ))
+                    ));
                 }
             };
             let event = crate::recording::RecordedEvent {

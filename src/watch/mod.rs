@@ -295,7 +295,7 @@ mod tests {
     async fn coordinator_starts_with_both_disabled_no_handles() {
         // GIVEN: both sensors disabled
         let cfg = WatchConfig::default(); // audio=false, camera=false
-                                          // WHEN: coordinator started
+        // WHEN: coordinator started
         let (coord, _rx) = WatchCoordinator::start(cfg);
         // THEN: no tasks spawned → handles are None
         assert!(coord.audio_handle.is_none());

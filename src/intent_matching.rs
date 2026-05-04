@@ -329,7 +329,7 @@ fn build_reason(label_score: f64, role_score: f64, context_score: f64, node: &Sc
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intent::{build_scene_from_nodes, NodeId, SceneGraph, SceneNode};
+    use crate::intent::{NodeId, SceneGraph, SceneNode, build_scene_from_nodes};
 
     fn btn(id: usize, title: &str) -> SceneNode {
         SceneNode {

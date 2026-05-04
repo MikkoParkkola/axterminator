@@ -683,7 +683,7 @@ fn build_http_auth(
     localhost_only: bool,
     bind_addr: std::net::IpAddr,
 ) -> Result<axterminator::mcp::auth::AuthConfig> {
-    use axterminator::mcp::auth::{generate_token, AuthConfig};
+    use axterminator::mcp::auth::{AuthConfig, generate_token};
 
     if localhost_only {
         // Explicit localhost-only: validate bind address.
@@ -945,7 +945,7 @@ fn cmd_completions(shell: &str) -> Result<()> {
 }
 
 fn cmd_upgrade(dry_run: bool, quiet: bool) -> Result<()> {
-    use axterminator::upgrade::{check_upgrade, UpgradeOptions};
+    use axterminator::upgrade::{UpgradeOptions, check_upgrade};
     let opts = UpgradeOptions { dry_run, quiet };
     check_upgrade(&opts)?;
     Ok(())
@@ -1075,16 +1075,18 @@ mod tests {
     fn token_and_localhost_only_conflict() {
         // GIVEN: --token and --localhost-only together
         // THEN: clap returns an error (they conflict)
-        assert!(parse(&[
-            "mcp",
-            "serve",
-            "--http",
-            "8741",
-            "--token",
-            "tok",
-            "--localhost-only"
-        ])
-        .is_err());
+        assert!(
+            parse(&[
+                "mcp",
+                "serve",
+                "--http",
+                "8741",
+                "--token",
+                "tok",
+                "--localhost-only"
+            ])
+            .is_err()
+        );
     }
 
     #[test]

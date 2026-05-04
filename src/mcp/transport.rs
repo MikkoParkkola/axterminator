@@ -164,8 +164,8 @@ mod http {
     use axum::{Json, Router};
     use serde_json::Value;
     use tokio::sync::broadcast;
-    use tokio_stream::wrappers::BroadcastStream;
     use tokio_stream::StreamExt as _;
+    use tokio_stream::wrappers::BroadcastStream;
     use tracing::{debug, error, info, warn};
 
     use crate::mcp::auth::{AuthError, BearerValidator};
@@ -536,9 +536,11 @@ mod http {
             )
             .await;
             assert_eq!(status, StatusCode::OK);
-            assert!(tools["result"]["tools"]
-                .as_array()
-                .is_some_and(|tools| !tools.is_empty()));
+            assert!(
+                tools["result"]["tools"]
+                    .as_array()
+                    .is_some_and(|tools| !tools.is_empty())
+            );
         }
     }
 }

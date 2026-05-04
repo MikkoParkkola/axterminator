@@ -4,7 +4,7 @@
 //!
 //! Run with: cargo bench
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use std::process::Command;
 use std::time::Duration;
@@ -14,7 +14,7 @@ use core_foundation::string::CFString;
 
 // FFI declarations for macOS Accessibility API
 #[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
     fn AXUIElementCopyAttributeValue(
         element: CFTypeRef,
@@ -152,12 +152,14 @@ unsafe fn search_for_role(element: CFTypeRef, target_role: &str, max_depth: usiz
     // Check this element's role
     let mut role_value: CFTypeRef = std::ptr::null();
     let role_attr = CFString::new("AXRole");
-    if AXUIElementCopyAttributeValue(element, role_attr.as_concrete_TypeRef(), &mut role_value) == 0
+    if unsafe {
+        AXUIElementCopyAttributeValue(element, role_attr.as_concrete_TypeRef(), &mut role_value)
+    } == 0
         && !role_value.is_null()
     {
-        let role_cf = CFString::wrap_under_get_rule(role_value as _);
+        let role_cf = unsafe { CFString::wrap_under_get_rule(role_value as _) };
         let matches = role_cf.to_string() == target_role;
-        CFRelease(role_value);
+        unsafe { CFRelease(role_value) };
         if matches {
             return true;
         }
@@ -166,23 +168,24 @@ unsafe fn search_for_role(element: CFTypeRef, target_role: &str, max_depth: usiz
     // Get children
     let mut children: CFTypeRef = std::ptr::null();
     let children_attr = CFString::new("AXChildren");
-    if AXUIElementCopyAttributeValue(element, children_attr.as_concrete_TypeRef(), &mut children)
-        == 0
+    if unsafe {
+        AXUIElementCopyAttributeValue(element, children_attr.as_concrete_TypeRef(), &mut children)
+    } == 0
         && !children.is_null()
     {
         let array = children as CFArrayRef;
-        let count = CFArrayGetCount(array);
+        let count = unsafe { CFArrayGetCount(array) };
 
         for i in 0..count.min(50) {
             // Limit to avoid huge trees
-            let child = CFArrayGetValueAtIndex(array, i);
-            if search_for_role(child, target_role, max_depth - 1) {
-                CFRelease(children);
+            let child = unsafe { CFArrayGetValueAtIndex(array, i) };
+            if unsafe { search_for_role(child, target_role, max_depth - 1) } {
+                unsafe { CFRelease(children) };
                 return true;
             }
         }
 
-        CFRelease(children);
+        unsafe { CFRelease(children) };
     }
 
     false

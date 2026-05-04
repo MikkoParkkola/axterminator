@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::app::AXApp;
 use crate::mcp::elicitation::is_destructive_element;
@@ -124,7 +124,7 @@ fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResul
         Err(_) => {
             return ToolCallResult::error(format!(
                 "Element not found: '{query}' (semantic fallback also failed)"
-            ))
+            ));
         }
     };
 

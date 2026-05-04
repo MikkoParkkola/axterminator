@@ -1,6 +1,6 @@
 //! Window management MCP tools — move, resize, focus, minimize macOS windows.
 //! Uses CoreGraphics and Accessibility APIs for window control.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::process::Command;
 
 use crate::mcp::annotations;

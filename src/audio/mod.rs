@@ -77,9 +77,9 @@ mod speech;
 // ---------------------------------------------------------------------------
 
 pub use capture::{capture_microphone, capture_system_audio, validate_duration};
-pub use devices::{check_microphone_permission, list_audio_devices, AudioDevice};
+pub use devices::{AudioDevice, check_microphone_permission, list_audio_devices};
 pub use speech::{
-    list_speech_voices, speak, speak_with_voice, transcribe, transcribe_with_engine, AudioEngine,
+    AudioEngine, list_speech_voices, speak, speak_with_voice, transcribe, transcribe_with_engine,
 };
 
 // ---------------------------------------------------------------------------

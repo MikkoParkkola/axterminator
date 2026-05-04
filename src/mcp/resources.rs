@@ -114,8 +114,7 @@ pub fn static_resources() -> ResourceListResult {
             uri: "axterminator://system/displays",
             name: "system-displays",
             title: "Connected Displays",
-            description:
-                "All connected displays with id, bounds (global logical-point coordinates), \
+            description: "All connected displays with id, bounds (global logical-point coordinates), \
                  scale factor, and is_primary flag. Bounds origin may be negative for secondary \
                  monitors placed left of or above the primary display.",
             mime_type: "application/json",
@@ -124,16 +123,14 @@ pub fn static_resources() -> ResourceListResult {
             uri: "axterminator://apps",
             name: "running-apps",
             title: "Running Applications",
-            description:
-                "All running macOS applications with PIDs, bundle IDs, and accessibility info.",
+            description: "All running macOS applications with PIDs, bundle IDs, and accessibility info.",
             mime_type: "application/json",
         },
         Resource {
             uri: "axterminator://clipboard",
             name: "clipboard",
             title: "System Clipboard",
-            description:
-                "Current macOS clipboard text content. Subscribe for change notifications \
+            description: "Current macOS clipboard text content. Subscribe for change notifications \
                 when the clipboard is updated by the user or another application.",
             mime_type: "application/json",
         },
@@ -245,8 +242,7 @@ pub fn resource_templates() -> ResourceTemplateListResult {
                 uri_template: "axterminator://app/{name}/tree",
                 name: "app-element-tree",
                 title: "Application Element Tree",
-                description:
-                    "Accessibility element hierarchy for a connected app (depth ≤ 3 by default).",
+                description: "Accessibility element hierarchy for a connected app (depth ≤ 3 by default).",
                 mime_type: "application/json",
             },
             ResourceTemplate {
@@ -260,8 +256,7 @@ pub fn resource_templates() -> ResourceTemplateListResult {
                 uri_template: "axterminator://app/{name}/state",
                 name: "app-ui-state",
                 title: "Application UI State",
-                description:
-                    "Current UI state: window titles, focused element, visible text summary.",
+                description: "Current UI state: window titles, focused element, visible text summary.",
                 mime_type: "application/json",
             },
             ResourceTemplate {
@@ -654,7 +649,9 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(text).unwrap();
         let displays = v["displays"].as_array().unwrap();
         if displays.is_empty() {
-            eprintln!("skipping display resource shape assertions: no active displays in this environment");
+            eprintln!(
+                "skipping display resource shape assertions: no active displays in this environment"
+            );
             return;
         }
         for display in displays {

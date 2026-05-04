@@ -61,7 +61,7 @@ use std::time::{Duration, Instant};
 
 use tracing::{debug, warn};
 
-use crate::audio::{capture_system_audio, transcribe, AudioData};
+use crate::audio::{AudioData, capture_system_audio, transcribe};
 
 // ---------------------------------------------------------------------------
 // Public types

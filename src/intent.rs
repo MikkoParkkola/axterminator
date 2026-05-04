@@ -32,9 +32,9 @@
 
 use std::collections::VecDeque;
 
-use crate::accessibility::{self, attributes, AXUIElementRef};
+use crate::accessibility::{self, AXUIElementRef, attributes};
 use crate::error::{AXError, AXResult};
-use crate::intent_matching::{score_node, MatchContext};
+use crate::intent_matching::{MatchContext, score_node};
 
 // ── Public types ──────────────────────────────────────────────────────────────
 

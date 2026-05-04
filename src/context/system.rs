@@ -247,11 +247,7 @@ fn screen_scale() -> f64 {
         return 1.0;
     }
     let scale: f64 = unsafe { msg_send![main, backingScaleFactor] };
-    if scale > 0.0 {
-        scale
-    } else {
-        1.0
-    }
+    if scale > 0.0 { scale } else { 1.0 }
 }
 
 // ---------------------------------------------------------------------------
@@ -515,11 +511,7 @@ fn frontmost_app_name() -> Option<String> {
     }
     let name: *mut Object = unsafe { msg_send![app, localizedName] };
     let s = ns_string_to_rust(name);
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    if s.is_empty() { None } else { Some(s) }
 }
 
 // ---------------------------------------------------------------------------

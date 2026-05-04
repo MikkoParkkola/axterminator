@@ -1593,11 +1593,12 @@ fn resources_unsubscribe_removes_uri_from_subscriptions_set() {
         "resources/subscribe",
         Some(json!({ "uri": "axterminator://apps" })),
     );
-    assert!(s
-        .subscriptions
-        .lock()
-        .unwrap()
-        .contains("axterminator://apps"));
+    assert!(
+        s.subscriptions
+            .lock()
+            .unwrap()
+            .contains("axterminator://apps")
+    );
     // WHEN: unsubscribe
     let v = send(
         &mut s,
@@ -1729,11 +1730,12 @@ fn ax_connect_tool_emits_notification_for_subscribed_apps_uri() {
     );
     s.handle(&req, &mut out);
     // THEN: subscriptions set is unchanged (non-connected tool, no notification)
-    assert!(s
-        .subscriptions
-        .lock()
-        .unwrap()
-        .contains("axterminator://apps"));
+    assert!(
+        s.subscriptions
+            .lock()
+            .unwrap()
+            .contains("axterminator://apps")
+    );
 }
 
 #[test]
@@ -1771,11 +1773,12 @@ fn resources_subscribe_capture_status_stores_uri() {
     );
     // THEN: success, URI tracked
     assert!(v.get("error").is_none());
-    assert!(s
-        .subscriptions
-        .lock()
-        .unwrap()
-        .contains("axterminator://capture/status"));
+    assert!(
+        s.subscriptions
+            .lock()
+            .unwrap()
+            .contains("axterminator://capture/status")
+    );
 }
 
 #[cfg(feature = "audio")]
@@ -1793,11 +1796,12 @@ fn resources_subscribe_capture_transcription_stores_uri() {
     );
     // THEN: success, URI tracked
     assert!(v.get("error").is_none());
-    assert!(s
-        .subscriptions
-        .lock()
-        .unwrap()
-        .contains("axterminator://capture/transcription"));
+    assert!(
+        s.subscriptions
+            .lock()
+            .unwrap()
+            .contains("axterminator://capture/transcription")
+    );
 }
 
 #[cfg(feature = "audio")]
@@ -1815,11 +1819,12 @@ fn resources_subscribe_capture_screen_stores_uri() {
     );
     // THEN: success, URI tracked
     assert!(v.get("error").is_none());
-    assert!(s
-        .subscriptions
-        .lock()
-        .unwrap()
-        .contains("axterminator://capture/screen"));
+    assert!(
+        s.subscriptions
+            .lock()
+            .unwrap()
+            .contains("axterminator://capture/screen")
+    );
 }
 
 #[cfg(feature = "audio")]

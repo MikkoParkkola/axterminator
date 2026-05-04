@@ -8,9 +8,9 @@ use std::ffi::CStr;
 use tracing::debug;
 
 use super::{
+    CChar, CDeviceInfo, CFrameResult, CameraDevice, CameraError, CameraPosition, ImageData,
     av_capture_frame, av_free_camera_list, av_free_frame_result, av_list_cameras,
-    check_camera_permission, CChar, CDeviceInfo, CFrameResult, CameraDevice, CameraError,
-    CameraPosition, ImageData,
+    check_camera_permission,
 };
 
 // ---------------------------------------------------------------------------
@@ -129,20 +129,21 @@ unsafe fn invoke_capture_frame(
         error_msg: std::ptr::null(),
     };
 
-    let ok = av_capture_frame(id_ptr, std::ptr::addr_of_mut!(result));
+    let ok = unsafe { av_capture_frame(id_ptr, std::ptr::addr_of_mut!(result)) };
 
     if !ok || result.jpeg_data.is_null() {
-        let msg = error_msg_from_ptr(result.error_msg)
+        let msg = unsafe { error_msg_from_ptr(result.error_msg) }
             .unwrap_or_else(|| "Unknown capture error".to_string());
-        av_free_frame_result(std::ptr::addr_of_mut!(result));
+        unsafe { av_free_frame_result(std::ptr::addr_of_mut!(result)) };
         return Err(CameraError::CaptureFailed(msg));
     }
 
     let jpeg_data =
-        std::slice::from_raw_parts(result.jpeg_data as *const u8, result.jpeg_len).to_vec();
+        unsafe { std::slice::from_raw_parts(result.jpeg_data as *const u8, result.jpeg_len) }
+            .to_vec();
     let width = result.width;
     let height = result.height;
-    av_free_frame_result(std::ptr::addr_of_mut!(result));
+    unsafe { av_free_frame_result(std::ptr::addr_of_mut!(result)) };
 
     Ok(ImageData {
         width,
@@ -160,7 +161,11 @@ unsafe fn error_msg_from_ptr(ptr: *const CChar) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
-        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
+        Some(
+            unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned(),
+        )
     }
 }
 

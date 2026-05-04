@@ -12,15 +12,15 @@ use crate::error::{AXError, AXResult};
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::string::CFString;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use sysinfo::System;
 use tracing::{debug, info, warn};
 use tungstenite::stream::MaybeTlsStream;
-use tungstenite::{connect, Message, WebSocket};
+use tungstenite::{Message, WebSocket, connect};
 
 /// Type of application for routing
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

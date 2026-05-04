@@ -53,9 +53,13 @@ pub struct Location {
 /// Geolocation error.
 #[derive(Debug, thiserror::Error)]
 pub enum LocationError {
-    #[error("Location Services disabled. Enable in System Settings > Privacy & Security > Location Services.")]
+    #[error(
+        "Location Services disabled. Enable in System Settings > Privacy & Security > Location Services."
+    )]
     Disabled,
-    #[error("Location permission denied for this app. Grant access in System Settings > Privacy & Security > Location Services.")]
+    #[error(
+        "Location permission denied for this app. Grant access in System Settings > Privacy & Security > Location Services."
+    )]
     PermissionDenied,
     #[error("Location request timed out after {0}s — try again or check GPS signal.")]
     Timeout(u64),

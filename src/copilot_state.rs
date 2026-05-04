@@ -26,7 +26,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
-use crate::accessibility::{get_children, AXUIElementRef};
+use crate::accessibility::{AXUIElementRef, get_children};
 use crate::copilot_extract::{
     extract_app_context, extract_content_context, extract_navigation_context,
     extract_selection_context, find_focused_window, first_window_ref,
@@ -525,9 +525,11 @@ mod tests {
 
         // WHEN / THEN
         let changes = diff_states(&old, &new);
-        assert!(changes
-            .iter()
-            .any(|c| c.field == "selection.selected_list_row"));
+        assert!(
+            changes
+                .iter()
+                .any(|c| c.field == "selection.selected_list_row")
+        );
     }
 
     #[test]
@@ -539,9 +541,11 @@ mod tests {
 
         // WHEN / THEN
         let changes = diff_states(&old, &new);
-        assert!(changes
-            .iter()
-            .any(|c| c.field == "selection.selected_items"));
+        assert!(
+            changes
+                .iter()
+                .any(|c| c.field == "selection.selected_items")
+        );
     }
 
     // -- diff_states: NavigationContext changes -----------------------------

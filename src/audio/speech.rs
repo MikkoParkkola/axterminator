@@ -580,11 +580,7 @@ fn create_sf_speech_url_recognition_request(url: *mut Object) -> Option<*mut Obj
         let obj: *mut Object = msg_send![cls, alloc];
         msg_send![obj, initWithURL: url]
     };
-    if req.is_null() {
-        None
-    } else {
-        Some(req)
-    }
+    if req.is_null() { None } else { Some(req) }
 }
 
 /// Set `requiresOnDeviceRecognition` on an `SFSpeechRecognitionRequest`.
@@ -602,11 +598,7 @@ fn nsurl_from_path(path: &str) -> Option<*mut Object> {
     }
     let ns_path = ns_string_from_str(path);
     let url: *mut Object = unsafe { msg_send![cls, fileURLWithPath: ns_path] };
-    if url.is_null() {
-        None
-    } else {
-        Some(url)
-    }
+    if url.is_null() { None } else { Some(url) }
 }
 
 // ---------------------------------------------------------------------------
@@ -684,7 +676,7 @@ fn create_ns_speech_synthesizer(voice: Option<&str>) -> Result<*mut Object, Audi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::{encode_wav_pcm16, CHANNELS, SAMPLE_RATE};
+    use crate::audio::{CHANNELS, SAMPLE_RATE, encode_wav_pcm16};
 
     // -----------------------------------------------------------------------
     // SpeechAuthStatus

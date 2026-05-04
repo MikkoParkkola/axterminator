@@ -1,5 +1,5 @@
 //! Extended system MCP tools: memory, disk, network, power, launchd.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::process::Command;
 
 use crate::mcp::annotations;

@@ -6,7 +6,7 @@
 //! | `ax_clipboard`      | Read/write clipboard       | None |
 //! | `ax_location`       | GPS coordinates            | Location Services (feature `context`) |
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::mcp::annotations;
 use crate::mcp::protocol::{Tool, ToolCallResult};

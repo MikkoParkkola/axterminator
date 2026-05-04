@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 #[cfg(feature = "spaces")]
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[cfg(feature = "spaces")]
 use crate::mcp::annotations;

@@ -30,9 +30,9 @@ use std::io::{self, BufRead, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use serde_json::json;
 #[cfg(test)]
 use serde_json::Value;
+use serde_json::json;
 use tracing::{debug, error, info, warn};
 
 use crate::mcp::protocol::{

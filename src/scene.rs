@@ -49,7 +49,7 @@
 //! ```
 
 use crate::intent::{SceneGraph, SceneNode};
-use crate::intent_matching::{score_node, MatchContext};
+use crate::intent_matching::{MatchContext, score_node};
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -405,7 +405,7 @@ fn build_state_description(subject: &str, result: &SceneResult) -> Option<String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intent::{build_scene_from_nodes, NodeId, SceneNode};
+    use crate::intent::{NodeId, SceneNode, build_scene_from_nodes};
 
     // ── Fixture helpers ────────────────────────────────────────────────────
 

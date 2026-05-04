@@ -8,17 +8,17 @@ use objc::{msg_send, sel, sel_impl};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+use super::AudioError;
 use super::ffi::{
-    cf_string_to_string, ns_string_from_str, objc_class, AudioObjectGetPropertyData,
-    AudioObjectGetPropertyDataSize, AudioObjectPropertyAddress,
+    AudioObjectGetPropertyData, AudioObjectGetPropertyDataSize, AudioObjectPropertyAddress,
     K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN, K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
     K_AUDIO_OBJECT_PROPERTY_SCOPE_INPUT, K_AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT,
     K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEFAULT_INPUT,
     K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEFAULT_OUTPUT, K_AUDIO_OBJECT_PROPERTY_SELECTOR_DEVICES,
     K_AUDIO_OBJECT_PROPERTY_SELECTOR_NAME, K_AUDIO_OBJECT_PROPERTY_SELECTOR_NOMINAL_SAMPLE_RATE,
-    K_AUDIO_OBJECT_PROPERTY_SELECTOR_STREAMS, K_AUDIO_OBJECT_SYSTEM_OBJECT,
+    K_AUDIO_OBJECT_PROPERTY_SELECTOR_STREAMS, K_AUDIO_OBJECT_SYSTEM_OBJECT, cf_string_to_string,
+    ns_string_from_str, objc_class,
 };
-use super::AudioError;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -185,11 +185,7 @@ fn query_default_device(selector: u32) -> u32 {
             (&mut device_id as *mut u32).cast::<c_void>(),
         )
     };
-    if status == 0 {
-        device_id
-    } else {
-        0
-    }
+    if status == 0 { device_id } else { 0 }
 }
 
 /// Build an [`AudioDevice`] for a CoreAudio device ID. Returns `None` when
@@ -273,11 +269,7 @@ fn query_nominal_sample_rate(device_id: u32) -> f64 {
             (&mut rate as *mut f64).cast::<c_void>(),
         )
     };
-    if status == 0 {
-        rate
-    } else {
-        0.0
-    }
+    if status == 0 { rate } else { 0.0 }
 }
 
 // ---------------------------------------------------------------------------

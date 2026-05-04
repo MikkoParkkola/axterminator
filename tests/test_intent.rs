@@ -4,7 +4,7 @@
 //! [`build_scene_from_nodes`] so they run without accessibility permissions and
 //! without a live macOS application.
 
-use axterminator::intent::{build_scene_from_nodes, extract_intent, NodeId, SceneGraph, SceneNode};
+use axterminator::intent::{NodeId, SceneGraph, SceneNode, build_scene_from_nodes, extract_intent};
 use axterminator::intent_matching::{fuzzy_score, infer_role_hint, tokenise};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -126,9 +126,11 @@ fn scene_graph_nodes_by_role_returns_only_matching() {
     let buttons = graph.nodes_by_role("AXButton");
     // THEN: 2 buttons
     assert_eq!(buttons.len(), 2);
-    assert!(buttons
-        .iter()
-        .all(|n| n.role.as_deref() == Some("AXButton")));
+    assert!(
+        buttons
+            .iter()
+            .all(|n| n.role.as_deref() == Some("AXButton"))
+    );
 }
 
 #[test]

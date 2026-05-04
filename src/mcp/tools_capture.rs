@@ -25,7 +25,7 @@
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(feature = "audio")]
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[cfg(feature = "audio")]
 use crate::capture::{CaptureConfig, CaptureSession};

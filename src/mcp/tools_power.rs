@@ -1,5 +1,5 @@
 //! Additional power tools: file ops, HTTP, app management, notifications.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::process::Command;
 
 use crate::mcp::annotations;

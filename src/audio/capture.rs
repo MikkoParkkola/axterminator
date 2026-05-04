@@ -215,11 +215,7 @@ fn query_input_sample_rate(engine: *mut Object) -> u32 {
     let rate: f64 = unsafe { msg_send![format, sampleRate] };
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let rate_u32 = rate as u32;
-    if rate_u32 == 0 {
-        SAMPLE_RATE
-    } else {
-        rate_u32
-    }
+    if rate_u32 == 0 { SAMPLE_RATE } else { rate_u32 }
 }
 
 /// Create an `AVAudioEngine` instance.
@@ -229,11 +225,7 @@ fn create_av_audio_engine() -> Option<*mut Object> {
         return None;
     }
     let engine: *mut Object = unsafe { msg_send![cls, new] };
-    if engine.is_null() {
-        None
-    } else {
-        Some(engine)
-    }
+    if engine.is_null() { None } else { Some(engine) }
 }
 
 /// Install a tap on the `AVAudioEngine` input node.

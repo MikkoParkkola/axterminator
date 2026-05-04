@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::app::AXApp;
 use crate::mcp::annotations;
@@ -184,8 +184,7 @@ fn tool_ax_find() -> Tool {
     Tool {
         name: "ax_find",
         title: "Find a UI element",
-        description:
-            "Find a UI element in a connected app using text, role, or attribute queries.\n\
+        description: "Find a UI element in a connected app using text, role, or attribute queries.\n\
             Query syntax:\n\
             - Simple text: \"Save\" (matches title/label/identifier)\n\
             - By role: \"role:AXButton\"\n\
@@ -406,8 +405,7 @@ fn tool_ax_screenshot() -> Tool {
     Tool {
         name: "ax_screenshot",
         title: "Take a screenshot",
-        description:
-            "Capture a screenshot of an app or a specific element without stealing focus. \
+        description: "Capture a screenshot of an app or a specific element without stealing focus. \
             Returns base64-encoded PNG data.",
         input_schema: json!({
             "type": "object",

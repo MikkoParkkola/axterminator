@@ -26,7 +26,7 @@
 //! assert!(json.is_object());
 //! ```
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::copilot_state::{CopilotState, StateChange};
 

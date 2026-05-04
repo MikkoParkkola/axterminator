@@ -907,10 +907,12 @@ mod tests {
             ],
         );
         let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("File > New Folder"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("File > New Folder")
+        );
     }
 
     #[test]
@@ -977,10 +979,12 @@ mod tests {
         let p = params("accessibility-audit", &[("app_name", "Mail")]);
         let result = get_prompt(&p).unwrap();
         // Should reference the tree resource for the named app
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://app/Mail/tree"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("axterminator://app/Mail/tree")
+        );
     }
 
     #[test]
@@ -1026,15 +1030,19 @@ mod tests {
             &[("app_name", "Finder"), ("goal", "create a folder")],
         );
         let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("ax_workflow_create"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("ax_workflow_create")
+        );
         assert!(result.messages[0].content.text.contains("ax_workflow_step"));
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("ax_workflow_status"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("ax_workflow_status")
+        );
     }
 
     #[test]
@@ -1075,10 +1083,12 @@ mod tests {
             &[("app_name", "Safari"), ("query", "role:AXButton title:Go")],
         );
         let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("role:AXButton title:Go"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("role:AXButton title:Go")
+        );
     }
 
     #[test]
@@ -1146,10 +1156,12 @@ mod tests {
             ],
         );
         let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://clipboard"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("axterminator://clipboard")
+        );
     }
 
     #[test]
@@ -1180,20 +1192,24 @@ mod tests {
     fn analyze_app_user_message_mentions_state_resource() {
         let p = params("analyze-app", &[("app_name", "Finder")]);
         let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://app/Finder/state"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("axterminator://app/Finder/state")
+        );
     }
 
     #[test]
     fn analyze_app_user_message_mentions_tree_resource() {
         let p = params("analyze-app", &[("app_name", "Mail")]);
         let result = get_prompt(&p).unwrap();
-        assert!(result.messages[0]
-            .content
-            .text
-            .contains("axterminator://app/Mail/tree"));
+        assert!(
+            result.messages[0]
+                .content
+                .text
+                .contains("axterminator://app/Mail/tree")
+        );
     }
 
     #[test]

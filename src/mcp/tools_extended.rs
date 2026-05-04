@@ -41,7 +41,7 @@ pub use crate::mcp::tools_spaces::spaces_tools;
 
 // Re-export watch tools and state.
 #[cfg(feature = "watch")]
-pub use crate::mcp::tools_watch::{watch_tools, WatchState};
+pub use crate::mcp::tools_watch::{WatchState, watch_tools};
 
 // Re-export docker browser tools.
 #[cfg(feature = "docker")]

@@ -3,7 +3,7 @@
 //! Uses pseudo-terminals for proper interactive terminal programs
 //! (python REPL, psql, ssh, vim, npm install with progress, etc.).
 //! Sessions persist across tool calls via the AppRegistry session state.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
@@ -14,9 +14,8 @@ use crate::mcp::protocol::{Tool, ToolCallResult};
 
 type TermSessions = Arc<Mutex<HashMap<String, TermSession>>>;
 
-struct TermSession {
+pub(crate) struct TermSession {
     child: Child,
-    id: String,
     command: String,
     started: String,
 }
@@ -115,7 +114,6 @@ fn handle_term_start(args: &Value) -> ToolCallResult {
 
     let session = TermSession {
         child,
-        id: id.clone(),
         command: cmd_str.to_string(),
         started: now.clone(),
     };

@@ -11,9 +11,9 @@ use tracing::debug;
 
 use super::capture::capture_frame;
 use super::{
+    CGestureItem, CGestureList, CameraError, Gesture, GestureDetection, Hand, ImageData,
     check_camera_permission, validate_duration, validate_gesture_names, vn_detect_gestures,
-    vn_free_gesture_list, CGestureItem, CGestureList, CameraError, Gesture, GestureDetection, Hand,
-    ImageData,
+    vn_free_gesture_list,
 };
 
 // ---------------------------------------------------------------------------
@@ -121,26 +121,28 @@ unsafe fn invoke_detect_gestures(image: &ImageData) -> Result<Vec<GestureDetecti
         error_msg: std::ptr::null(),
     };
 
-    let ok = vn_detect_gestures(
-        image.jpeg_data.as_ptr(),
-        image.jpeg_data.len(),
-        std::ptr::addr_of_mut!(list),
-    );
+    let ok = unsafe {
+        vn_detect_gestures(
+            image.jpeg_data.as_ptr(),
+            image.jpeg_data.len(),
+            std::ptr::addr_of_mut!(list),
+        )
+    };
 
     if !ok {
         let msg = if list.error_msg.is_null() {
             "Vision framework error".to_string()
         } else {
-            CStr::from_ptr(list.error_msg)
+            unsafe { CStr::from_ptr(list.error_msg) }
                 .to_string_lossy()
                 .into_owned()
         };
-        vn_free_gesture_list(std::ptr::addr_of_mut!(list));
+        unsafe { vn_free_gesture_list(std::ptr::addr_of_mut!(list)) };
         return Err(CameraError::CaptureFailed(msg));
     }
 
-    let detections = collect_gesture_detections(&list);
-    vn_free_gesture_list(std::ptr::addr_of_mut!(list));
+    let detections = unsafe { collect_gesture_detections(&list) };
+    unsafe { vn_free_gesture_list(std::ptr::addr_of_mut!(list)) };
     Ok(detections)
 }
 
@@ -151,7 +153,7 @@ unsafe fn collect_gesture_detections(list: &CGestureList) -> Vec<GestureDetectio
     if list.count == 0 || list.items.is_null() {
         return Vec::new();
     }
-    std::slice::from_raw_parts(list.items, list.count)
+    unsafe { std::slice::from_raw_parts(list.items, list.count) }
         .iter()
         .filter_map(c_gesture_to_rust)
         .collect()

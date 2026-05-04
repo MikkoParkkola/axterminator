@@ -7,7 +7,7 @@
 //!
 //! Also contains shared value-extraction helpers used across GUI handlers.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 // ---------------------------------------------------------------------------
 // Running apps enumeration

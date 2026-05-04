@@ -13,7 +13,7 @@
 use std::io::Write;
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::accessibility::{attributes, perform_action};
 use crate::mcp::annotations;
@@ -571,7 +571,7 @@ fn handle_get_tree_compact(
 /// formats it with [`crate::copilot_format::format_for_llm`].  The resulting
 /// plain text is compact enough to drop directly into an LLM system prompt.
 fn handle_get_tree_llm_format(app_name: &str, registry: &Arc<AppRegistry>) -> ToolCallResult {
-    use crate::copilot_format::{format_for_llm, FormatOptions};
+    use crate::copilot_format::{FormatOptions, format_for_llm};
     use crate::copilot_state::read_copilot_state;
 
     registry

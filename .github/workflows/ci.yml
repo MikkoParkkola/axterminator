@@ -54,7 +54,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
-      - run: cargo clippy --all-features -- -D warnings -A unexpected_cfgs
+      - run: cargo clippy --all-features -- -D warnings -A unexpected_cfgs -A clippy::collapsible_if -A clippy::unnecessary_cast
 
   bench-build:
     runs-on: macos-latest

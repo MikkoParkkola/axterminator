@@ -657,8 +657,9 @@ mod tests {
             structural_leaf(),
         );
         // THEN: Visual/a11y disabled mismatch detected
-        assert!(u
-            .inconsistencies
-            .contains(&Inconsistency::VisuallyDisabledButA11yEnabled));
+        assert!(
+            u.inconsistencies
+                .contains(&Inconsistency::VisuallyDisabledButA11yEnabled)
+        );
     }
 }

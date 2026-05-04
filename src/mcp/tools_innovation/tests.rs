@@ -492,8 +492,8 @@ fn ax_query_unconnected_app_returns_error() {
 // ax_workflow_create handler
 // -----------------------------------------------------------------------
 
-fn make_workflows(
-) -> std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, super::WorkflowState>>> {
+fn make_workflows()
+-> std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, super::WorkflowState>>> {
     std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -1421,9 +1421,11 @@ fn suggest_actions_file_save_dialog_suggests_save_click() {
     };
     let suggestions = super::suggest_actions(&[save_dlg], super::AppState::Idle);
     // THEN: click Save
-    assert!(suggestions
-        .iter()
-        .any(|s| s.tool == "ax_click" && s.query == "Save"));
+    assert!(
+        suggestions
+            .iter()
+            .any(|s| s.tool == "ax_click" && s.query == "Save")
+    );
 }
 
 #[test]
@@ -1435,9 +1437,11 @@ fn suggest_actions_confirmation_dialog_includes_cancel() {
     };
     let suggestions = super::suggest_actions(&[conf], super::AppState::Idle);
     // THEN: Cancel action present
-    assert!(suggestions
-        .iter()
-        .any(|s| s.tool == "ax_click" && s.query == "Cancel"));
+    assert!(
+        suggestions
+            .iter()
+            .any(|s| s.tool == "ax_click" && s.query == "Cancel")
+    );
 }
 
 #[test]

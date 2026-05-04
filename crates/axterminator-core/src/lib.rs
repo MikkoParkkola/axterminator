@@ -97,25 +97,25 @@ pub struct SystemContext {
 pub trait MacOsAutomation: Send + Sync {
     /// Check if accessibility permissions are granted.
     fn is_accessible(&self) -> bool;
-    
+
     /// List running applications with accessibility status.
     fn list_apps(&self) -> Result<Vec<AppInfo>, AXError>;
-    
+
     /// Find a UI element by text or role.
     fn find_element(&self, app_name: &str, query: &str) -> Result<AXElement, AXError>;
-    
+
     /// Click an element.
     fn click(&self, element: &AXElement) -> Result<(), AXError>;
-    
+
     /// Type text into an element.
     fn type_text(&self, element: &AXElement, text: &str) -> Result<(), AXError>;
-    
+
     /// Take a screenshot.
     fn screenshot(&self, app_name: &str) -> Result<Vec<u8>, AXError>;
-    
+
     /// Get system context snapshot.
     fn system_context(&self) -> SystemContext;
-    
+
     /// Execute a shell command.
     fn exec(&self, command: &str) -> Result<String, AXError>;
 }

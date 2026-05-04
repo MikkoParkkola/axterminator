@@ -5,10 +5,10 @@
 //! and skipped gracefully when permissions are absent.
 
 use axterminator::copilot_format::{
-    format_as_json, format_changes_for_llm, format_for_llm, FormatOptions,
+    FormatOptions, format_as_json, format_changes_for_llm, format_for_llm,
 };
 use axterminator::copilot_state::{
-    diff_states, AppContext, ContentContext, CopilotState, NavigationContext, SelectionContext,
+    AppContext, ContentContext, CopilotState, NavigationContext, SelectionContext, diff_states,
 };
 
 // ---------------------------------------------------------------------------
@@ -161,9 +161,11 @@ fn diff_selected_list_row_changes() {
 
     // WHEN / THEN
     let changes = diff_states(&old, &new);
-    assert!(changes
-        .iter()
-        .any(|c| c.field == "selection.selected_list_row"));
+    assert!(
+        changes
+            .iter()
+            .any(|c| c.field == "selection.selected_list_row")
+    );
 }
 
 #[test]
@@ -175,9 +177,11 @@ fn diff_selected_items_vec_changes() {
 
     // WHEN / THEN
     let changes = diff_states(&old, &new);
-    assert!(changes
-        .iter()
-        .any(|c| c.field == "selection.selected_items"));
+    assert!(
+        changes
+            .iter()
+            .any(|c| c.field == "selection.selected_items")
+    );
 }
 
 // ---------------------------------------------------------------------------
