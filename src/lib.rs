@@ -53,6 +53,8 @@ pub mod recording;
 mod router;
 pub mod scene;
 pub mod semantic_find;
+#[doc(hidden)]
+pub mod supercharge;
 mod sync;
 pub mod triple_understanding;
 
