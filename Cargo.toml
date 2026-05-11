@@ -118,7 +118,7 @@ cocoa = "0.26"
 block = "0.1"
 
 # Async runtime
-tokio = { version = "1.44", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1.52", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 # CancellationToken for cooperative task shutdown (watch feature)
 tokio-util = { version = "0.7", features = ["rt"], optional = true }
 
