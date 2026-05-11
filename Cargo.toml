@@ -141,7 +141,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tungstenite = "0.29"
 
 # Process inspection
-sysinfo = "0.38"
+sysinfo = "0.39"
 
 # URL parsing
 url = "2.5"
