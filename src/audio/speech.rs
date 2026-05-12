@@ -108,6 +108,62 @@ impl AudioEngine {
     }
 }
 
+/// Text-to-speech engine selector.
+///
+/// `System` keeps the existing `NSSpeechSynthesizer` behavior.  `Kokoro` and
+/// `Piper` are optional enhanced engines that require the `enhanced-tts`
+/// feature plus downloaded model files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TtsEngine {
+    /// Apple `NSSpeechSynthesizer` — on-device, macOS built-in.
+    #[default]
+    System,
+    /// Kokoro 82M TTS model bundle through `sherpa-onnx-offline-tts`.
+    Kokoro,
+    /// Piper TTS model bundle through `sherpa-onnx-offline-tts`.
+    Piper,
+}
+
+impl TtsEngine {
+    /// Parse a TTS engine name from a string slice (case-insensitive).
+    ///
+    /// Accepts `"system"`, `"kokoro"`, and `"piper"`.
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "system" => Some(Self::System),
+            "kokoro" => Some(Self::Kokoro),
+            "piper" => Some(Self::Piper),
+            _ => None,
+        }
+    }
+
+    /// Machine-readable name of the engine.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Kokoro => "kokoro",
+            Self::Piper => "piper",
+        }
+    }
+}
+
+/// Result metadata for a TTS request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TtsSpeakResult {
+    /// Blocking wall-clock duration of synthesis and playback.
+    pub elapsed: Duration,
+    /// Engine requested by the caller.
+    pub requested_engine: TtsEngine,
+    /// Engine actually used after any fallback.
+    pub engine_used: TtsEngine,
+    /// Voice identifier or model speaker name/ID used for synthesis.
+    pub voice_used: String,
+    /// Reason for falling back to system TTS.
+    pub fallback_reason: Option<String>,
+}
+
 /// Transcribe audio on-device using `SFSpeechRecognizer`.
 ///
 /// All recognition runs locally (`requiresOnDeviceRecognition = true`).
@@ -237,6 +293,104 @@ pub fn speak_with_voice(text: &str, voice: Option<&str>) -> Result<Duration, Aud
         "speaking text"
     );
     speak_with_ns_speech_synthesizer(text, voice)
+}
+
+/// Synthesize `text` with a selected TTS engine.
+///
+/// When `engine` is [`TtsEngine::System`], this is the same path used by
+/// [`speak_with_voice`].  Enhanced engines fall back to `System` when their
+/// model files are not installed, preserving compatibility for callers that
+/// opt into a better voice before downloading local model weights.
+pub fn speak_with_engine(
+    text: &str,
+    voice: Option<&str>,
+    engine: TtsEngine,
+) -> Result<TtsSpeakResult, AudioError> {
+    if text.is_empty() {
+        return Err(AudioError::Synthesis(
+            "Cannot speak empty string".to_string(),
+        ));
+    }
+
+    match engine {
+        TtsEngine::System => speak_with_system_engine(text, voice, TtsEngine::System, None),
+        TtsEngine::Kokoro | TtsEngine::Piper => try_speak_with_enhanced_engine(text, voice, engine),
+    }
+}
+
+fn speak_with_system_engine(
+    text: &str,
+    voice: Option<&str>,
+    requested_engine: TtsEngine,
+    fallback_reason: Option<String>,
+) -> Result<TtsSpeakResult, AudioError> {
+    let elapsed = speak_with_voice(text, voice)?;
+    Ok(TtsSpeakResult {
+        elapsed,
+        requested_engine,
+        engine_used: TtsEngine::System,
+        voice_used: voice
+            .map(str::trim)
+            .filter(|candidate| !candidate.is_empty())
+            .unwrap_or("system-default")
+            .to_string(),
+        fallback_reason,
+    })
+}
+
+#[cfg(feature = "enhanced-tts")]
+fn try_speak_with_enhanced_engine(
+    text: &str,
+    voice: Option<&str>,
+    engine: TtsEngine,
+) -> Result<TtsSpeakResult, AudioError> {
+    let missing = crate::audio::tts_models::missing_model_files(engine)?;
+    if !missing.is_empty() {
+        return speak_with_system_engine(
+            text,
+            voice,
+            engine,
+            Some(format!(
+                "{} model files not downloaded (missing: {})",
+                engine.as_str(),
+                missing.join(", ")
+            )),
+        );
+    }
+
+    let elapsed = crate::audio::tts_models::speak_with_sherpa(text, voice, engine)?;
+    Ok(TtsSpeakResult {
+        elapsed,
+        requested_engine: engine,
+        engine_used: engine,
+        voice_used: voice
+            .map(str::trim)
+            .filter(|candidate| !candidate.is_empty())
+            .unwrap_or(match engine {
+                TtsEngine::Kokoro => "af_heart",
+                TtsEngine::Piper => "en_US-lessac-medium",
+                TtsEngine::System => "system-default",
+            })
+            .to_string(),
+        fallback_reason: None,
+    })
+}
+
+#[cfg(not(feature = "enhanced-tts"))]
+fn try_speak_with_enhanced_engine(
+    text: &str,
+    voice: Option<&str>,
+    engine: TtsEngine,
+) -> Result<TtsSpeakResult, AudioError> {
+    speak_with_system_engine(
+        text,
+        voice,
+        engine,
+        Some(format!(
+            "{} requires the `enhanced-tts` Cargo feature; used system TTS",
+            engine.as_str()
+        )),
+    )
 }
 
 /// Return the installed macOS speech voice identifiers.
@@ -754,6 +908,35 @@ mod tests {
     #[test]
     fn audio_engine_default_is_apple() {
         assert_eq!(AudioEngine::default(), AudioEngine::Apple);
+    }
+
+    // -----------------------------------------------------------------------
+    // TtsEngine parsing
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tts_engine_from_str_system() {
+        assert_eq!(TtsEngine::parse_str("system"), Some(TtsEngine::System));
+        assert_eq!(TtsEngine::parse_str("SYSTEM"), Some(TtsEngine::System));
+    }
+
+    #[test]
+    fn tts_engine_from_str_kokoro_and_piper() {
+        assert_eq!(TtsEngine::parse_str("kokoro"), Some(TtsEngine::Kokoro));
+        assert_eq!(TtsEngine::parse_str("piper"), Some(TtsEngine::Piper));
+    }
+
+    #[test]
+    fn tts_engine_from_str_unknown_returns_none() {
+        assert_eq!(TtsEngine::parse_str("festival"), None);
+        assert_eq!(TtsEngine::parse_str(""), None);
+    }
+
+    #[test]
+    fn tts_engine_as_str_round_trips() {
+        assert_eq!(TtsEngine::System.as_str(), "system");
+        assert_eq!(TtsEngine::Kokoro.as_str(), "kokoro");
+        assert_eq!(TtsEngine::Piper.as_str(), "piper");
     }
 
     // -----------------------------------------------------------------------

@@ -7,7 +7,7 @@
 //! | Microphone capture | `AVAudioEngine` (CoreAudio) | Requires TCC microphone permission |
 //! | System audio capture | `ScreenCaptureKit` (macOS 14+) | No Screen Recording permission needed |
 //! | Speech-to-text | `SFSpeechRecognizer` | On-device only — no cloud |
-//! | Text-to-speech | `NSSpeechSynthesizer` | No network; local voice synthesis |
+//! | Text-to-speech | `NSSpeechSynthesizer`, optional Kokoro/Piper | No network during synthesis |
 //!
 //! ## Quick start
 //!
@@ -53,6 +53,7 @@
 //! ## Security
 //!
 //! - Speech recognition prefers on-device models (server fallback if model not downloaded).
+//! - Enhanced TTS model files are downloaded only when explicitly requested.
 //! - No audio data leaves the machine (when on-device model is available).
 //! - Temporary WAV files (when used) are written to `/tmp` with mode `0600`
 //!   and deleted immediately after encoding.
@@ -71,6 +72,8 @@ mod ffi;
 pub mod parakeet;
 mod sck_capture;
 mod speech;
+#[cfg(feature = "enhanced-tts")]
+pub mod tts_models;
 
 // ---------------------------------------------------------------------------
 // Public re-exports
@@ -79,7 +82,8 @@ mod speech;
 pub use capture::{capture_microphone, capture_system_audio, validate_duration};
 pub use devices::{AudioDevice, check_microphone_permission, list_audio_devices};
 pub use speech::{
-    AudioEngine, list_speech_voices, speak, speak_with_voice, transcribe, transcribe_with_engine,
+    AudioEngine, TtsEngine, TtsSpeakResult, list_speech_voices, speak, speak_with_engine,
+    speak_with_voice, transcribe, transcribe_with_engine,
 };
 
 // ---------------------------------------------------------------------------

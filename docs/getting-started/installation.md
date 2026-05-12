@@ -50,7 +50,10 @@ cd axterminator
 cargo build --release --features cli
 
 # With all optional features
-cargo build --release --features "cli,audio,camera,spaces"
+cargo build --release --features "cli,audio,enhanced-tts,camera,spaces"
+
+# With optional enhanced TTS model management
+cargo build --release --features "cli,enhanced-tts"
 ```
 
 ## Verify Installation

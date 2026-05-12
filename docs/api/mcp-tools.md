@@ -38,12 +38,13 @@ AXTerminator v0.6.1 exposes up to 30 MCP tools (19 core + optional audio, camera
 | `ax_assert` | Assert element state (exists, enabled, value, etc.) | readOnly |
 | `ax_find_visual` | Find element using VLM vision as fallback | readOnly |
 
-## Audio Tools (3) -- `audio` feature
+## Audio Tools (4) -- `audio` feature
 
 | Tool | Description | Annotations |
 |------|-------------|-------------|
 | `ax_listen` | Capture audio and transcribe via SFSpeechRecognizer (48kHz native) | readOnly |
-| `ax_speak` | Text-to-speech via NSSpeechSynthesizer | openWorld |
+| `ax_speak` | Text-to-speech via system, Kokoro, or Piper engines | openWorld |
+| `ax_audio_voices` | List installed macOS speech voices | readOnly |
 | `ax_audio_devices` | List available audio input/output devices | readOnly |
 
 ## Camera Tools (3) -- `camera` feature

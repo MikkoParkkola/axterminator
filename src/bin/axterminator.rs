@@ -11,6 +11,7 @@
 //! axterminator tree         [--app <name>] [--depth <n>]
 //! axterminator apps
 //! axterminator check
+//! axterminator models tts list|download <engine>
 //! axterminator completions <shell>
 //! ```
 
@@ -142,6 +143,13 @@ enum Commands {
     /// Check accessibility permissions and system status.
     Check,
 
+    /// Manage optional model files.
+    #[cfg(feature = "enhanced-tts")]
+    Models {
+        #[command(subcommand)]
+        subcommand: ModelsSubcommand,
+    },
+
     /// Generate shell completion scripts.
     Completions {
         /// Target shell
@@ -242,6 +250,33 @@ enum McpSubcommand {
     },
 }
 
+#[cfg(feature = "enhanced-tts")]
+#[derive(Subcommand, Debug)]
+enum ModelsSubcommand {
+    /// Manage optional text-to-speech model bundles.
+    Tts {
+        #[command(subcommand)]
+        subcommand: TtsModelsSubcommand,
+    },
+}
+
+#[cfg(feature = "enhanced-tts")]
+#[derive(Subcommand, Debug)]
+enum TtsModelsSubcommand {
+    /// List enhanced TTS model installation status.
+    List,
+    /// Download and extract one enhanced TTS model bundle.
+    Download {
+        /// Engine model to download.
+        #[arg(value_parser = ["kokoro", "piper"])]
+        engine: String,
+
+        /// Replace any existing model directory.
+        #[arg(long)]
+        force: bool,
+    },
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -298,6 +333,8 @@ fn dispatch(cmd: Commands) -> Result<()> {
         } => cmd_tree(app.as_deref(), bundle_id.as_deref(), depth),
         Commands::Apps => cmd_apps(),
         Commands::Check => cmd_check(),
+        #[cfg(feature = "enhanced-tts")]
+        Commands::Models { subcommand } => dispatch_models(subcommand),
         Commands::Completions { shell } => cmd_completions(&shell),
         Commands::Upgrade { dry_run, quiet } => cmd_upgrade(dry_run, quiet),
     }
@@ -321,6 +358,21 @@ fn dispatch_mcp(sub: McpSubcommand) -> Result<()> {
             bind,
             localhost_only,
         } => dispatch_mcp_serve(http, stdio, token, &bind, localhost_only),
+    }
+}
+
+#[cfg(feature = "enhanced-tts")]
+fn dispatch_models(sub: ModelsSubcommand) -> Result<()> {
+    match sub {
+        ModelsSubcommand::Tts { subcommand } => dispatch_tts_models(subcommand),
+    }
+}
+
+#[cfg(feature = "enhanced-tts")]
+fn dispatch_tts_models(sub: TtsModelsSubcommand) -> Result<()> {
+    match sub {
+        TtsModelsSubcommand::List => cmd_models_tts_list(),
+        TtsModelsSubcommand::Download { engine, force } => cmd_models_tts_download(&engine, force),
     }
 }
 
@@ -933,6 +985,64 @@ fn cmd_check() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "enhanced-tts")]
+fn cmd_models_tts_list() -> Result<()> {
+    use axterminator::audio::tts_models::model_statuses;
+
+    let statuses = model_statuses().map_err(|e| anyhow::anyhow!("{e}"))?;
+    println!("Enhanced TTS models:");
+    for status in statuses {
+        let installed = if status.installed {
+            "installed"
+        } else {
+            "missing"
+        };
+        println!(
+            "- {:<6} {:<10} {}",
+            status.spec.engine.as_str(),
+            installed,
+            status.spec.display_name
+        );
+        println!("  path: {}", status.path.display());
+        println!("  source: {}", status.spec.archive_url);
+        println!("  docs: {}", status.spec.docs_url);
+        println!("  runtime: {}", status.spec.runtime_binary);
+        println!("  note: {}", status.spec.description);
+        if !status.missing_files.is_empty() {
+            println!("  missing: {}", status.missing_files.join(", "));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "enhanced-tts")]
+fn cmd_models_tts_download(engine: &str, force: bool) -> Result<()> {
+    use axterminator::audio::{TtsEngine, tts_models::download_model};
+
+    let engine = TtsEngine::parse_str(engine)
+        .filter(|engine| *engine != TtsEngine::System)
+        .ok_or_else(|| anyhow::anyhow!("engine must be \"kokoro\" or \"piper\""))?;
+    let result = download_model(engine, force).map_err(|e| anyhow::anyhow!("{e}"))?;
+    if result.downloaded {
+        println!(
+            "Downloaded {} to {}",
+            result.spec.display_name,
+            result.path.display()
+        );
+    } else {
+        println!(
+            "{} already installed at {}",
+            result.spec.display_name,
+            result.path.display()
+        );
+    }
+    println!(
+        "Use with: ax_speak {{\"text\":\"hello\", \"engine\":\"{}\"}}",
+        result.spec.engine.as_str()
+    );
+    Ok(())
+}
+
 fn cmd_completions(shell: &str) -> Result<()> {
     use clap_complete::Shell;
 
@@ -1196,6 +1306,44 @@ mod tests {
     fn parses_check_subcommand() {
         let cli = parse(&["check"]).unwrap();
         assert!(matches!(cli.command, Commands::Check));
+    }
+
+    #[cfg(feature = "enhanced-tts")]
+    #[test]
+    fn parses_models_tts_list() {
+        let cli = parse(&["models", "tts", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Models {
+                subcommand: ModelsSubcommand::Tts {
+                    subcommand: TtsModelsSubcommand::List
+                }
+            }
+        ));
+    }
+
+    #[cfg(feature = "enhanced-tts")]
+    #[test]
+    fn parses_models_tts_download_kokoro() {
+        let cli = parse(&["models", "tts", "download", "kokoro", "--force"]).unwrap();
+        match cli.command {
+            Commands::Models {
+                subcommand:
+                    ModelsSubcommand::Tts {
+                        subcommand: TtsModelsSubcommand::Download { engine, force },
+                    },
+            } => {
+                assert_eq!(engine, "kokoro");
+                assert!(force);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[cfg(feature = "enhanced-tts")]
+    #[test]
+    fn models_tts_download_rejects_unknown_engine() {
+        assert!(parse(&["models", "tts", "download", "festival"]).is_err());
     }
 
     #[test]
