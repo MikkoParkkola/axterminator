@@ -53,8 +53,7 @@ mod tests {
 
     #[test]
     fn test_is_accessible_returns_bool() {
-        let result = is_accessible();
-        assert!(result == true || result == false);
+        let _: bool = is_accessible();
     }
 }
 

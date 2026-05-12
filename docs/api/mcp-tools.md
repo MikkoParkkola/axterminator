@@ -36,7 +36,14 @@ AXTerminator v0.6.1 exposes up to 30 MCP tools (19 core + optional audio, camera
 | Tool | Description | Annotations |
 |------|-------------|-------------|
 | `ax_assert` | Assert element state (exists, enabled, value, etc.) | readOnly |
-| `ax_find_visual` | Find element using VLM vision as fallback | readOnly |
+| `ax_find_visual` | Find element visually, with optional AX-first source priority before VLM fallback | readOnly |
+
+`ax_find_visual` accepts optional `caller` (`agent` or `human`) and `user_prompt`
+fields. When `AXTERMINATOR_PRIORITY_MODE=explicit`, agent-mediated calls treat
+`user_prompt` as higher priority than the agent-generated `description`, and the
+handler checks the AX tree before returning a screenshot sampling request. AX API
+facts then win over screen vision for the same target. Unset or `legacy` mode
+preserves historical visual lookup behavior.
 
 ## Audio Tools (4) -- `audio` feature
 
