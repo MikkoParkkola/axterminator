@@ -79,6 +79,7 @@ nav:
   - Architecture:
     - Design: DESIGN.md
     - Sync Engine: SYNC_ENGINE.md
+    - Instruction Sources: architecture/instruction-sources.md
 
 extra:
   social:

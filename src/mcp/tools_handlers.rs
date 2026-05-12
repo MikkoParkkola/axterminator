@@ -13,6 +13,10 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::app::AXApp;
+use crate::instruction_sources::{
+    InstructionSource, InvocationActor, SourceCandidate, SourceDecision,
+    select_effective_description, select_ui_fact,
+};
 use crate::mcp::elicitation::is_destructive_element;
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tools::AppRegistry;
@@ -416,10 +420,13 @@ pub(crate) fn handle_find_visual_with_sampling(
     let Some(description) = args["description"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: description");
     };
+    let caller = InvocationActor::from_tool_arg(args["caller"].as_str());
+    let user_prompt = args["user_prompt"].as_str();
+    let description_decision = select_effective_description(&description, user_prompt, caller);
 
     registry
         .with_app(&app_name, |app| {
-            build_find_visual_response(app, &description, sampling_ctx)
+            build_find_visual_response(app, &description, &description_decision, sampling_ctx)
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -427,15 +434,43 @@ pub(crate) fn handle_find_visual_with_sampling(
 /// Build the `ax_find_visual` response body based on sampling availability.
 fn build_find_visual_response(
     app: &crate::app::AXApp,
-    description: &str,
+    original_description: &str,
+    description_decision: &SourceDecision,
     sampling_ctx: crate::mcp::sampling::SamplingContext,
 ) -> ToolCallResult {
+    if let Some(top) = find_ax_candidate_for_visual_description(app, &description_decision.value) {
+        let ax_fact = select_ui_fact(&[SourceCandidate::new(
+            InstructionSource::AxApi,
+            top.label.clone(),
+        )])
+        .expect("AX fact candidate must be selected");
+
+        return ToolCallResult::ok(
+            serde_json::json!({
+                "found": true,
+                "source": ax_fact.source.as_str(),
+                "visual_skipped": true,
+                "semantic_match": true,
+                "confidence": top.score,
+                "role": top.role,
+                "label": top.label,
+                "bounds": top.bounds.map(|(x, y, w, h)| [x, y, w, h]),
+                "description": description_decision.value,
+                "original_tool_description": original_description,
+                "source_priority": source_priority_json(description_decision, Some(&ax_fact)),
+                "hint": "AX tree resolved the target before screen-vision fallback; use ax_find or ax_click with the semantic locator when possible."
+            })
+            .to_string(),
+        );
+    }
+
     if !sampling_ctx.is_available() {
         return ToolCallResult::error(format!(
-            "Visual element detection for '{description}' requires a client that supports \
+            "Visual element detection for '{}' requires a client that supports \
              MCP sampling (sampling/createMessage). The connected client does not advertise \
              this capability. Alternative: call ax_screenshot to capture the app, then use \
-             an external VLM with the screenshot to locate the element."
+             an external VLM with the screenshot to locate the element.",
+            description_decision.value
         ));
     }
 
@@ -445,13 +480,16 @@ fn build_find_visual_response(
         Ok(png_bytes) => {
             use base64::Engine as _;
             let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
-            let (messages, system_prompt) =
-                crate::mcp::sampling::locate_element_messages(description, &png_bytes);
+            let (messages, system_prompt) = crate::mcp::sampling::locate_element_messages(
+                &description_decision.value,
+                &png_bytes,
+            );
 
             ToolCallResult::ok(
                 serde_json::json!({
                     "sampling_available": true,
-                    "description": description,
+                    "description": description_decision.value,
+                    "original_tool_description": original_description,
                     "screenshot_b64": b64,
                     "screenshot_mime": "image/png",
                     "sampling_request": {
@@ -462,6 +500,7 @@ fn build_find_visual_response(
                             "systemPrompt": system_prompt
                         }
                     },
+                    "source_priority": source_priority_json(description_decision, None),
                     "hint": "Send sampling_request to the LLM via sampling/createMessage, \
                              then parse the JSON response for {found, x, y} coordinates."
                 })
@@ -473,6 +512,40 @@ fn build_find_visual_response(
              Use ax_screenshot separately and call an external VLM."
         )),
     }
+}
+
+fn find_ax_candidate_for_visual_description(
+    app: &crate::app::AXApp,
+    description: &str,
+) -> Option<crate::semantic_find::ElementMatch> {
+    use crate::semantic_find::{FindQuery, SemanticFinder};
+
+    let scene = crate::intent::scan_scene(app.element).ok()?;
+    let finder = SemanticFinder;
+    let result = finder.find(&scene, &FindQuery::new(description));
+    result
+        .matches
+        .into_iter()
+        .find(|candidate| candidate.score >= 0.3)
+}
+
+fn source_priority_json(
+    description_decision: &SourceDecision,
+    ui_fact_decision: Option<&SourceDecision>,
+) -> Value {
+    json!({
+        "effective_description_source": description_decision.source.as_str(),
+        "effective_description_reason": description_decision.reason,
+        "tool_args_overridden": description_decision.overrode_tool_args(),
+        "overridden_description_source": description_decision
+            .overridden_source
+            .map(InstructionSource::as_str),
+        "ui_fact_source": ui_fact_decision.map(|decision| decision.source.as_str()),
+        "ui_fact_reason": ui_fact_decision.map(|decision| decision.reason),
+        "ui_fact_order": ["ax_api", "app_dialog", "screen_vision"],
+        "instruction_order_for_agent_calls": ["human_user_prompt", "agent_tool_args"],
+        "instruction_order_for_human_calls": ["human_tool_args"]
+    })
 }
 
 pub(crate) fn handle_wait_idle(args: &Value, registry: &Arc<AppRegistry>) -> ToolCallResult {

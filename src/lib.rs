@@ -46,6 +46,7 @@ mod element;
 mod error;
 mod healing;
 pub mod healing_match;
+pub mod instruction_sources;
 pub mod intent;
 pub mod intent_matching;
 pub mod persistent_refs;

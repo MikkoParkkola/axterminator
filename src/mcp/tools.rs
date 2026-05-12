@@ -480,6 +480,16 @@ fn tool_ax_find_visual() -> Tool {
                 "description": {
                     "type": "string",
                     "description": "Natural language description, e.g. 'Load unpacked button'"
+                },
+                "caller": {
+                    "type": "string",
+                    "enum": ["agent", "human"],
+                    "default": "agent",
+                    "description": "Whether the tool args came from an agent or a direct human caller"
+                },
+                "user_prompt": {
+                    "type": "string",
+                    "description": "Higher-priority initiating user prompt when an agent supplies tool args"
                 }
             },
             "required": ["app", "description"],
@@ -490,7 +500,8 @@ fn tool_ax_find_visual() -> Tool {
             "properties": {
                 "found": { "type": "boolean" },
                 "x":     { "type": "integer" },
-                "y":     { "type": "integer" }
+                "y":     { "type": "integer" },
+                "source_priority": { "type": "object" }
             },
             "required": ["found"]
         }),
@@ -654,6 +665,21 @@ mod tests {
                 tool.name
             );
         }
+    }
+
+    #[test]
+    fn ax_find_visual_schema_accepts_source_priority_context() {
+        let tool = all_tools()
+            .into_iter()
+            .find(|tool| tool.name == "ax_find_visual")
+            .expect("ax_find_visual tool exists");
+        let props = &tool.input_schema["properties"];
+
+        assert!(props["caller"].is_object());
+        assert_eq!(props["caller"]["default"], "agent");
+        assert!(props["user_prompt"].is_object());
+        assert_eq!(tool.input_schema["additionalProperties"], false);
+        assert!(tool.output_schema["properties"]["source_priority"].is_object());
     }
 
     #[test]
