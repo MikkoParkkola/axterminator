@@ -1,0 +1,11 @@
+# Pin rationale: keep axterminator reproducible on the portfolio Rust baseline
+# used by sibling production repos and tracked in MIK-3181 / GitHub #55.
+# Renewal cadence: review quarterly or whenever the portfolio Rust baseline
+# moves after a successful cross-repo build/test/clippy pass.
+# Bump history:
+# - 2026-05-12: pinned to Rust 1.95.0 as the initial axterminator baseline.
+
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
