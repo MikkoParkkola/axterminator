@@ -523,12 +523,11 @@ impl Server {
 
         // Gate 3 — app policy (applies to ax_connect only; the app_id is
         // checked before we even attempt the AX connection).
-        if name == "ax_connect" {
-            if let Some(app_id) = args.get("app").and_then(Value::as_str) {
-                if let Err(msg) = self.security.check_app_allowed(app_id) {
-                    return crate::mcp::protocol::ToolCallResult::error(msg);
-                }
-            }
+        if name == "ax_connect"
+            && let Some(app_id) = args.get("app").and_then(Value::as_str)
+            && let Err(msg) = self.security.check_app_allowed(app_id)
+        {
+            return crate::mcp::protocol::ToolCallResult::error(msg);
         }
         if name == "ax_click_at" && !self.security.app_policy_is_permissive() {
             return crate::mcp::protocol::ToolCallResult::error(

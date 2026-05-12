@@ -181,10 +181,10 @@ impl AXApp {
             query: query.to_string(),
         };
 
-        if let Some(cached) = crate::cache::global_cache().get(&cache_key) {
-            if cached.exists() {
-                return Ok(cached);
-            }
+        if let Some(cached) = crate::cache::global_cache().get(&cache_key)
+            && cached.exists()
+        {
+            return Ok(cached);
         }
 
         // Perform breadth-first search of accessibility tree

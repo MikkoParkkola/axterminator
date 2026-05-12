@@ -132,21 +132,21 @@ fn semantic_find_fallback(app: &crate::app::AXApp, query: &str) -> ToolCallResul
     let fq = FindQuery::new(query);
     let result = finder.find(&scene, &fq);
 
-    if let Some(top) = result.matches.first() {
-        if top.score >= 0.3 {
-            return ToolCallResult::ok(
-                json!({
-                    "found": true,
-                    "semantic_match": true,
-                    "confidence": top.score,
-                    "role": top.role,
-                    "label": top.label,
-                    "bounds": top.bounds.map(|(x, y, w, h)| [x, y, w, h]),
-                    "reasoning": top.reasoning
-                })
-                .to_string(),
-            );
-        }
+    if let Some(top) = result.matches.first()
+        && top.score >= 0.3
+    {
+        return ToolCallResult::ok(
+            json!({
+                "found": true,
+                "semantic_match": true,
+                "confidence": top.score,
+                "role": top.role,
+                "label": top.label,
+                "bounds": top.bounds.map(|(x, y, w, h)| [x, y, w, h]),
+                "reasoning": top.reasoning
+            })
+            .to_string(),
+        );
     }
 
     ToolCallResult::error(format!("Element not found: '{query}'"))

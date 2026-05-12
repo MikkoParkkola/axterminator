@@ -366,11 +366,11 @@ impl AuditLog {
 
 /// Attempt to open the log file; returns `None` on failure (best-effort).
 fn try_open_log(path: &PathBuf) -> Option<BufWriter<std::fs::File>> {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            warn!(path = %parent.display(), error = %e, "audit log dir creation failed");
-            return None;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        warn!(path = %parent.display(), error = %e, "audit log dir creation failed");
+        return None;
     }
     match OpenOptions::new().create(true).append(true).open(path) {
         Ok(f) => Some(BufWriter::new(f)),

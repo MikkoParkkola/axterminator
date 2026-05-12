@@ -101,10 +101,10 @@ fn handle_window_list(args: &Value) -> ToolCallResult {
             if parts.len() >= 4 {
                 let app = parts[0].to_string();
                 let title = parts[1].to_string();
-                if let Some(ref f) = filter {
-                    if !app.to_lowercase().contains(f) {
-                        continue;
-                    }
+                if let Some(ref f) = filter
+                    && !app.to_lowercase().contains(f)
+                {
+                    continue;
                 }
                 windows.push(
                     json!({"app": app, "title": title, "bounds": parts[2], "size": parts[3]}),

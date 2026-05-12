@@ -96,23 +96,23 @@ fn memory_pressure() -> String {
 
 fn handle_disk(args: &Value) -> ToolCallResult {
     let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("/");
-    if let Ok(out) = Command::new("df").args(["-k", path]).output() {
-        if let Some(line) = String::from_utf8_lossy(&out.stdout).lines().nth(1) {
-            let p: Vec<&str> = line.split_whitespace().collect();
-            if p.len() >= 4 {
-                if let (Ok(blk), Ok(avail)) = (p[1].parse::<f64>(), p[3].parse::<f64>()) {
-                    let tg = blk / (1024.0 * 1024.0);
-                    let fg = avail / (1024.0 * 1024.0);
-                    return ToolCallResult::ok(
-                        json!({
-                            "total_gb": (tg * 10.0).round() / 10.0,
-                            "free_gb": (fg * 10.0).round() / 10.0,
-                            "used_gb": ((tg - fg) * 10.0).round() / 10.0,
-                        })
-                        .to_string(),
-                    );
-                }
-            }
+    if let Ok(out) = Command::new("df").args(["-k", path]).output()
+        && let Some(line) = String::from_utf8_lossy(&out.stdout).lines().nth(1)
+    {
+        let p: Vec<&str> = line.split_whitespace().collect();
+        if p.len() >= 4
+            && let (Ok(blk), Ok(avail)) = (p[1].parse::<f64>(), p[3].parse::<f64>())
+        {
+            let tg = blk / (1024.0 * 1024.0);
+            let fg = avail / (1024.0 * 1024.0);
+            return ToolCallResult::ok(
+                json!({
+                    "total_gb": (tg * 10.0).round() / 10.0,
+                    "free_gb": (fg * 10.0).round() / 10.0,
+                    "used_gb": ((tg - fg) * 10.0).round() / 10.0,
+                })
+                .to_string(),
+            );
         }
     }
     ToolCallResult::error("df failed")
@@ -210,10 +210,10 @@ fn handle_launchd(args: &Value) -> ToolCallResult {
         .to_string();
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
-            if let Some(ref f) = filter {
-                if !name.to_lowercase().contains(f) {
-                    continue;
-                }
+            if let Some(ref f) = filter
+                && !name.to_lowercase().contains(f)
+            {
+                continue;
             }
             agents.push(json!({ "name": name, "loaded": loaded_list.contains(&name), "path": format!("{dir}/{name}") }));
         }

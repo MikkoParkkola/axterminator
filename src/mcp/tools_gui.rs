@@ -750,15 +750,15 @@ fn build_tree_node<W: Write>(
     }
 
     // Emit one progress notification the first time we enter each depth layer.
-    if let Some(d) = emitted.get_mut(current_depth) {
-        if !*d {
-            *d = true;
-            if let Some(rep) = reporter {
-                let layer = current_depth + 1;
-                let msg = format!("Scanning layer {layer}/{max_depth}…");
-                // Best-effort: silently ignore I/O errors in progress notifications.
-                let _ = rep.step(&msg);
-            }
+    if let Some(d) = emitted.get_mut(current_depth)
+        && !*d
+    {
+        *d = true;
+        if let Some(rep) = reporter {
+            let layer = current_depth + 1;
+            let msg = format!("Scanning layer {layer}/{max_depth}…");
+            // Best-effort: silently ignore I/O errors in progress notifications.
+            let _ = rep.step(&msg);
         }
     }
 

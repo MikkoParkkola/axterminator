@@ -271,11 +271,10 @@ impl AXElement {
         let (key_code, needs_shift) = char_to_keycode(ch);
 
         // Press shift if needed
-        if needs_shift {
-            if let Ok(shift_down) = CGEvent::new_keyboard_event(source.clone(), 56, true) {
-                shift_down.post_to_pid(pid);
-                std::thread::sleep(Duration::from_millis(10));
-            }
+        if needs_shift && let Ok(shift_down) = CGEvent::new_keyboard_event(source.clone(), 56, true)
+        {
+            shift_down.post_to_pid(pid);
+            std::thread::sleep(Duration::from_millis(10));
         }
 
         // Key down
@@ -294,11 +293,10 @@ impl AXElement {
         }
 
         // Release shift if needed
-        if needs_shift {
-            if let Ok(shift_up) = CGEvent::new_keyboard_event(source.clone(), 56, false) {
-                shift_up.post_to_pid(pid);
-                std::thread::sleep(Duration::from_millis(10));
-            }
+        if needs_shift && let Ok(shift_up) = CGEvent::new_keyboard_event(source.clone(), 56, false)
+        {
+            shift_up.post_to_pid(pid);
+            std::thread::sleep(Duration::from_millis(10));
         }
 
         Ok(())
@@ -329,10 +327,9 @@ impl AXElement {
         loop {
             if let Some(role) =
                 accessibility::get_string_attribute_value(current, attributes::AX_ROLE)
+                && role == "AXWindow"
             {
-                if role == "AXWindow" {
-                    return Ok(current);
-                }
+                return Ok(current);
             }
 
             // Get parent
@@ -427,17 +424,17 @@ impl AXElement {
     ) -> AXResult<AXElement> {
         for &element in elements {
             // Check if this element matches
-            if let Some(attr_value) = accessibility::get_string_attribute_value(element, attr) {
-                if attr_value.contains(value) {
-                    return Ok(AXElement::new(element));
-                }
+            if let Some(attr_value) = accessibility::get_string_attribute_value(element, attr)
+                && attr_value.contains(value)
+            {
+                return Ok(AXElement::new(element));
             }
 
             // Search in children
-            if let Ok(children) = accessibility::get_children(element) {
-                if let Ok(found) = self.search_in_elements(&children, attr, value) {
-                    return Ok(found);
-                }
+            if let Ok(children) = accessibility::get_children(element)
+                && let Ok(found) = self.search_in_elements(&children, attr, value)
+            {
+                return Ok(found);
             }
         }
 
@@ -468,10 +465,10 @@ impl AXElement {
                 return Ok(AXElement::new(element));
             }
 
-            if let Ok(children) = accessibility::get_children(element) {
-                if let Ok(found) = self.search_in_elements_any_text(&children, query) {
-                    return Ok(found);
-                }
+            if let Ok(children) = accessibility::get_children(element)
+                && let Ok(found) = self.search_in_elements_any_text(&children, query)
+            {
+                return Ok(found);
             }
         }
 
@@ -655,17 +652,16 @@ mod tests {
             .output()
             .expect("Failed to run pgrep");
 
-        if let Ok(pid_str) = String::from_utf8(output.stdout) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                if let Ok(app_ref) = accessibility::create_application_element(pid) {
-                    let element = AXElement::new(app_ref);
+        if let Ok(pid_str) = String::from_utf8(output.stdout)
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+            && let Ok(app_ref) = accessibility::create_application_element(pid)
+        {
+            let element = AXElement::new(app_ref);
 
-                    // Finder should have a role
-                    let role = element.role();
-                    assert!(role.is_some());
-                    assert_eq!(role.unwrap(), "AXApplication");
-                }
-            }
+            // Finder should have a role
+            let role = element.role();
+            assert!(role.is_some());
+            assert_eq!(role.unwrap(), "AXApplication");
         }
     }
 
@@ -682,17 +678,16 @@ mod tests {
             .output()
             .expect("Failed to run pgrep");
 
-        if let Ok(pid_str) = String::from_utf8(output.stdout) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                if let Ok(app_ref) = accessibility::create_application_element(pid) {
-                    let element = AXElement::new(app_ref);
+        if let Ok(pid_str) = String::from_utf8(output.stdout)
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+            && let Ok(app_ref) = accessibility::create_application_element(pid)
+        {
+            let element = AXElement::new(app_ref);
 
-                    // Check enabled attribute (should return a boolean)
-                    let enabled = element.enabled();
-                    // Value doesn't matter, just that it returns without panic
-                    let _ = enabled;
-                }
-            }
+            // Check enabled attribute (should return a boolean)
+            let enabled = element.enabled();
+            // Value doesn't matter, just that it returns without panic
+            let _ = enabled;
         }
     }
 
@@ -709,25 +704,24 @@ mod tests {
             .output()
             .expect("Failed to run pgrep");
 
-        if let Ok(pid_str) = String::from_utf8(output.stdout) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                if let Ok(app_ref) = accessibility::create_application_element(pid) {
-                    let element = AXElement::new(app_ref);
+        if let Ok(pid_str) = String::from_utf8(output.stdout)
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+            && let Ok(app_ref) = accessibility::create_application_element(pid)
+        {
+            let element = AXElement::new(app_ref);
 
-                    // Try to get windows
-                    if let Ok(children) = accessibility::get_children(element.element) {
-                        for child in children.iter().take(5) {
-                            let child_elem = AXElement::new(*child);
-                            if let Some(role) = child_elem.role() {
-                                if role == "AXWindow" {
-                                    // Window should have bounds
-                                    if let Some((_x, _y, w, h)) = child_elem.bounds() {
-                                        assert!(w > 0.0);
-                                        assert!(h > 0.0);
-                                        return;
-                                    }
-                                }
-                            }
+            // Try to get windows
+            if let Ok(children) = accessibility::get_children(element.element) {
+                for child in children.iter().take(5) {
+                    let child_elem = AXElement::new(*child);
+                    if let Some(role) = child_elem.role()
+                        && role == "AXWindow"
+                    {
+                        // Window should have bounds
+                        if let Some((_x, _y, w, h)) = child_elem.bounds() {
+                            assert!(w > 0.0);
+                            assert!(h > 0.0);
+                            return;
                         }
                     }
                 }
@@ -748,13 +742,12 @@ mod tests {
             .output()
             .expect("Failed to run pgrep");
 
-        if let Ok(pid_str) = String::from_utf8(output.stdout) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                if let Ok(app_ref) = accessibility::create_application_element(pid) {
-                    let element = AXElement::new(app_ref);
-                    assert!(element.exists());
-                }
-            }
+        if let Ok(pid_str) = String::from_utf8(output.stdout)
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+            && let Ok(app_ref) = accessibility::create_application_element(pid)
+        {
+            let element = AXElement::new(app_ref);
+            assert!(element.exists());
         }
     }
 

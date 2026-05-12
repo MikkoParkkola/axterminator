@@ -99,10 +99,10 @@ impl CDPConnection {
         // Look for --remote-debugging-port=XXXX in command line
         for arg in process.cmd() {
             let arg_str = arg.to_string_lossy();
-            if let Some(port_str) = arg_str.strip_prefix("--remote-debugging-port=") {
-                if let Ok(port) = port_str.parse::<u16>() {
-                    return Some(port);
-                }
+            if let Some(port_str) = arg_str.strip_prefix("--remote-debugging-port=")
+                && let Ok(port) = port_str.parse::<u16>()
+            {
+                return Some(port);
             }
         }
 
@@ -491,10 +491,10 @@ impl TestRouter {
             }
             AppType::WebViewHybrid if is_css_selector(query) => {
                 // Use WebView bridge for hybrid apps with CSS selectors
-                if let Some(ref bridge) = self.webview {
-                    if let Some(elem) = bridge.find_web_element(query) {
-                        return Ok(elem);
-                    }
+                if let Some(ref bridge) = self.webview
+                    && let Some(elem) = bridge.find_web_element(query)
+                {
+                    return Ok(elem);
                 }
                 Err(AXError::ElementNotFound(query.to_string()))
             }
@@ -578,12 +578,12 @@ fn has_chromium_helper(pid: i32) -> bool {
     system.refresh_all();
 
     for process in system.processes().values() {
-        if let Some(parent_pid) = process.parent() {
-            if parent_pid.as_u32() == pid as u32 {
-                let name = process.name().to_string_lossy();
-                if name.contains("Chromium Helper") || name.contains("Electron Helper") {
-                    return true;
-                }
+        if let Some(parent_pid) = process.parent()
+            && parent_pid.as_u32() == pid as u32
+        {
+            let name = process.name().to_string_lossy();
+            if name.contains("Chromium Helper") || name.contains("Electron Helper") {
+                return true;
             }
         }
     }
