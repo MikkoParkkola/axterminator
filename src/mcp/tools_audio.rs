@@ -159,9 +159,22 @@ fn tool_ax_speak() -> Tool {
         name: "ax_speak",
         title: "Synthesize and play text as speech",
         description: "Speak `text` through the default system audio output using \
-            NSSpeechSynthesizer (on-device, no network). Pass `voice` to select a \
-            specific installed macOS voice identifier from `ax_audio_voices`. \
+            the selected local TTS engine. The default `system` engine preserves \
+            the existing NSSpeechSynthesizer path (on-device, no network). Pass \
+            `voice` to select a specific installed macOS voice identifier from \
+            `ax_audio_voices` for `system`, or an engine-specific speaker ID/name \
+            for enhanced engines. \
             Blocks until synthesis completes and returns the elapsed duration.\n\
+            \n\
+            Engines:\n\
+            - `\"system\"` — default, Apple NSSpeechSynthesizer.\n\
+            - `\"kokoro\"` — optional Kokoro 82M model. Requires `enhanced-tts` \
+              and `axterminator models tts download kokoro`.\n\
+            - `\"piper\"` — optional Piper model. Requires `enhanced-tts` and \
+              `axterminator models tts download piper`.\n\
+            \n\
+            If an enhanced engine is requested but its model files are missing, \
+            the tool falls back to `system` and reports `fallback_reason`.\n\
             \n\
             Useful for: testing VoiceOver integrations, verifying audio feedback, \
             injecting voice prompts into the agent workflow.\n\
@@ -180,7 +193,16 @@ fn tool_ax_speak() -> Tool {
                 "voice": {
                     "type": "string",
                     "description": "Optional macOS speech voice identifier from `ax_audio_voices`. \
-                        When omitted, the current system default voice is used."
+                        For enhanced engines this may be a model speaker name or numeric \
+                        speaker ID. When omitted, the engine default voice is used."
+                },
+                "engine": {
+                    "type": "string",
+                    "enum": ["system", "kokoro", "piper"],
+                    "description": "TTS engine (default \"system\"). Enhanced engines require \
+                        the `enhanced-tts` feature and local model files; if files are absent \
+                        synthesis falls back to system TTS.",
+                    "default": "system"
                 }
             },
             "required": ["text"],
@@ -191,9 +213,12 @@ fn tool_ax_speak() -> Tool {
             "properties": {
                 "spoken":      { "type": "boolean" },
                 "duration_ms": { "type": "integer" },
-                "voice_used":  { "type": "string" }
+                "voice_used":  { "type": "string" },
+                "engine_requested": { "type": "string" },
+                "engine_used": { "type": "string" },
+                "fallback_reason": { "type": "string" }
             },
-            "required": ["spoken", "duration_ms", "voice_used"]
+            "required": ["spoken", "duration_ms", "voice_used", "engine_requested", "engine_used"]
         }),
         annotations: annotations::ACTION,
     }
@@ -375,6 +400,19 @@ pub(crate) fn handle_ax_speak(args: &Value) -> ToolCallResult {
     let Some(text) = args["text"].as_str().map(str::to_string) else {
         return ToolCallResult::error("Missing required field: text");
     };
+    let engine_str = args["engine"].as_str().unwrap_or("system");
+    let engine = match crate::audio::TtsEngine::parse_str(engine_str) {
+        Some(e) => e,
+        None => {
+            return ToolCallResult::error(
+                json!({
+                    "error": format!("Unknown TTS engine \"{engine_str}\". Valid values: \"system\", \"kokoro\", \"piper\"."),
+                    "error_code": "invalid_engine"
+                })
+                .to_string(),
+            );
+        }
+    };
     let voice = match args["voice"].as_str() {
         Some(candidate) if candidate.trim().is_empty() => {
             return ToolCallResult::error(
@@ -389,15 +427,20 @@ pub(crate) fn handle_ax_speak(args: &Value) -> ToolCallResult {
         None => None,
     };
 
-    match crate::audio::speak_with_voice(&text, voice.as_deref()) {
-        Ok(elapsed) => ToolCallResult::ok(
-            json!({
-                "spoken":      true,
-                "duration_ms": elapsed.as_millis() as u64,
-                "voice_used":  voice.unwrap_or_else(|| "system-default".to_string()),
-            })
-            .to_string(),
-        ),
+    match crate::audio::speak_with_engine(&text, voice.as_deref(), engine) {
+        Ok(result) => {
+            let mut payload = json!({
+                "spoken":           true,
+                "duration_ms":      result.elapsed.as_millis() as u64,
+                "voice_used":       result.voice_used,
+                "engine_requested": result.requested_engine.as_str(),
+                "engine_used":      result.engine_used.as_str(),
+            });
+            if let Some(reason) = result.fallback_reason {
+                payload["fallback_reason"] = Value::String(reason);
+            }
+            ToolCallResult::ok(payload.to_string())
+        }
         Err(e) => ToolCallResult::error(
             json!({ "error": e.to_string(), "error_code": e.code() }).to_string(),
         ),
@@ -499,6 +542,19 @@ mod tests {
     }
 
     #[test]
+    fn ax_speak_tool_includes_optional_engine_field() {
+        let tool = tool_ax_speak();
+        assert!(
+            tool.input_schema["properties"]["engine"].is_object(),
+            "engine property missing from schema"
+        );
+        assert_eq!(
+            tool.input_schema["properties"]["engine"]["enum"],
+            json!(["system", "kokoro", "piper"])
+        );
+    }
+
+    #[test]
     fn ax_audio_voices_tool_has_empty_input_schema() {
         let tool = tool_ax_audio_voices();
         assert!(
@@ -553,6 +609,15 @@ mod tests {
         assert!(result.is_error);
         let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
         assert_eq!(v["error_code"], "invalid_voice");
+    }
+
+    #[test]
+    fn handle_ax_speak_invalid_engine_returns_error_before_synthesis() {
+        let args = json!({ "text": "hello", "engine": "festival" });
+        let result = handle_ax_speak(&args);
+        assert!(result.is_error);
+        let v: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+        assert_eq!(v["error_code"], "invalid_engine");
     }
 
     #[test]

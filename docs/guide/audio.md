@@ -1,6 +1,6 @@
 # Audio & Speech
 
-AXTerminator includes on-device audio capture and speech recognition via the `audio` feature flag.
+AXTerminator includes on-device audio capture, speech recognition, and text-to-speech via the `audio` feature flag.
 
 ## Enable Audio
 
@@ -15,7 +15,8 @@ cargo build --release --features "cli,audio"
 | Tool | Description |
 |------|-------------|
 | `ax_listen` | Capture microphone or system audio, transcribe via SFSpeechRecognizer |
-| `ax_speak` | Text-to-speech via NSSpeechSynthesizer |
+| `ax_speak` | Text-to-speech via system, Kokoro, or Piper engines |
+| `ax_audio_voices` | List installed macOS speech voices |
 | `ax_audio_devices` | List available audio input/output devices |
 
 ## Speech Recognition
@@ -39,12 +40,30 @@ AXTerminator captures audio at **native 48kHz sample rate** and transcribes on-d
 
 ## Text-to-Speech
 
-```bash
-# Via CLI
-axterminator speak "Hello from AXTerminator"
+`ax_speak` defaults to the existing macOS `NSSpeechSynthesizer` path:
+
+```json
+{"text": "Hello from AXTerminator"}
 ```
 
-Uses NSSpeechSynthesizer with the system default voice.
+To opt into local neural engines, build with `enhanced-tts`, install the
+external `sherpa-onnx-offline-tts` runtime, and download model files on demand:
+
+```bash
+cargo build --release --features "cli,enhanced-tts"
+axterminator models tts list
+axterminator models tts download kokoro
+axterminator models tts download piper
+```
+
+Then call:
+
+```json
+{"text": "Hello from AXTerminator", "engine": "kokoro", "voice": "af_heart"}
+```
+
+If an enhanced engine is requested but its model files are missing, `ax_speak`
+falls back to `system` and returns `fallback_reason`.
 
 ## Audio Devices
 

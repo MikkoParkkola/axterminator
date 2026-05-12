@@ -85,6 +85,11 @@ docker = []
 #     --local-dir ~/.axterminator/models/parakeet-tdt-0.6b-v3
 # The `ort` crate uses pre-built ONNX Runtime binaries (no manual SDK install).
 parakeet = ["audio", "dep:ort"]
+# enhanced-tts: optional higher-quality TTS routing for Kokoro and Piper via
+# sherpa-onnx model bundles.  Requires the `audio` feature but adds no default
+# dependency or model weight to the normal binary; model files are downloaded
+# on demand with `axterminator models tts download`.
+enhanced-tts = ["audio"]
 
 [dependencies]
 # CLI (feature-gated so it's only compiled for the binary target)
