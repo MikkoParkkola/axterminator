@@ -442,15 +442,14 @@ fn active_network_interfaces() -> Vec<NetworkInterface> {
         } else if line.contains("inet ") && !line.contains("inet6") && !current_name.is_empty() {
             // IPv4 line: "	inet 192.168.1.5 netmask ..."
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if let Some(pos) = parts.iter().position(|&s| s == "inet") {
-                if let Some(&ip) = parts.get(pos + 1) {
-                    if ip != "127.0.0.1" {
-                        interfaces.push(NetworkInterface {
-                            name: current_name.clone(),
-                            ipv4: Some(ip.to_string()),
-                        });
-                    }
-                }
+            if let Some(pos) = parts.iter().position(|&s| s == "inet")
+                && let Some(&ip) = parts.get(pos + 1)
+                && ip != "127.0.0.1"
+            {
+                interfaces.push(NetworkInterface {
+                    name: current_name.clone(),
+                    ipv4: Some(ip.to_string()),
+                });
             }
         }
     }

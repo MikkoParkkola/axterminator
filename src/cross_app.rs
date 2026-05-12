@@ -172,10 +172,9 @@ impl CrossAppTracker {
             .then_some(())
             .map(|_| None)
             .unwrap_or(Some(from_app.clone()))
+            && let Some(state) = self.apps.get_mut(prev)
         {
-            if let Some(state) = self.apps.get_mut(prev) {
-                state.focused = false;
-            }
+            state.focused = false;
         }
 
         // Ensure destination app entry exists
@@ -330,11 +329,11 @@ impl CrossAppTracker {
 
     /// Credit elapsed dwell time to the current app.
     fn flush_dwell_time(&mut self, now_ms: u64) {
-        if let Some(app) = &self.current_app.clone() {
-            if let Some(state) = self.apps.get_mut(app) {
-                let elapsed = now_ms.saturating_sub(self.current_focus_start_ms);
-                state.total_time_ms = state.total_time_ms.saturating_add(elapsed);
-            }
+        if let Some(app) = &self.current_app.clone()
+            && let Some(state) = self.apps.get_mut(app)
+        {
+            let elapsed = now_ms.saturating_sub(self.current_focus_start_ms);
+            state.total_time_ms = state.total_time_ms.saturating_add(elapsed);
         }
     }
 

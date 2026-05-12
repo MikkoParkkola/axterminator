@@ -338,13 +338,12 @@ impl WorkflowPlayer {
         result: &mut ReplayResult,
     ) -> Option<crate::persistent_refs::ElementRef> {
         // Strategy 1: exact fingerprint match
-        if event.element_fingerprint != 0 {
-            if let Some(elem_ref) = ref_store
+        if event.element_fingerprint != 0
+            && let Some(elem_ref) = ref_store
                 .resolve_by_fingerprint(event.element_fingerprint)
                 .filter(|r| r.alive)
-            {
-                return Some(elem_ref.clone());
-            }
+        {
+            return Some(elem_ref.clone());
         }
 
         // Strategy 2: label-based fuzzy match

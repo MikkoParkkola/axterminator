@@ -492,10 +492,10 @@ fn find_text_in_tree(root: crate::accessibility::AXUIElementRef, query: &str) ->
             attributes::AX_VALUE,
             attributes::AX_LABEL,
         ] {
-            if let Some(text) = accessibility::get_string_attribute_value(elem, attr) {
-                if text.to_lowercase().contains(&query_lower) {
-                    return Some(text);
-                }
+            if let Some(text) = accessibility::get_string_attribute_value(elem, attr)
+                && text.to_lowercase().contains(&query_lower)
+            {
+                return Some(text);
             }
         }
 

@@ -52,10 +52,10 @@ pub(crate) fn system_tools() -> Vec<Tool> {
 }
 
 fn resolve_path(raw: &str) -> String {
-    if let Some(rest) = raw.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return format!("{home}/{rest}");
-        }
+    if let Some(rest) = raw.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return format!("{home}/{rest}");
     }
     raw.to_string()
 }
@@ -130,10 +130,10 @@ pub(crate) fn call_system_tool(name: &str, args: &Value, _mode: &str) -> ToolCal
             let mut procs: Vec<Value> = Vec::new();
             for (pid, proc) in sys.processes() {
                 let name = proc.name().to_string_lossy().to_string();
-                if let Some(ref f) = filter {
-                    if !name.to_lowercase().contains(f) {
-                        continue;
-                    }
+                if let Some(ref f) = filter
+                    && !name.to_lowercase().contains(f)
+                {
+                    continue;
                 }
                 procs.push(json!({
                     "pid": pid.as_u32(),

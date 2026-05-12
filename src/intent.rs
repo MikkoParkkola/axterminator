@@ -217,10 +217,10 @@ pub fn scan_scene_bounded(root_element: AXUIElementRef, max_nodes: usize) -> AXR
         let node_id = graph.push(node);
 
         // Register this child with its parent
-        if let Some(pid) = queued.parent {
-            if let Some(parent) = graph.get_mut(pid) {
-                parent.children.push(node_id);
-            }
+        if let Some(pid) = queued.parent
+            && let Some(parent) = graph.get_mut(pid)
+        {
+            parent.children.push(node_id);
         }
 
         // Enqueue children. get_children() returns +1 retained refs; the queue

@@ -100,17 +100,17 @@ pub(crate) fn first_window_ref(
 fn find_active_tab(children: &[AXUIElementRef]) -> Option<String> {
     children.iter().find_map(|&c| {
         let role = get_string_attribute_value(c, attributes::AX_ROLE)?;
-        if role == "AXTabGroup" {
-            if let Ok(tab_children) = get_children(c) {
-                return tab_children.iter().find_map(|&tc| {
-                    let selected = get_bool_attribute_value(tc, "AXSelected")?;
-                    if selected {
-                        get_string_attribute_value(tc, attributes::AX_TITLE)
-                    } else {
-                        None
-                    }
-                });
-            }
+        if role == "AXTabGroup"
+            && let Ok(tab_children) = get_children(c)
+        {
+            return tab_children.iter().find_map(|&tc| {
+                let selected = get_bool_attribute_value(tc, "AXSelected")?;
+                if selected {
+                    get_string_attribute_value(tc, attributes::AX_TITLE)
+                } else {
+                    None
+                }
+            });
         }
         None
     })
@@ -140,17 +140,16 @@ fn find_selected_text_in(elements: &[AXUIElementRef]) -> Option<String> {
     for &el in elements {
         let role = get_string_attribute_value(el, attributes::AX_ROLE);
         let is_text = matches!(role.as_deref(), Some("AXTextField" | "AXTextArea"));
-        if is_text {
-            if let Some(text) = get_string_attribute_value(el, "AXSelectedText") {
-                if !text.is_empty() {
-                    return Some(crate::copilot_state::truncate_str(text, 512));
-                }
-            }
+        if is_text
+            && let Some(text) = get_string_attribute_value(el, "AXSelectedText")
+            && !text.is_empty()
+        {
+            return Some(crate::copilot_state::truncate_str(text, 512));
         }
-        if let Ok(kids) = get_children(el) {
-            if let Some(found) = find_selected_text_in(&kids) {
-                return Some(found);
-            }
+        if let Ok(kids) = get_children(el)
+            && let Some(found) = find_selected_text_in(&kids)
+        {
+            return Some(found);
         }
     }
     None
@@ -163,19 +162,19 @@ fn find_selected_list_row(win: AXUIElementRef, _children: &[AXUIElementRef]) -> 
 
 fn find_list_row_in(elements: &[AXUIElementRef]) -> Option<usize> {
     for &el in elements {
-        if get_string_attribute_value(el, attributes::AX_ROLE).as_deref() == Some("AXList") {
-            if let Ok(rows) = get_children(el) {
-                for (i, &row) in rows.iter().enumerate() {
-                    if get_bool_attribute_value(row, "AXSelected").unwrap_or(false) {
-                        return Some(i);
-                    }
+        if get_string_attribute_value(el, attributes::AX_ROLE).as_deref() == Some("AXList")
+            && let Ok(rows) = get_children(el)
+        {
+            for (i, &row) in rows.iter().enumerate() {
+                if get_bool_attribute_value(row, "AXSelected").unwrap_or(false) {
+                    return Some(i);
                 }
             }
         }
-        if let Ok(kids) = get_children(el) {
-            if let Some(idx) = find_list_row_in(&kids) {
-                return Some(idx);
-            }
+        if let Ok(kids) = get_children(el)
+            && let Some(idx) = find_list_row_in(&kids)
+        {
+            return Some(idx);
         }
     }
     None
@@ -191,12 +190,11 @@ fn collect_selected_items(win: AXUIElementRef) -> Vec<String> {
 fn collect_selected_items_in(elements: &[AXUIElementRef]) -> Vec<String> {
     let mut result = Vec::new();
     for &el in elements {
-        if get_bool_attribute_value(el, "AXSelected").unwrap_or(false) {
-            if let Some(title) = get_string_attribute_value(el, attributes::AX_TITLE)
+        if get_bool_attribute_value(el, "AXSelected").unwrap_or(false)
+            && let Some(title) = get_string_attribute_value(el, attributes::AX_TITLE)
                 .or_else(|| get_string_attribute_value(el, attributes::AX_VALUE))
-            {
-                result.push(title);
-            }
+        {
+            result.push(title);
         }
         if let Ok(kids) = get_children(el) {
             result.extend(collect_selected_items_in(&kids));
@@ -233,19 +231,19 @@ fn find_sidebar_selection(
 
 fn find_role_selection_in(elements: &[AXUIElementRef], target_role: &str) -> Option<String> {
     for &el in elements {
-        if get_string_attribute_value(el, attributes::AX_ROLE).as_deref() == Some(target_role) {
-            if let Ok(rows) = get_children(el) {
-                for &row in &rows {
-                    if get_bool_attribute_value(row, "AXSelected").unwrap_or(false) {
-                        return get_string_attribute_value(row, attributes::AX_TITLE);
-                    }
+        if get_string_attribute_value(el, attributes::AX_ROLE).as_deref() == Some(target_role)
+            && let Ok(rows) = get_children(el)
+        {
+            for &row in &rows {
+                if get_bool_attribute_value(row, "AXSelected").unwrap_or(false) {
+                    return get_string_attribute_value(row, attributes::AX_TITLE);
                 }
             }
         }
-        if let Ok(kids) = get_children(el) {
-            if let Some(found) = find_role_selection_in(&kids, target_role) {
-                return Some(found);
-            }
+        if let Ok(kids) = get_children(el)
+            && let Some(found) = find_role_selection_in(&kids, target_role)
+        {
+            return Some(found);
         }
     }
     None
@@ -291,16 +289,14 @@ fn collect_text_in(elements: &[AXUIElementRef], budget: usize) -> String {
         if matches!(
             role.as_deref(),
             Some("AXStaticText" | "AXTextField" | "AXTextArea")
-        ) {
-            if let Some(val) = get_string_attribute_value(el, attributes::AX_VALUE)
-                .or_else(|| get_string_attribute_value(el, attributes::AX_TITLE))
-            {
-                if !buf.is_empty() {
-                    buf.push(' ');
-                }
-                let remaining = budget.saturating_sub(buf.len());
-                buf.push_str(&crate::copilot_state::truncate_str(val, remaining));
+        ) && let Some(val) = get_string_attribute_value(el, attributes::AX_VALUE)
+            .or_else(|| get_string_attribute_value(el, attributes::AX_TITLE))
+        {
+            if !buf.is_empty() {
+                buf.push(' ');
             }
+            let remaining = budget.saturating_sub(buf.len());
+            buf.push_str(&crate::copilot_state::truncate_str(val, remaining));
         }
         if let Ok(kids) = get_children(el) {
             let sub = collect_text_in(&kids, budget.saturating_sub(buf.len()));

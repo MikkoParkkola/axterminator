@@ -172,7 +172,7 @@ fn handle_term_read(args: &Value) -> ToolCallResult {
     let timeout_ms = args
         .get("timeout_ms")
         .and_then(|v| v.as_u64())
-        .unwrap_or(1000) as u64;
+        .unwrap_or(1000);
 
     let sessions = get_term_sessions();
     let mut guard = sessions.lock().unwrap();

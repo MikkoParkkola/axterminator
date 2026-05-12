@@ -71,10 +71,10 @@ pub(crate) fn call_power_tool(name: &str, args: &Value, _mode: &str) -> ToolCall
 }
 
 fn resolve_path(raw: &str) -> String {
-    if let Some(rest) = raw.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return format!("{home}/{rest}");
-        }
+    if let Some(rest) = raw.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return format!("{home}/{rest}");
     }
     raw.to_string()
 }

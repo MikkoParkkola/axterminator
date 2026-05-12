@@ -144,16 +144,15 @@ pub fn find_with_healing(query: &ElementQuery, root: AXUIElementRef) -> AXResult
     let config = get_global_config();
 
     // Check cache first if enabled
-    if config.cache_healed {
-        if let Ok(cache) = HEALING_CACHE.read() {
-            if let Some(cached_query) = cache.get(&query.original) {
-                // Try the cached successful query first
-                for strategy_name in &config.strategies {
-                    let strategy = parse_strategy(strategy_name);
-                    if let Some(element) = try_strategy(strategy, cached_query, root) {
-                        return Ok(element);
-                    }
-                }
+    if config.cache_healed
+        && let Ok(cache) = HEALING_CACHE.read()
+        && let Some(cached_query) = cache.get(&query.original)
+    {
+        // Try the cached successful query first
+        for strategy_name in &config.strategies {
+            let strategy = parse_strategy(strategy_name);
+            if let Some(element) = try_strategy(strategy, cached_query, root) {
+                return Ok(element);
             }
         }
     }
@@ -170,10 +169,10 @@ pub fn find_with_healing(query: &ElementQuery, root: AXUIElementRef) -> AXResult
         let strategy = parse_strategy(strategy_name);
         if let Some(element) = try_strategy(strategy, query, root) {
             // Cache successful query if enabled
-            if config.cache_healed {
-                if let Ok(mut cache) = HEALING_CACHE.write() {
-                    cache.insert(query.original.clone(), query.clone());
-                }
+            if config.cache_healed
+                && let Ok(mut cache) = HEALING_CACHE.write()
+            {
+                cache.insert(query.original.clone(), query.clone());
             }
             return Ok(element);
         }
@@ -422,11 +421,11 @@ fn try_by_data_testid(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEl
     walk_tree(
         root,
         &mut |element| {
-            if let Some(identifier) = get_string_attr(element, attributes::AX_IDENTIFIER) {
-                if identifier == *target_id {
-                    found = Some(element);
-                    return true;
-                }
+            if let Some(identifier) = get_string_attr(element, attributes::AX_IDENTIFIER)
+                && identifier == *target_id
+            {
+                found = Some(element);
+                return true;
             }
             false
         },
@@ -445,19 +444,19 @@ fn try_by_aria_label(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEle
         root,
         &mut |element| {
             // Try AXLabel first
-            if let Some(label) = get_string_attr(element, attributes::AX_LABEL) {
-                if label == *target_label {
-                    found = Some(element);
-                    return true;
-                }
+            if let Some(label) = get_string_attr(element, attributes::AX_LABEL)
+                && label == *target_label
+            {
+                found = Some(element);
+                return true;
             }
 
             // Try AXDescription
-            if let Some(desc) = get_string_attr(element, attributes::AX_DESCRIPTION) {
-                if desc == *target_label {
-                    found = Some(element);
-                    return true;
-                }
+            if let Some(desc) = get_string_attr(element, attributes::AX_DESCRIPTION)
+                && desc == *target_label
+            {
+                found = Some(element);
+                return true;
             }
 
             false
@@ -476,11 +475,11 @@ fn try_by_identifier(query: &ElementQuery, root: AXUIElementRef) -> Option<AXEle
     walk_tree(
         root,
         &mut |element| {
-            if let Some(identifier) = get_string_attr(element, attributes::AX_IDENTIFIER) {
-                if identifier == *target_id {
-                    found = Some(element);
-                    return true;
-                }
+            if let Some(identifier) = get_string_attr(element, attributes::AX_IDENTIFIER)
+                && identifier == *target_id
+            {
+                found = Some(element);
+                return true;
             }
             false
         },
@@ -498,11 +497,11 @@ fn try_by_title(query: &ElementQuery, root: AXUIElementRef) -> Option<AXElement>
     walk_tree(
         root,
         &mut |element| {
-            if let Some(title) = get_string_attr(element, attributes::AX_TITLE) {
-                if fuzzy_match(&title, target_title, 0.8) {
-                    found = Some(element);
-                    return true;
-                }
+            if let Some(title) = get_string_attr(element, attributes::AX_TITLE)
+                && fuzzy_match(&title, target_title, 0.8)
+            {
+                found = Some(element);
+                return true;
             }
             false
         },
@@ -654,12 +653,11 @@ fn get_window_dimensions(root: AXUIElementRef) -> Option<(f64, f64)> {
     // Try to find a window parent
     let mut current = root;
     for _ in 0..10 {
-        if let Some(role) = get_string_attr(current, attributes::AX_ROLE) {
-            if role == "AXWindow" {
-                if let Some(size) = crate::accessibility::get_size_attribute(current) {
-                    return Some((size.width, size.height));
-                }
-            }
+        if let Some(role) = get_string_attr(current, attributes::AX_ROLE)
+            && role == "AXWindow"
+            && let Some(size) = crate::accessibility::get_size_attribute(current)
+        {
+            return Some((size.width, size.height));
         }
 
         // Get parent
