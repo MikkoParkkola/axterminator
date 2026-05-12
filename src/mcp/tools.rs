@@ -485,11 +485,11 @@ fn tool_ax_find_visual() -> Tool {
                     "type": "string",
                     "enum": ["agent", "human"],
                     "default": "agent",
-                    "description": "Whether the tool args came from an agent or a direct human caller"
+                    "description": "Whether the tool args came from an agent or a direct human caller; used when AXTERMINATOR_PRIORITY_MODE=explicit"
                 },
                 "user_prompt": {
                     "type": "string",
-                    "description": "Higher-priority initiating user prompt when an agent supplies tool args"
+                    "description": "Higher-priority initiating user prompt when an agent supplies tool args; used when AXTERMINATOR_PRIORITY_MODE=explicit"
                 }
             },
             "required": ["app", "description"],

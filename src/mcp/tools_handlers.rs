@@ -14,8 +14,8 @@ use serde_json::{Value, json};
 
 use crate::app::AXApp;
 use crate::instruction_sources::{
-    InstructionSource, InvocationActor, SourceCandidate, SourceDecision,
-    select_effective_description, select_ui_fact,
+    InstructionSource, InvocationActor, SourceCandidate, SourceDecision, SourcePriorityMode,
+    select_effective_description, select_legacy_description, select_ui_fact,
 };
 use crate::mcp::elicitation::is_destructive_element;
 use crate::mcp::protocol::ToolCallResult;
@@ -422,11 +422,22 @@ pub(crate) fn handle_find_visual_with_sampling(
     };
     let caller = InvocationActor::from_tool_arg(args["caller"].as_str());
     let user_prompt = args["user_prompt"].as_str();
-    let description_decision = select_effective_description(&description, user_prompt, caller);
+    let priority_mode = SourcePriorityMode::from_env();
+    let description_decision = if priority_mode.is_explicit() {
+        select_effective_description(&description, user_prompt, caller)
+    } else {
+        select_legacy_description(&description, caller)
+    };
 
     registry
         .with_app(&app_name, |app| {
-            build_find_visual_response(app, &description, &description_decision, sampling_ctx)
+            build_find_visual_response(
+                app,
+                &description,
+                &description_decision,
+                priority_mode,
+                sampling_ctx,
+            )
         })
         .unwrap_or_else(ToolCallResult::error)
 }
@@ -436,9 +447,13 @@ fn build_find_visual_response(
     app: &crate::app::AXApp,
     original_description: &str,
     description_decision: &SourceDecision,
+    priority_mode: SourcePriorityMode,
     sampling_ctx: crate::mcp::sampling::SamplingContext,
 ) -> ToolCallResult {
-    if let Some(top) = find_ax_candidate_for_visual_description(app, &description_decision.value) {
+    if priority_mode.is_explicit()
+        && let Some(top) =
+            find_ax_candidate_for_visual_description(app, &description_decision.value)
+    {
         let ax_fact = select_ui_fact(&[SourceCandidate::new(
             InstructionSource::AxApi,
             top.label.clone(),
@@ -457,7 +472,11 @@ fn build_find_visual_response(
                 "bounds": top.bounds.map(|(x, y, w, h)| [x, y, w, h]),
                 "description": description_decision.value,
                 "original_tool_description": original_description,
-                "source_priority": source_priority_json(description_decision, Some(&ax_fact)),
+                "source_priority": source_priority_json(
+                    priority_mode,
+                    description_decision,
+                    Some(&ax_fact),
+                ),
                 "hint": "AX tree resolved the target before screen-vision fallback; use ax_find or ax_click with the semantic locator when possible."
             })
             .to_string(),
@@ -500,7 +519,7 @@ fn build_find_visual_response(
                             "systemPrompt": system_prompt
                         }
                     },
-                    "source_priority": source_priority_json(description_decision, None),
+                    "source_priority": source_priority_json(priority_mode, description_decision, None),
                     "hint": "Send sampling_request to the LLM via sampling/createMessage, \
                              then parse the JSON response for {found, x, y} coordinates."
                 })
@@ -530,10 +549,13 @@ fn find_ax_candidate_for_visual_description(
 }
 
 fn source_priority_json(
+    priority_mode: SourcePriorityMode,
     description_decision: &SourceDecision,
     ui_fact_decision: Option<&SourceDecision>,
 ) -> Value {
     json!({
+        "mode": priority_mode.as_str(),
+        "mode_env": crate::instruction_sources::PRIORITY_MODE_ENV,
         "effective_description_source": description_decision.source.as_str(),
         "effective_description_reason": description_decision.reason,
         "tool_args_overridden": description_decision.overrode_tool_args(),

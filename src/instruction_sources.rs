@@ -3,6 +3,52 @@
 //! The policy is intentionally small and deterministic so MCP handlers can
 //! apply it before handing control to lower-trust visual fallback paths.
 
+/// Environment variable controlling whether source priority is enforced.
+pub const PRIORITY_MODE_ENV: &str = "AXTERMINATOR_PRIORITY_MODE";
+
+/// Runtime mode for instruction/source priority behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourcePriorityMode {
+    /// Preserve historical visual lookup behavior.
+    Legacy,
+    /// Enforce explicit instruction and UI fact precedence.
+    Explicit,
+}
+
+impl SourcePriorityMode {
+    /// Read the priority mode from `AXTERMINATOR_PRIORITY_MODE`.
+    #[must_use]
+    pub fn from_env() -> Self {
+        Self::from_raw(std::env::var(PRIORITY_MODE_ENV).ok().as_deref())
+    }
+
+    /// Parse a mode value. Unknown or unset values default to legacy mode as a
+    /// conservative rollback default.
+    #[must_use]
+    pub fn from_raw(raw: Option<&str>) -> Self {
+        match raw.map(str::trim) {
+            Some("explicit") => Self::Explicit,
+            Some("legacy") | None => Self::Legacy,
+            Some(_) => Self::Legacy,
+        }
+    }
+
+    /// Stable lowercase identifier used in JSON responses and docs.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Legacy => "legacy",
+            Self::Explicit => "explicit",
+        }
+    }
+
+    /// Whether explicit priority should be enforced.
+    #[must_use]
+    pub const fn is_explicit(self) -> bool {
+        matches!(self, Self::Explicit)
+    }
+}
+
 /// Source of an instruction or UI observation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionSource {
@@ -149,6 +195,20 @@ pub fn select_effective_description(
     }
 }
 
+/// Preserve historical behavior while still producing provenance metadata.
+#[must_use]
+pub fn select_legacy_description(tool_description: &str, actor: InvocationActor) -> SourceDecision {
+    SourceDecision {
+        source: match actor {
+            InvocationActor::Human => InstructionSource::HumanToolArgs,
+            InvocationActor::Agent => InstructionSource::AgentToolArgs,
+        },
+        value: tool_description.trim().to_string(),
+        overridden_source: None,
+        reason: "legacy mode preserves the supplied tool description",
+    }
+}
+
 /// Choose the highest-priority UI fact for a single field.
 #[must_use]
 pub fn select_ui_fact(candidates: &[SourceCandidate]) -> Option<SourceDecision> {
@@ -267,5 +327,29 @@ mod tests {
         assert_eq!(chosen.source, InstructionSource::HumanToolArgs);
         assert_eq!(chosen.value, "click the delete button");
         assert!(!chosen.overrode_tool_args());
+    }
+
+    #[test]
+    fn priority_mode_defaults_to_legacy() {
+        assert_eq!(
+            SourcePriorityMode::from_raw(None),
+            SourcePriorityMode::Legacy
+        );
+        assert_eq!(
+            SourcePriorityMode::from_raw(Some("unknown")),
+            SourcePriorityMode::Legacy
+        );
+    }
+
+    #[test]
+    fn priority_mode_accepts_explicit_and_legacy() {
+        assert_eq!(
+            SourcePriorityMode::from_raw(Some("explicit")),
+            SourcePriorityMode::Explicit
+        );
+        assert_eq!(
+            SourcePriorityMode::from_raw(Some("legacy")),
+            SourcePriorityMode::Legacy
+        );
     }
 }

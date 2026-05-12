@@ -34,7 +34,7 @@ no separate agent layer to override.
 
 ## `ax_find_visual`
 
-`ax_find_visual` now applies this priority before screenshot/VLM fallback:
+`ax_find_visual` applies this priority when explicit mode is enabled:
 
 1. Resolve the effective description from `description`, optional
    `user_prompt`, and optional `caller`.
@@ -42,6 +42,13 @@ no separate agent layer to override.
 3. If AX returns a confident match, return that match and skip screen vision.
 4. If AX cannot resolve and the client supports MCP sampling, return the
    screenshot plus sampling request for VLM location.
+
+The behavior is controlled by `AXTERMINATOR_PRIORITY_MODE`:
+
+| Value | Meaning |
+| --- | --- |
+| unset or `legacy` | Preserve historical visual lookup behavior. This is the rollback default. |
+| `explicit` | Enforce the source-priority rules before screen-vision fallback. |
 
 The optional MCP arguments are backward-compatible:
 

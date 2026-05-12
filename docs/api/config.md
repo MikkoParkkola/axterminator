@@ -8,6 +8,7 @@
 | `AXTERMINATOR_VLM_API_KEY` | VLM API key | None |
 | `AXTERMINATOR_TIMEOUT_MS` | Default timeout | 5000 |
 | `AXTERMINATOR_LOG_LEVEL` | Log level | INFO |
+| `AXTERMINATOR_PRIORITY_MODE` | Visual lookup source-priority mode: `legacy` or `explicit` | `legacy` |
 
 ## HealingConfig
 
