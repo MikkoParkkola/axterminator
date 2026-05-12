@@ -187,6 +187,8 @@ You probably use *both*. Those agents call axterminator as an MCP tool. axtermin
 
 It works everywhere vision works: foreground, focused, slow, expensive. axterminator works in the background, costs nothing, and is sub-millisecond. For automation of native macOS apps — the majority of business software — AX is strictly better. Vision is the escape hatch, not the default.
 
+The binding architecture decision is [ADR-0001: AX-first With Vision Fallback](docs/architecture/decisions/ADR-0001-ax-first-with-vision-fallback.md).
+
 **What app surfaces does axterminator cover?**
 
 Any macOS app that exposes the Accessibility API: all native AppKit/SwiftUI apps, Electron apps, web apps in Chrome/Safari/Firefox, terminal apps. Canvas-only surfaces (Figma canvas, game renderers, video players) use `ax_find_visual` — the built-in vision fallback that tries AX first and falls back to VLM automatically.
