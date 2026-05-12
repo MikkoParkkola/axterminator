@@ -6,6 +6,8 @@ Evidence date: 2026-05-08
 
 Select UI-TARS-2 as the first model target for the sovereign multimodal GUI-agent stack. Keep CogAgent-9B-20241220 as a comparison baseline and possible fallback evaluator.
 
+ADR alignment: [ADR-0001: AX-first With Vision Fallback](../../architecture/decisions/ADR-0001-ax-first-with-vision-fallback.md) is binding for AXTerminator. UI-TARS-style screenshot-to-action output is planner input; AXTerminator remains the semantic AX-first execution and verification layer unless a future superseding ADR proves a measured vision-first default should replace it.
+
 The decisive factor is integration fit, not raw model appeal. UI-TARS-2 and the UI-TARS Desktop stack already express desktop GUI work as screenshot-to-action computer-use loops, and that maps directly into axterminator primitives such as `ax_find`, `ax_click`, `ax_type`, `ax_scroll`, `ax_key_press`, and `ax_assert`. CogAgent is credible GUI-agent research, but its current published path has heavier local inference requirements and a separate model-weight license constraint.
 
 ## Acceptance Criteria
@@ -54,6 +56,7 @@ Live execution status: blocked. `axterminator check` returned `Accessibility: DI
 ## Next Implementation Slice
 
 - Add a provider-neutral action adapter that converts UI-TARS-style computer-use actions into axterminator durable steps.
+- Keep the adapter AX-first per ADR-0001: model actions should be normalized into semantic AXTerminator primitives before falling back to raw coordinates.
 - Add a trace format that stores screenshot hash, AX tree hash, hebb memory keys, planned action, executed action, and verification result.
 - Re-run the three demo tasks live after Accessibility is enabled. File the consumer-product positioning ticket only if autonomous live success exceeds 70%.
 

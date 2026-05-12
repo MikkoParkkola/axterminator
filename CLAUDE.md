@@ -31,7 +31,7 @@ The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot
 | Decision | Rationale | Do not |
 |---|---|---|
 | **macOS-only for AX-first path** | AX API is the entire performance + reliability story | Introduce Linux/Windows AX support that is not a thin shim |
-| **AX-first with vision fallback** (not vision-first) | AX is faster, more reliable, semantic; vision is the escape hatch | Make vision the default pipeline |
+| **AX-first with vision fallback** (not vision-first) | AX is faster, more reliable, semantic; vision is the escape hatch; see [ADR-0001](docs/architecture/decisions/ADR-0001-ax-first-with-vision-fallback.md) | Make vision the default pipeline |
 | **Background interaction** (no mouse-takeover required) | Parallel agent work; user keeps using their machine | Require focus-stealing; avoid mouse-driven automation |
 | **Accessibility permissions required for terminal/host** | macOS security model; no workaround | Add code paths that work around Privacy & Security panel |
 | **No on-device prereqs for iOS path** | Keeps "mac-only agent" contract intact | Require iOS UIAutomation test runner install |
@@ -67,6 +67,7 @@ The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot
 | Self-healing locators | `src/healing.rs` + `src/healing_match.rs` |
 | Scene graph / UI patterns | `src/intent.rs` + `src/intent_matching.rs` |
 | Benchmarks | `benches/` |
+| AX-first vs vision-first decision | `docs/architecture/decisions/ADR-0001-ax-first-with-vision-fallback.md` |
 | Known limitations | README §Known Limitations + #43 (iOS) + #42 (AX-first rationale) |
 
 ## Build & Test
