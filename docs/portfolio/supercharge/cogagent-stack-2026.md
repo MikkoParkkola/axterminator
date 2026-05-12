@@ -8,6 +8,8 @@ Select UI-TARS-2 as the first model target for the sovereign multimodal GUI-agen
 
 ADR alignment: [ADR-0001: AX-first With Vision Fallback](../../architecture/decisions/ADR-0001-ax-first-with-vision-fallback.md) is binding for AXTerminator. UI-TARS-style screenshot-to-action output is planner input; AXTerminator remains the semantic AX-first execution and verification layer unless a future superseding ADR proves a measured vision-first default should replace it.
 
+Upstream GLM/AutoClaw research: [MIK-3285 Research Memo: GLM-5V-Turbo, AutoClaw, and AXTerminator Runtime Fit](glm-5v-autoclaw-runtime-2026.md) validates the same model-brain plus execution-hands split and keeps GLM-style perception as adapter input, not the default actuator.
+
 The decisive factor is integration fit, not raw model appeal. UI-TARS-2 and the UI-TARS Desktop stack already express desktop GUI work as screenshot-to-action computer-use loops, and that maps directly into axterminator primitives such as `ax_find`, `ax_click`, `ax_type`, `ax_scroll`, `ax_key_press`, and `ax_assert`. CogAgent is credible GUI-agent research, but its current published path has heavier local inference requirements and a separate model-weight license constraint.
 
 ## Acceptance Criteria
@@ -62,6 +64,7 @@ Live execution status: blocked. `axterminator check` returned `Accessibility: DI
 
 ## Sources
 
+- MIK-3285 GLM-5V-Turbo and AutoClaw runtime-fit memo: [glm-5v-autoclaw-runtime-2026.md](glm-5v-autoclaw-runtime-2026.md)
 - UI-TARS repository: https://github.com/bytedance/UI-TARS
 - UI-TARS-2 technical report: https://arxiv.org/abs/2509.02544
 - UI-TARS Desktop repository: https://github.com/bytedance/UI-TARS-desktop
