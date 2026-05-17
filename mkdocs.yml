@@ -88,4 +88,13 @@ extra:
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/axterminator/
 
+# MIK-3598: WebMCP markup. Loads on every docs page; registers typed tools
+# (getInstallCommand, getAccessibilityPermissionGuide, getMCPConfig,
+# getLatestVersion) for AI agents that visit via Chrome 146+ WebMCP /
+# Cloudflare Browser Run. Falls back to no-op on browsers without
+# navigator.modelContext (Safari, Firefox, older Chrome, vision-pipeline
+# agents).
+extra_javascript:
+  - assets/js/webmcp.js
+
 copyright: Copyright &copy; 2024-2026 Mikko Parkkola
