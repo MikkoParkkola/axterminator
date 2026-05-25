@@ -5,6 +5,35 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-05-25
+
+### Added
+- `axterminator-core` library crate — `AppInfo`, `WindowInfo`, `SystemContext`, `MacOsAutomation` trait, `ScreenshotResult` type (PolyForm Noncommercial license)
+- Window management tools: list, focus, move, resize, minimize, close
+- Interactive terminal sessions: multi-turn CLI access
+- Extended system MCP tools: filesystem, processes, shell exec, memory, disk, network, power, launchd
+- Power tools: file edit/search/delete, HTTP, app launch, notifications
+- Enhanced TTS engine routing with Kokoro/Piper sherpa-onnx support
+- Agent output integration (MIK-3286)
+- `MacOsAutomation` trait for cross-module automation abstractions
+
+### Changed
+- Rust edition bumped to 2024; `rust-version` pinned to 1.95.0
+- `ax_type` defaults to background mode instead of focus mode
+- Toolchain pinned to Rust 1.95.0 via `rust-toolchain.toml`
+
+### Fixed
+- ApplicationServices framework linking via `build.rs` for `axterminator-core`
+- Edition-2024 migration: extern blocks, unsafe ops, borrow patterns
+- AppleScript brace escaping in format strings
+- MCP lifecycle hardening and temp file handling
+- Clippy 1.95 lints: `unnecessary_sort_by`, `manual_check`
+
+### Internal
+- Cargo.lock refreshed; resolves `--locked` incompatibility introduced by Rust 1.95.0 resolver changes
+- CI action SHAs pinned for supply-chain integrity
+- Dependabot: serde_json, sysinfo, clap_complete, tokio, lru, toml, cc updates
+
 ## [0.9.1] - 2026-04-16
 
 ### Changed
