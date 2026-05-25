@@ -5,6 +5,12 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-05-25
+
+### Fixed
+- Release pipeline: the `x86_64-apple-darwin` build failed with E0463 (`can't find crate for std`) because `rust-toolchain.toml` pins the active toolchain to 1.95.0, overriding the `stable` toolchain whose rust-std target was added by the toolchain action. Added an explicit `rustup target add` step that runs inside the checkout directory so the target lands on the pinned toolchain. The v0.10.0 tag's release run failed before publishing, so v0.10.1 is the first 0.10.x release reaching crates.io, GitHub Releases, and the Homebrew tap.
+- Release workflow now supports `workflow_dispatch` for validating the build matrix without consuming a tag; publish/release/homebrew jobs are guarded to run only on tag refs.
+
 ## [0.10.0] - 2026-05-25
 
 ### Added
