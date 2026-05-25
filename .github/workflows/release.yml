@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger validates the build matrix without burning a tag.
+  # Publish/release/homebrew jobs are guarded to run only on tag refs.
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -31,6 +34,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # rust-toolchain.toml pins the active toolchain to 1.95.0, overriding the
+      # `stable` toolchain the action just installed. The `targets:` input above
+      # adds the rust-std component to `stable`, NOT to the pinned 1.95.0
+      # toolchain — so `cargo build --target x86_64-apple-darwin` fails with
+      # E0463 "can't find crate for std". Running rustup inside the checkout dir
+      # adds the target to the pinned toolchain that actually builds.
+      - name: Add target to pinned toolchain
+        run: rustup target add ${{ matrix.target }}
+
       - name: Build release binary
         run: cargo build --release --locked --features cli --target ${{ matrix.target }}
 
@@ -48,6 +60,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [build-rust]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -79,6 +92,7 @@ jobs:
   publish-crates-io:
     name: Publish to crates.io
     needs: [build-rust]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: macos-14
     environment:
       name: crates-io
@@ -97,6 +111,7 @@ jobs:
   update-homebrew:
     name: Update Homebrew tap
     needs: [release]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     environment:
       name: homebrew
