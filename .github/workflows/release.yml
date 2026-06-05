@@ -12,8 +12,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Release backstop for the dependency-vulnerability gate. ci.yml scans on
+  # every PR/push; this re-scans at tag time so a vuln that landed between the
+  # last green CI run and the release tag (or via a path that skipped CI) cannot
+  # ship. build-rust `needs:` this gate, and every publishing job is transitively
+  # rooted at build-rust (release, publish-crates-io -> build-rust; update-homebrew
+  # -> release) — so the GitHub release, crates.io publish, and Homebrew tap all
+  # block if a known fixable vuln is present. Exceptions are time-boxed in
+  # .github/osv-scanner.toml.
+  security-gate:
+    name: Security gate (block release on known vulns)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Scan Rust dependencies against OSV
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --config=.github/osv-scanner.toml
+            --recursive
+            ./
+
   build-rust:
     name: Build Rust ${{ matrix.target }}
+    needs: [security-gate]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

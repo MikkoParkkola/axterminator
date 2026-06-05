@@ -46,6 +46,26 @@ jobs:
         with:
           extra_args: --only-verified
 
+  # Dependency-vulnerability gate: scans Cargo.lock against the OSV database on
+  # every PR and push. Fails the build on any known, fixable vuln so a security
+  # fix lands with the change that introduces (or fails to bump past) it — not
+  # weeks later. osv-scanner is the only dep-vuln gate in this repo; cargo's
+  # dependabot updater PROPOSES bumps, this gate DISPOSES — it refuses to ship
+  # until the fix is merged. Accepted/unfixable vulns are time-boxed in
+  # .github/osv-scanner.toml. The release.yml `security-gate` job is the backstop.
+  osv-scan:
+    name: OSV vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Scan Rust dependencies against OSV
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --config=.github/osv-scanner.toml
+            --recursive
+            ./
+
   clippy:
     runs-on: macos-latest
     steps:
