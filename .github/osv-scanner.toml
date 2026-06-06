@@ -1,0 +1,35 @@
+# osv-scanner allowlist — the pressure valve for the CI security gate.
+#
+# The gate fails the build on ANY known, fixable vulnerability in the
+# dependency tree. It runs in two places:
+#   - ci.yml `osv-scan` job          -> fast layer, fires on every PR/push
+#   - release.yml `security-gate` job -> backstop, blocks the release if a
+#     vuln slipped past CI between merge and tag
+#
+# Scope (verified by local run 2026-06-05): Rust crates — osv-scanner reads
+# Cargo.lock and checks every dependency (including ones cargo-audit/RustSec
+# might treat differently) against OSV. NOT covered: github-actions advisories
+# (our actions are SHA-pinned, which is itself the mitigation, and osv-scanner
+# does not map SHA pins to advisory versions). There is no Docker image in this
+# repo, so no OS-layer / base-image CVE surface to scan. This covers the primary
+# attack surface: the Rust dependency tree that .github/dependabot.yml's cargo
+# updater watches.
+#
+# Failing on any fixable vuln is intentional: a new build must include the
+# security fixes that are available. Dependabot PROPOSES the bump PR; this gate
+# DISPOSES — it refuses to ship until the fix is merged.
+#
+# When a vulnerability has NO upstream fix yet, or is verified unreachable, it
+# would otherwise block every release indefinitely. Add a time-boxed exception
+# here instead of weakening the gate. Each entry MUST carry a reason and an
+# ignoreUntil review date — expired entries re-trigger the gate automatically.
+#
+# Format (https://google.github.io/osv-scanner/configuration/):
+#
+#   [[IgnoredVulns]]
+#   id = "RUSTSEC-2024-1234"
+#   ignoreUntil = 2026-07-01   # review by this date; after it the gate fires again
+#   reason = "No patched release upstream yet; verified unreachable. Reviewed 2026-06-05 by <who>."
+#
+# Keep this list EMPTY unless a vuln genuinely has no fix. The right fix for a
+# fixable vuln is to bump the dependency, not to ignore it.

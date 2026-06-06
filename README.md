@@ -284,5 +284,8 @@ open-source, and free public-good projects with attribution.
 Business use requires a written commercial license. See [LICENSE.md](LICENSE.md)
 and [COMMERCIAL.md](COMMERCIAL.md).
 
+Companies can buy a standard commercial-use license via
+[GitHub Sponsors](https://github.com/sponsors/MikkoParkkola) at EUR 500/month per named project.
+
 Earlier releases published under `MIT OR Apache-2.0` remain under those earlier
 license grants for those earlier versions only.
