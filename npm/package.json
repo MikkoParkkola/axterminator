@@ -1,0 +1,50 @@
+{
+  "name": "axterminator",
+  "version": "0.10.1",
+  "description": "MCP server for macOS desktop automation: give AI agents the ability to see and control macOS apps via the Accessibility API. Background GUI testing, sub-millisecond element access, self-healing locators. Works with Claude, Cursor, Windsurf, and any MCP client.",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MikkoParkkola/axterminator"
+  },
+  "homepage": "https://mikkoparkkola.github.io/axterminator/",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "macos",
+    "gui-automation",
+    "accessibility",
+    "accessibility-api",
+    "desktop-automation",
+    "ui-testing",
+    "claude",
+    "cursor",
+    "windsurf",
+    "ai-agents",
+    "model-context-protocol",
+    "automation",
+    "screenshot",
+    "self-healing-locators"
+  ],
+  "bin": {
+    "axterminator": "bin/axterminator.js"
+  },
+  "files": [
+    "bin/axterminator.js",
+    "bin/install.js",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node bin/install.js"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}
