@@ -1,71 +1,142 @@
-# AXTerminator Community License v1.0
+# PolyForm Noncommercial License 1.0.0
 
-Copyright (c) 2026 Mikko Parkkola.
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-This license applies to AXTerminator versions that reference this file in
-their package metadata. Earlier releases that were published under
-`MIT OR Apache-2.0` remain available under those earlier license grants for
-those earlier versions only.
+## Acceptance
 
-## 1. Free Use
+In order to get any license under these terms, you must agree
+to them as both strict obligations and conditions to all
+your licenses.
 
-You may use, copy, modify, and distribute AXTerminator for free when the use is
-one of the following:
+## Copyright License
 
-- Personal, hobby, or learning use by an individual.
-- Academic, research, or educational use.
-- Noncommercial open-source projects.
-- Free public-good projects that do not generate revenue and are not operated
-  as part of a company, paid service, consulting business, or commercial
-  product.
+The licensor grants you a copyright license for the
+software to do everything you might do with the software
+that would otherwise infringe the licensor's copyright
+in it for any permitted purpose. However, you may only
+distribute the software according to [Distribution
+License](#distribution-license) and make changes or new works
+based on the software according to [Changes and New Works
+License](#changes-and-new-works-license).
 
-## 2. Attribution
+## Distribution License
 
-All free use requires attribution. Keep the copyright notice and this license
-with the software, and give project credit in a reasonable place such as the
-README, documentation, dependency notices, about screen, or credits page.
+The licensor grants you an additional copyright license
+to distribute copies of the software. Your license
+to distribute covers distributing the software with
+changes and new works permitted by [Changes and New Works
+License](#changes-and-new-works-license).
 
-Suggested attribution:
+## Notices
 
-```text
-Uses AXTerminator by Mikko Parkkola: https://github.com/MikkoParkkola/axterminator
-```
+You must ensure that anyone who gets a copy of any part of
+the software from you also gets a copy of these terms or the
+URL for them above, as well as copies of any plain-text lines
+beginning with `Required Notice:` that the licensor provided
+with the software. For example:
 
-## 3. Commercial Use Requires a Commercial License
+> Required Notice: Copyright Mikko Parkkola (https://github.com/MikkoParkkola/axterminator)
 
-You need a separate written commercial license from Mikko Parkkola before using
-AXTerminator for commercial or business purposes.
+## Changes and New Works License
 
-Commercial or business use includes, without limitation:
+The licensor grants you an additional copyright license to
+make changes and new works based on the software for any
+permitted purpose.
 
-- Use by or for a company, startup, consultancy, agency, or other business.
-- Internal automation, QA, agent workflows, operations, demos, or productivity
-  use inside a business.
-- Use in a paid product, paid hosted service, commercial SaaS, commercial
-  developer tool, or paid consulting/customer delivery.
-- Bundling, embedding, or materially depending on AXTerminator in software or
-  services that create revenue or business value.
+## Patent License
 
-Commercial license terms may include attribution, upstream collaboration,
-support terms, revenue share, fixed license fees, or a separate partnership
-agreement.
+The licensor grants you a patent license for the software that
+covers patent claims the licensor can license, or becomes able
+to license, that you would infringe by using the software.
 
-## 4. Contributions
+## Noncommercial Purposes
 
-By submitting a contribution to AXTerminator, you agree that the contribution
-may be distributed by the project owner under this Community License and under
-separate commercial licenses. Do not submit code you cannot license on those
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for
+the benefit of public knowledge, personal study, private
+entertainment, hobby projects, amateur pursuits, or religious
+observance, without any anticipated commercial application,
+is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution,
+public research organization, public safety or health
+organization, environmental protection organization, or
+government institution is use for a permitted purpose
+regardless of the source of funding or obligations resulting
+from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the
+law. These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of
+your licenses to anyone else, or prevent the licensor from
+granting licenses to anyone else. These terms do not imply
+any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or
+contributes to infringement of any patent, your patent license
+for the software granted under these terms ends immediately. If
+your company makes such a claim, your patent license ends
+immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have
+violated any of these terms, or any agreement made under them,
+your licenses can nonetheless continue if you come into full
+compliance with these terms, and any agreement made under them,
+within 30 days of receiving notice. Otherwise, all your licenses
+end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without
+any warranty or condition, and the licensor will not be liable
+to you for any damages arising out of these terms or the use
+or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these
+terms, and the **software** is the software the licensor makes
+available under these terms.
+
+**You** refers to the individual or entity agreeing to these
 terms.
 
-## 5. No Warranty
+**Your company** is any legal entity, sole proprietorship,
+or other kind of organization that you work for, plus all
+organizations that have control over, are under the control of,
+or are under common control with that organization. **Control**
+means ownership of substantially all the assets of an entity,
+or the power to direct its management and policies by vote,
+contract, or otherwise. Control can be direct or indirect.
 
-AXTerminator is provided "as is", without warranty of any kind, express or
-implied, including but not limited to the warranties of merchantability,
-fitness for a particular purpose, and noninfringement. In no event shall the
-authors or copyright holders be liable for any claim, damages, or other
-liability arising from use of the software.
+**Your licenses** are all the licenses granted to you for the
+software under these terms.
 
-## 6. Questions and Commercial Licensing
+**Use** means anything you do with the software requiring one
+of your licenses.
 
-If you are unsure whether your use is free or commercial, contact the project
-owner before using AXTerminator in that context.
+---
+
+Required Notice: Copyright (c) 2026 Mikko Parkkola (https://github.com/MikkoParkkola/axterminator)
+
+For commercial licensing, contact mikko.parkkola@iki.fi.
+
+---
+
+## Earlier versions
+
+Releases of AXTerminator published before this license took effect were available under MIT OR Apache-2.0. Those releases remain available under those earlier license grants, for those earlier versions only. See LICENSE-MIT and LICENSE-APACHE for the historical texts, and COMMERCIAL.md for commercial-use terms.
