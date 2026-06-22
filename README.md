@@ -35,6 +35,7 @@ Your agent will install the binary, wire itself up, and request accessibility pe
 **Or install manually:**
 
 ```bash
+brew trust --tap MikkoParkkola/tap   # Homebrew 6.0+
 brew install MikkoParkkola/tap/axterminator
 ```
 
