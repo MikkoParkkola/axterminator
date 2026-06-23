@@ -5,7 +5,7 @@
 
 ## What To Do
 
-You are setting up `axterminator` -- MCP server that gives you ability to see and control macOS applications via Accessibility API. 27 core tools, up to 34+ w/ optional features. Run these steps in order:
+You are setting up `axterminator` -- an MCP server that gives you the ability to see and control macOS applications via the Accessibility API. 27 core tools, up to 34+ with optional features. Run these steps in order:
 
 ### Step 1: Install
 
@@ -27,13 +27,13 @@ axterminator check
 
 ### Step 2: Grant Accessibility Permission
 
- host application (Terminal, iTerm2, Ghostty, Claude Desktop, etc.) must have Accessibility permission:
+The host application (Terminal, iTerm2, Ghostty, Claude Desktop, etc.) must have Accessibility permission:
 
 1. Open: **System Settings > Privacy & Security > Accessibility**
-2. Click **+** button
-3. Add terminal application or AI host app
-4. Ensure toggle is **ON**
-5. **Restart** terminal / host app
+2. Click the **+** button
+3. Add the terminal application or AI host app
+4. Ensure the toggle is **ON**
+5. **Restart** the terminal / host app
 
 Verify:
 ```bash
@@ -54,7 +54,7 @@ axterminator check
 }
 ```
 
-Add above to your MCP client config:
+Add the above to your MCP client config:
 - **Claude Code / Claude Desktop**: `~/.claude/settings.json` or project `.mcp.json`
 - **Cursor / Windsurf / Continue.dev**: `.cursor/mcp.json` (or equivalent)
 - **Codex**: `~/.codex/config.toml` (use TOML format: `[mcp_servers.axterminator]`)
@@ -76,7 +76,7 @@ axterminator find "File" --app Finder
 # Expected: UI element match
 ```
 
-Tell user: "AXTerminator is installed w/ up to 34 MCP tools. I can see your screen, click buttons, type text, take screenshots, read UI trees, run AppleScript, audit accessibility, and control apps in background while you work. tell me what to do."
+Tell the user: "AXTerminator is installed with up to 34 MCP tools. I can see your screen, click buttons, type text, take screenshots, read UI trees, run AppleScript, audit accessibility, and control apps in the background while you work. Just tell me what to do."
 
 ---
 
@@ -155,7 +155,7 @@ You now have MCP tools to control any macOS application. Tools are grouped by ca
 | `ax_list_spaces` | spaces | List virtual desktops |
 | `ax_create_space` | spaces | Create virtual desktop |
 
- Homebrew formula includes all features.
+The Homebrew formula includes all features.
 
 ### Query Syntax
 
@@ -178,11 +178,11 @@ ax_find query="//AXButton[@AXTitle='Save']"
 
 ### Tips
 
-- Background interaction works for click, read, screenshots -- user's focus is not interrupted.
-- Text input may need focused text field in some apps.
-- Use `ax_get_tree` first to understand app's element hierarchy before interacting.
-- Use `ax_screenshot` to see what user sees when tree is not enough.
-- Elements found by `ax_find` persist in session -- use `ax_click` w/ same query.
+- Background interaction works for click, read, screenshots -- the user's focus is not interrupted.
+- Text input may need a focused text field in some apps.
+- Use `ax_get_tree` first to understand an app's element hierarchy before interacting.
+- Use `ax_screenshot` to see what the user sees when the tree is not enough.
+- Elements found by `ax_find` persist in session -- use `ax_click` with the same query.
 
 ## Troubleshooting
 
@@ -198,6 +198,5 @@ ax_find query="//AXButton[@AXTitle='Save']"
 - GitHub: https://github.com/MikkoParkkola/axterminator
 - License: AXTerminator Community License + commercial license. Free for
   personal, research, educational, noncommercial open-source, and free
-  public-good projects w/ attribution. Business use requires written
-  commercial license. See `LICENSE.md`  `COMMERCIAL.md`.
-
+  public-good projects with attribution. Business use requires a written
+  commercial license. See `LICENSE.md` and `COMMERCIAL.md`.
