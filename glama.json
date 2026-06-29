@@ -1,6 +1,29 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "name": "axterminator",
+  "displayName": "AXTerminator",
+  "description": "macOS GUI automation MCP server that lets AI agents inspect accessibility trees, click controls, type text, capture screenshots, run AppleScript, and control apps in the background.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MikkoParkkola/axterminator"
+  },
+  "homepage": "https://mikkoparkkola.github.io/axterminator/",
+  "license": "AXTerminator Community License",
+  "categories": [
+    "automation",
+    "macos",
+    "accessibility",
+    "testing"
+  ],
   "maintainers": [
     "MikkoParkkola"
-  ]
+  ],
+  "startCommand": {
+    "type": "stdio",
+    "command": "axterminator",
+    "args": [
+      "mcp",
+      "serve"
+    ]
+  }
 }
