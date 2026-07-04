@@ -24,6 +24,21 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+      # macos-latest's Xcode 26.5 image is missing libclang_rt.osx.a at the path
+      # clang reports, so linking objects that use @available (which needs
+      # __isPlatformVersionAtLeast from that lib) fails with "library
+      # 'clang_rt.osx' not found". Find the runtime lib wherever the image keeps
+      # it and add its directory to the link search path, so we build on the
+      # latest toolchain rather than pinning to an old runner image.
+      - name: ensure compiler-rt is linkable
+        run: |
+          echo "xcode-select: $(xcode-select -p)"
+          echo "clang runtime-dir: $(clang -print-runtime-dir 2>&1)"
+          lib=$(find /Applications/Xcode*.app /Library/Developer -name 'libclang_rt.osx.a' 2>/dev/null | head -1)
+          echo "libclang_rt.osx.a: ${lib:-<not found on runner>}"
+          if [ -n "$lib" ]; then
+            echo "RUSTFLAGS=-L $(dirname "$lib") ${RUSTFLAGS:-}" >> "$GITHUB_ENV"
+          fi
       # Skip live macOS session tests; permission probes that self-skip still run in CI.
       - run: cargo test --all-features -- --skip live_
 
