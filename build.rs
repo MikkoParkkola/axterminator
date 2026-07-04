@@ -173,17 +173,28 @@ fn fix_clang_rt_search_path() {
 
         // `lib/darwin` is missing at the major-only path.  Scan sibling
         // directories (e.g. "21.0.0") for the real `lib/darwin` tree.
-        let parent = std::path::Path::new(path)
-            .parent()
-            .unwrap_or(std::path::Path::new("/"));
+        let Some(parent) = std::path::Path::new(path).parent() else {
+            break;
+        };
         if let Ok(entries) = std::fs::read_dir(parent) {
             let mut candidates: Vec<_> = entries
                 .flatten()
                 .map(|e| e.path().join("lib/darwin"))
                 .filter(|p| p.is_dir())
                 .collect();
-            // Sort so we pick the highest version when multiple exist.
-            candidates.sort();
+            // Sort numerically by version components so that e.g. "21.0.10"
+            // is correctly ordered after "21.0.9".
+            candidates.sort_by_key(|p| {
+                p.parent()
+                    .and_then(|d| d.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(|s| {
+                        s.split('.')
+                            .filter_map(|c| c.parse::<u64>().ok())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            });
             if let Some(found) = candidates.last() {
                 println!("cargo:rustc-link-search=native={}", found.display());
             }
