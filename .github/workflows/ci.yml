@@ -22,6 +22,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # macos-latest's default Xcode (26.5) ships without the compiler-rt darwin
+      # runtime, so linking test binaries fails with "library 'clang_rt.osx' not
+      # found" (@available lowers to __isPlatformVersionAtLeast, which lives there).
+      # Select the newest *stable* Xcode, which includes the runtime, so we keep
+      # building on the latest toolchain instead of pinning to an old runner.
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
       # Skip live macOS session tests; permission probes that self-skip still run in CI.
