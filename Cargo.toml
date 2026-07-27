@@ -109,7 +109,7 @@ axum = { version = "0.8", features = ["http1", "http2", "json", "tokio"], option
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 
 # Base64 encoding for screenshot data
-base64 = "0.22"
+base64 = "0.23"
 
 # macOS accessibility
 core-foundation = "0.10"
