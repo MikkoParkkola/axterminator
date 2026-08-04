@@ -5,6 +5,20 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-08-04
+
+### Security
+- **openssl 0.10.78 -> 0.10.80**, clearing GHSA-xp3w-r5p5-63rr (high). The advisory published 2026-05-05 and v0.10.1 shipped 2026-05-25, twenty days later, so every installed copy of 0.10.1 carries it. Exploitability is low in this context (X509 OCSP-responder parsing of non-UTF-8 URLs, and AES-KW-PAD ciphers) but the fix has been sitting on `main` undelivered for over two months.
+- **crossbeam-epoch 0.9.18 -> 0.9.20**, clearing RUSTSEC-2026-0204.
+- **openssl-sys 0.9.114 -> 0.9.116**, **tokio 1.52.3 -> 1.53.1**, **base64 0.22.1 -> 0.23.0**, **regex 1.12.3 -> 1.13.1**.
+
+### Changed
+- Thirty-six dependency versions advanced since v0.10.1, none of which had reached a released artifact. Beyond the security items above: ort 2.0.0-rc.12 -> rc.13, tungstenite 0.29.0 -> 0.30.0, syn 2.0.117 -> 3.0.2, digest 0.10.7 -> 0.11.3, sha1 0.10.6 -> 0.11.0, shlex 1.3.0 -> 2.0.1, cc 1.2.62 -> 1.4.0, clap 4.6.1 -> 4.6.4, thiserror 2.0.18 -> 2.0.19, sysinfo 0.39.2 -> 0.39.6, and the serde/tokio/toml families.
+
+### Notes
+- **No functional changes.** This release exists solely to deliver dependency fixes that accumulated on `main` and never reached users.
+- Found by a portfolio-wide security audit on 2026-08-04. The gap was invisible because **Dependabot scans only the default branch**: this repository showed 35 fixed and 0 open alerts while the binary users had installed predated every one of those fixes. A clean alert count on `main` says nothing about what has actually shipped.
+
 ## [0.10.1] - 2026-05-25
 
 ### Fixed
