@@ -499,7 +499,6 @@ no Python runtime required for CLI or MCP use.
 |---------|---------|-------------|
 | **Homebrew** | `brew install axterminator` | Single binary (CLI + MCP server) |
 | **Cargo** | `cargo install axterminator` | Single binary (CLI + MCP server) |
-| **PyPI** | `pip install axterminator` | Python bindings + bundled binary |
 
 ### 2C.3 MCP Client Configuration
 

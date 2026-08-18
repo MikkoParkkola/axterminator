@@ -147,21 +147,13 @@ impl SyncEngine {
 
 ## Usage
 
-### Python API
+### MCP Tool
 
-```python
-import axterminator as ax
-
-# Connect to app
-app = ax.app(bundle_id="com.apple.Safari")
-
-# Wait for idle (auto-selects XPC or heuristic)
-if app.wait_for_idle(timeout_ms=5000):
-    print("App is idle, safe to interact")
-
-# Non-blocking check
-if app.is_idle():
-    print("App is currently idle")
+```json
+{
+  "name": "ax_wait_idle",
+  "arguments": { "app": "Safari", "timeout_ms": 5000 }
+}
 ```
 
 ### Rust API

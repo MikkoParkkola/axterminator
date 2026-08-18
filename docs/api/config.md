@@ -1,136 +1,53 @@
 # Configuration
 
+AXTerminator is configured through environment variables, CLI flags on
+`axterminator mcp serve`, and an optional security policy file. There is no
+configuration API: the Python bindings that once carried one were removed in
+v0.7.0.
+
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AXTERMINATOR_VLM_BACKEND` | VLM backend | None |
-| `AXTERMINATOR_VLM_API_KEY` | VLM API key | None |
-| `AXTERMINATOR_TIMEOUT_MS` | Default timeout | 5000 |
-| `AXTERMINATOR_LOG_LEVEL` | Log level | INFO |
+| `AXTERMINATOR_SECURITY_MODE` | Security mode: `normal`, `safe`, or `sandboxed` | `normal` |
+| `AXTERMINATOR_RATE_LIMIT_RPS` | Tool calls allowed per second (sliding one-second window) | `50` |
 | `AXTERMINATOR_PRIORITY_MODE` | Visual lookup source-priority mode: `legacy` or `explicit` | `legacy` |
+| `AXTERMINATOR_HTTP_TOKEN` | Bearer token for the HTTP transport (same as `--token`; needs the `http-transport` feature) | random token generated at startup and printed to stderr |
+| `AXTERMINATOR_LLM_ENDPOINT` | Optional endpoint that re-ranks the top structural candidates during semantic find | unset, structural score used directly |
+| `AXTERMINATOR_SHERPA_ONNX_TTS` | Path or name of the sherpa-onnx offline TTS binary (needs the `enhanced-tts` feature) | `sherpa-onnx-offline-tts` |
 
-## HealingConfig
+## Security Modes
 
-```python
-import axterminator as ax
+| Mode | Behaviour |
+|------|-----------|
+| `normal` (default) | All tools allowed; mutating calls are logged. |
+| `safe` | Scripting tools blocked; `tools/list` reflects the restriction. |
+| `sandboxed` | Read-only tools only; every write returns a policy error. |
 
-config = ax.HealingConfig(
-    strategies=[
-        "data_testid",  # Developer-set IDs (most stable)
-        "aria_label",   # Accessibility labels
-        "identifier",   # AX identifier
-        "title",        # Element title
-        "xpath",        # Structural path
-        "position",     # Screen position
-        "visual_vlm",   # AI vision (slowest)
-    ],
-    max_heal_time_ms=100,  # Total time budget for healing (ms), default: 100
-)
+## App Policy File
+
+`~/.config/axterminator/security.toml` is optional. It holds `allowed` and
+`denied` arrays of app names or bundle IDs. If the file is absent, every app is
+allowed.
+
+```toml
+allowed = ["Calculator", "com.apple.Safari"]
+denied  = ["com.apple.Keychain-Access", "1Password"]
 ```
 
-### Strategy Details
+## Audit Log
 
-| Strategy | Stability | Speed | Notes |
-|----------|-----------|-------|-------|
-| `data_testid` | Highest | Fast | Set by developers |
-| `aria_label` | High | Fast | Accessibility-focused |
-| `identifier` | High | Fast | System-assigned |
-| `title` | Medium | Fast | May change with i18n |
-| `xpath` | Low | Medium | Breaks on structure changes |
-| `position` | Lowest | Fast | Breaks on layout changes |
-| `visual_vlm` | High | Slow | Requires VLM backend |
+Every mutating tool call is appended to
+`~/.local/share/axterminator/audit.jsonl` as one JSON line:
 
-## VLM Configuration
-
-### MLX (Local, Recommended)
-
-```python
-ax.configure_vlm(backend="mlx")
+```json
+{"ts":"2025-11-05T12:00:00Z","tool":"ax_click","args":{},"result":"ok"}
 ```
 
-No API key needed. Uses Apple Silicon GPU.
+## Self-Healing Configuration
 
-### Ollama (Local)
-
-```python
-ax.configure_vlm(
-    backend="ollama",
-    model="llava"  # or "bakllava", "llava:13b"
-)
-```
-
-Requires Ollama running locally.
-
-### Anthropic (Cloud)
-
-```python
-ax.configure_vlm(
-    backend="anthropic",
-    api_key="sk-ant-..."
-)
-```
-
-### OpenAI (Cloud)
-
-```python
-ax.configure_vlm(
-    backend="openai",
-    api_key="sk-..."
-)
-```
-
-### Gemini (Cloud)
-
-```python
-ax.configure_vlm(
-    backend="gemini",
-    api_key="..."
-)
-```
-
-## Logging
-
-```python
-import logging
-
-# Enable debug logging
-logging.basicConfig(level=logging.DEBUG)
-
-# Or via environment
-# AXTERMINATOR_LOG_LEVEL=DEBUG
-```
-
-## pytest Integration
-
-```python
-# conftest.py
-import pytest
-
-@pytest.fixture
-def ax_app():
-    """Fixture to get app connections."""
-    import axterminator as ax
-
-    def _get_app(name):
-        return ax.app(name=name)
-
-    return _get_app
-
-@pytest.fixture
-def ax_wait():
-    """Fixture for waiting."""
-    import time
-    return time.sleep
-```
-
-### Custom Markers
-
-```python
-# pytest.ini
-[pytest]
-markers =
-    integration: Integration tests (require --run-integration)
-    slow: Slow tests
-    requires_app: Requires specific app running
-```
+`HealingConfig` is a Rust library type (`axterminator::HealingConfig`) with the
+fields `strategies`, `max_heal_time_ms` (default `100`) and `cache_healed`
+(default `true`). It is not wired into the MCP server, so there is nothing to
+configure when you run `axterminator mcp serve`. See
+[Self-Healing](../guide/self-healing.md).

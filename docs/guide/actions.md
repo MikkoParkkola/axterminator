@@ -1,6 +1,7 @@
 # Actions
 
-AXTerminator supports two action modes: **Background** (default) and **Focus**.
+AXTerminator supports two action modes: **background** (default) and **focus**.
+Both are reached through the MCP tools; the CLI exposes a subset.
 
 ## Action Modes
 
@@ -8,17 +9,11 @@ AXTerminator supports two action modes: **Background** (default) and **Focus**.
 
 Clicks happen without stealing focus from your current window:
 
-```python
-import axterminator as ax
-
-app = ax.app(name="Calculator")
-element = app.find("5")
-
-# Background click (default)
-element.click()
-
-# Explicit background mode
-element.click(mode=ax.BACKGROUND)
+```json
+{
+  "name": "ax_click",
+  "arguments": { "app": "Calculator", "query": "5" }
+}
 ```
 
 !!! success "Background Testing"
@@ -26,81 +21,77 @@ element.click(mode=ax.BACKGROUND)
 
 ### Focus Mode
 
-Brings the application to the foreground:
+Brings the application to the foreground. Text input requires it: `ax_type`
+with `"mode": "background"` returns an error rather than typing into a window
+that cannot receive keystrokes.
 
-```python
-# Focus click - brings app forward
-element.click(mode=ax.FOCUS)
-
-# Required for text input
-element.type_text("Hello", mode=ax.FOCUS)
+```json
+{
+  "name": "ax_type",
+  "arguments": { "app": "TextEdit", "query": "role:AXTextArea", "text": "Hello", "mode": "focus" }
+}
 ```
 
 ## Click Actions
 
-```python
-# Single click
-element.click()
+`ax_click` takes a `click_type` of `single` (default), `double`, or `right`.
+A right click triggers `AXShowMenu` to open the contextual menu.
 
-# Double click
-element.double_click()
-
-# Right click (context menu)
-element.right_click()
+```json
+{ "name": "ax_click", "arguments": { "app": "Finder", "query": "Documents", "click_type": "double" } }
 ```
+
+When the target element's title or description contains a destructive keyword
+(delete, remove, erase, quit, close, format, reset, clear, wipe, destroy,
+terminate, uninstall, revoke), the tool returns an error instead of clicking.
+Re-send the call with `"confirm": true` once you have verified the action is
+intended.
 
 ## Text Input
 
-```python
-# Type text (requires FOCUS mode)
-text_field = app.find("role:AXTextField")
-text_field.click(mode=ax.FOCUS)
-text_field.type_text("Hello World!")
+```json
+{ "name": "ax_type", "arguments": { "app": "TextEdit", "query": "role:AXTextArea", "text": "Hello World!", "mode": "focus" } }
+```
 
-# Set value directly (where supported)
-text_field.set_value("New value")
+To write a value without simulating keystrokes, use `ax_set_value`, which sets
+the `AXValue` attribute directly and works in the background:
+
+```json
+{ "name": "ax_set_value", "arguments": { "app": "Safari", "query": "role:AXTextField", "value": "New value" } }
 ```
 
 ## Keyboard Actions
 
-```python
-# Press specific keys
-element.press_key("Return")
-element.press_key("Tab")
-element.press_key("Escape")
+`ax_key_press` posts events to the application's PID with `CGEventPostToPid`,
+so it does not steal focus. Modifiers are combined with `+`:
 
-# Key combinations
-element.press_key("Command+S")
-element.press_key("Command+Shift+N")
+```json
+{ "name": "ax_key_press", "arguments": { "app": "TextEdit", "keys": "cmd+s" } }
 ```
+
+Accepted keys include `enter`, `return`, `tab`, `escape`, `space`, `delete`,
+the arrow keys, `f1`-`f20`, `a`-`z`, `0`-`9`, and combinations such as
+`ctrl+c`, `opt+tab`, `shift+cmd+p`.
 
 ## Screenshots
 
-```python
-# App screenshot
-png_data = app.screenshot()
+`ax_screenshot` returns base64-encoded PNG data. Omit `query` for the whole
+app, or pass one to crop to a single element:
 
-# Element screenshot
-element_png = element.screenshot()
+```json
+{ "name": "ax_screenshot", "arguments": { "app": "Safari" } }
+```
 
-# Save to file
-with open("screenshot.png", "wb") as f:
-    f.write(png_data)
+From the CLI, `--output` writes the PNG to a file instead of printing base64:
+
+```bash
+axterminator screenshot --app Safari --output shot.png
 ```
 
 ## Action Timing
 
-```python
-import time
+Rather than sleeping between actions, wait for the app to settle:
 
-# Add delays between actions if needed
-element1.click()
-time.sleep(0.1)
-element2.click()
-
-# Or use wait_for_idle
-from axterminator.sync import wait_for_idle
-element1.click()
-wait_for_idle(app, timeout_ms=1000)
-element2.click()
+```json
+{ "name": "ax_wait_idle", "arguments": { "app": "Safari", "timeout_ms": 1000 } }
 ```

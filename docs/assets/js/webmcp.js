@@ -24,7 +24,7 @@
   mc.registerTool({
     name: "getInstallCommand",
     description:
-      "Return the installation command for axterminator on the user's macOS. Returns the canonical Homebrew tap command; falls back to pip when macos_version < 13 (Homebrew tap requires macOS Ventura).",
+      "Return the installation command for axterminator on the user's macOS. Returns the canonical Homebrew tap command; falls back to cargo install when macos_version < 13 (Homebrew tap requires macOS Ventura).",
     parameters: {
       macos_version: {
         type: "string",
@@ -36,7 +36,7 @@
       var v = (args && args.macos_version) || "";
       var major = parseInt(v.split(".")[0], 10);
       if (!isNaN(major) && major < 13) {
-        return "pip install axterminator";
+        return "cargo install axterminator --features cli";
       }
       return "brew install MikkoParkkola/tap/axterminator";
     },
