@@ -31,7 +31,7 @@ Before expanding the vision-fallback path, run a one-week AX coverage audit on y
 
 | Tool | Element Access | Click | Focus Stealing | Language |
 |------|---------------|-------|----------------|----------|
-| **AXTerminator** | **379µs** | ~1ms | **No** | Rust/Python |
+| **AXTerminator** | **379µs** | ~1ms | **No** | Rust |
 | XCUITest | ~200ms | ~50ms | Yes | Swift |
 | Appium Mac2 | ~500ms | ~100ms | Yes | Any |
 | PyAutoGUI | ~100ms | ~50ms | Yes | Python |
@@ -47,7 +47,6 @@ Before expanding the vision-fallback path, run a one-week AX coverage audit on y
 | Self-healing locators | ✅ (7) | ❌ | Basic | ❌ | ✅ |
 | AI vision fallback | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Cross-app testing | ✅ | ❌ | Limited | ✅ | Limited |
-| Python API | ✅ | ❌ | ✅ | ✅ | ❌ |
 | No Xcode required | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Electron support | ✅ | ❌ | ✅ | ✅ | ✅ |
 | WebView support | ✅ | Limited | ✅ | ❌ | ✅ |
@@ -70,11 +69,11 @@ The speedup is primarily from eliminating HTTP/WebDriver/JSON protocol overhead.
 ### Direct API Access
 
 ```
-AXTerminator: Python → Rust FFI → AXUIElement → Element
+AXTerminator: MCP client → Rust binary → AXUIElement → Element
                        ↓
                     ~379µs
 
-Appium:       Python → HTTP → Node.js → XCTest → AXUIElement → Element
+Appium:       Client → HTTP → Node.js → XCTest → AXUIElement → Element
                        ↓         ↓         ↓
                     ~50ms    ~100ms    ~350ms = ~500ms total
 ```
@@ -107,7 +106,7 @@ Appium:       Python → HTTP → Node.js → XCTest → AXUIElement → Element
 - You need **background testing** (unique feature)
 - Speed matters (1000+ element operations)
 - Testing native macOS apps
-- You want Python + pytest integration
+- You are driving the Mac from an AI agent over MCP
 - You need self-healing locators
 
 ### Use XCUITest when:
@@ -139,12 +138,14 @@ Appium:       Python → HTTP → Node.js → XCTest → AXUIElement → Element
 import pyautogui
 pyautogui.click(100, 200)
 pyautogui.write('Hello')
+```
 
-# After (AXTerminator)
-import axterminator as ax
-app = ax.app(name="TextEdit")
-app.find("role:AXTextArea").click()
-app.find("role:AXTextArea").type_text("Hello")
+After (AXTerminator MCP tools):
+
+```json
+{"name": "ax_connect",  "arguments": {"app": "TextEdit"}}
+{"name": "ax_click",    "arguments": {"app": "TextEdit", "query": "role:AXTextArea", "mode": "focus"}}
+{"name": "ax_type",     "arguments": {"app": "TextEdit", "query": "role:AXTextArea", "text": "Hello", "mode": "focus"}}
 ```
 
 ### From Appium
@@ -155,9 +156,11 @@ from appium import webdriver
 driver = webdriver.Remote(command_executor='http://127.0.0.1:4723')
 element = driver.find_element(by='name', value='Save')
 element.click()
+```
 
-# After (AXTerminator)
-import axterminator as ax
-app = ax.app(name="MyApp")
-app.find("Save").click()  # 1,321× faster
+After (AXTerminator MCP tools):
+
+```json
+{"name": "ax_connect", "arguments": {"app": "MyApp"}}
+{"name": "ax_click",   "arguments": {"app": "MyApp", "query": "Save"}}
 ```

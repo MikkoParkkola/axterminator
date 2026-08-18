@@ -138,48 +138,10 @@ Deterministic fallback chain with configurable time budget (default: 100 ms):
 4. `title` -- Fuzzy title matching (Levenshtein, 80% threshold)
 5. `xpath` -- Structural path in accessibility tree
 6. `position` -- Relative spatial position (50px threshold)
-7. `visual_vlm` -- AI vision fallback (local MLX, Ollama, or cloud VLMs)
+7. `visual_vlm` -- placeholder in this chain: it always returns no match. Visual
+   lookup is the separate `ax_find_visual` MCP tool.
 
 Successful heals are cached so subsequent lookups skip failed strategies.
-
----
-
-## Python API
-
-### Basic Usage
-
-```python
-import axterminator as ax
-
-# Connect by bundle ID (locale-independent, recommended)
-app = ax.app(bundle_id="com.apple.Safari")
-
-# Find elements
-button = app.find("Save")
-button = app.find(role="AXButton", title="Save")
-
-# Background click (default)
-button.click()
-
-# Focus mode when needed
-text_field = app.find(role="AXTextField")
-text_field.type_text("Hello", mode=ax.FOCUS)
-
-# Synchronization
-app.wait_for_idle()
-app.wait_for_element("Loading Complete", timeout=5.0)
-```
-
-### Healing Configuration
-
-```python
-config = ax.HealingConfig(
-    strategies=["data_testid", "aria_label", "title"],
-    max_heal_time_ms=200,
-    cache_healed=True,
-)
-ax.configure_healing(config)
-```
 
 ---
 

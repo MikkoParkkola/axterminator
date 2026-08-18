@@ -31,8 +31,8 @@ The difference is architectural: AXTerminator eliminates all network and seriali
 AXTerminator uses the macOS Accessibility API directly via Rust bindings:
 
 ```
-AXTerminator: Python → Rust FFI → AX API → Element
-Appium:       Python → HTTP → Node.js → XCUITest → AX API → Element
+AXTerminator: MCP client → Rust binary → AX API → Element
+Appium:       Client → HTTP → Node.js → XCUITest → AX API → Element
 ```
 
 ### 2. Zero HTTP Overhead
@@ -93,28 +93,6 @@ rustc -O benches/bench_quick.rs \
 # Run (requires Finder running)
 ./bench_quick
 ```
-
-## Python Performance
-
-The Python bindings add minimal overhead:
-
-```python
-import axterminator as ax
-import time
-
-app = ax.app(name="Finder")
-
-# Benchmark 1000 element accesses
-start = time.perf_counter()
-for _ in range(1000):
-    app.find("File", timeout_ms=100)
-elapsed = time.perf_counter() - start
-
-print(f"1000 finds: {elapsed*1000:.1f}ms")
-print(f"Per find: {elapsed:.3f}ms")
-```
-
-Typical results: **0.5-1ms per find** including Python overhead.
 
 ## Memory Usage
 

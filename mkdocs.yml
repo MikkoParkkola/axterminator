@@ -69,8 +69,6 @@ nav:
     - Camera & Gestures: guide/camera.md
     - Virtual Desktops: guide/spaces.md
   - API Reference:
-    - Core API: api/core.md
-    - Element API: api/element.md
     - MCP Tools: api/mcp-tools.md
     - Config: api/config.md
   - Performance:
@@ -85,8 +83,6 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/MikkoParkkola/axterminator
-    - icon: fontawesome/brands/python
-      link: https://pypi.org/project/axterminator/
 
 # MIK-3598: WebMCP markup. Loads on every docs page; registers typed tools
 # (getInstallCommand, getAccessibilityPermissionGuide, getMCPConfig,
