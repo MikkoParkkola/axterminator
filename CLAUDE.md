@@ -1,21 +1,21 @@
 # AXTerminator
 
-MCP server + CLI that gives AI agents the ability to see and control macOS applications via the Accessibility API. 27 core tools, up to 34+ with feature flags. Rust, macOS-only.
+MCP server + CLI that gives AI agents the ability to see and control macOS applications via the Accessibility API. 62 tools with default features, 84 with all feature flags. Rust, macOS-only.
 
 > `AGENTS.md` in this repo is the public install-facing guide for end-user agents (see `trvl` pattern). This file (`CLAUDE.md`) is for contributing agents. They are intentionally diverged; do not symlink.
 
 ## Product Vision
 
-AXTerminator lets an AI agent observe and operate macOS applications **in the background**, with sub-millisecond element access (~379 us), self-healing locators, and structured-output MCP tools. It is the eyes-and-hands of a macOS agent: click, type, query UI state, capture screens, record audio, see camera input, manage virtual desktops. AX-first with vision-fallback means most interactions use the accessibility tree (fast, reliable, semantic), falling back to screenshot+vision only when AX is not available (e.g. Electron web views without proper ARIA).
+AXTerminator lets an AI agent observe and operate macOS applications **in the background**, with sub-millisecond element access (~379 us) and structured-output MCP tools. It is the eyes-and-hands of a macOS agent: click, type, query UI state, capture screens, record audio, see camera input, manage virtual desktops. AX-first with vision-fallback means most interactions use the accessibility tree (fast, reliable, semantic), falling back to screenshot+vision only when AX is not available (e.g. Electron web views without proper ARIA).
 
 The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot+vision only — the `idevice`/RPPairing surface does not expose AX trees for third-party apps, and UIAutomation would require an on-device test runner which breaks the "mac-only agent, no on-device prereqs" contract.
 
 ## Current Status
 
-- **v0.9.1** · Rust stable · macOS 12+ · last MIT + Apache-2.0 dual-license release
-- **27 core tools** (default features) plus up to 34+ with `audio`, `camera`, `spaces`, `watch`, `context`, `docker`, `parakeet`, `http-transport` feature flags
+- **v0.10.2** · Rust stable · macOS 12+ · PolyForm Noncommercial 1.0.0 (v0.9.1 was the last MIT + Apache-2.0 release)
+- **62 tools** on default features, **84** with `audio`, `camera`, `spaces`, `watch`, `context`, `docker`, `http-transport` (measured via `tools/list`). Default set includes shell (`ax_exec`), filesystem (`ax_fs_*`), PTY terminals (`ax_term_*`), window management and HTTP GET, none of them scoped to the connected app
 - **~1000 tests** on default features; full suite with `--all-features`; CI runs `test --all-features` on macOS
-- **Performance**: 379 us per element access, 7-strategy self-healing locators, ObjC FFI for CoreFoundation / CoreGraphics / AVFoundation
+- **Performance**: 379 us per element access, ObjC FFI for CoreFoundation / CoreGraphics / AVFoundation
 - **iOS**: tracked in #43, demoted to screenshot+vision tier (~350 ms USB, ~700 ms WiFi via CoreDeviceProxy)
 - **tvOS**: unverified; RSD surface narrower than `idevice`'s tvOS target suggests
 
@@ -54,7 +54,7 @@ The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot
 - **Before editing a tool schema**: check MCP 2025-11-25 annotation matrix in MIK-2986; every tool needs `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` plus `title`.
 - **When adding a feature-gated module**: mirror `src/audio/` pattern — feature flag in `Cargo.toml`, `cfg`-gated module, `.m` file compilation in `build.rs`, integration test behind `live_` prefix.
 - **Cross-app interaction**: use `src/app.rs` for app connection and `src/element.rs` for element abstraction — do not bypass to raw `accessibility.rs` FFI.
-- **Self-healing locators**: the 7-strategy system in `src/healing.rs` / `healing_match.rs` is the primary stability mechanism; do not bypass it with hard-coded selectors.
+- **Self-healing locators**: `find_with_healing` in `src/healing.rs` has no caller — `ax_find` goes through `AXApp::find_element` (criteria parse, cache, breadth-first search). Wire it up or leave it alone, but do not describe it in docs as the live find path.
 - **Build + test parity with CI**: `cargo fmt --check && cargo clippy --all-features -- -D warnings -A unexpected_cfgs && cargo test --all-features -- --skip live_`
 
 ## Where to Look
@@ -94,14 +94,17 @@ CI skips tests that use the `live_` prefix (`cargo test --all-features -- --skip
   - `tools_innovation.rs` -- analyze, record, audit, workflow tools
   - `tools_capture.rs` -- screenshot, session capture
   - `tools_audio.rs` / `tools_camera.rs` / `tools_spaces.rs` -- feature-gated
+  - `tools_system.rs` / `tools_system_ext.rs` / `tools_power.rs` -- shell exec, filesystem, HTTP, machine state
+  - `tools_term.rs` -- PTY terminal sessions
+  - `tools_window.rs` -- window move/resize/tile/focus
   - `protocol.rs` -- MCP message types, capabilities
   - `annotations.rs` -- tool annotation constants (readOnly, destructive, etc.)
-  - `elicitation.rs` -- confirmation prompts for destructive actions
+  - `elicitation.rs` -- elicitation request builders; nothing calls them, so no `elicitation/create` is ever sent
   - `transport.rs` -- stdio + optional HTTP transport
 - `src/app.rs` -- macOS app connection, element search
 - `src/accessibility.rs` -- AXUIElement FFI wrappers
 - `src/element.rs` -- UI element abstraction
-- `src/healing.rs` / `healing_match.rs` -- 7-strategy self-healing locators
+- `src/healing.rs` / `healing_match.rs` -- 7-strategy self-healing locator library API (no caller in the MCP/CLI path)
 - `src/intent.rs` / `intent_matching.rs` -- scene graph, UI pattern detection
 - `src/copilot.rs` -- AI copilot state tracking
 - `src/spaces.rs` -- virtual desktop management (feature-gated)
@@ -111,7 +114,7 @@ CI skips tests that use the `live_` prefix (`cargo test --all-features -- --skip
 
 ## Feature Flags
 
-`cli` (default), `audio`, `camera`, `spaces`, `http-transport`, `watch`, `context`, `docker`, `parakeet`
+`cli` (default), `audio`, `enhanced-tts`, `camera`, `spaces`, `http-transport`, `watch`, `context`, `docker`, `parakeet`
 
 ## Key Patterns
 

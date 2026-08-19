@@ -43,7 +43,7 @@ pub(crate) fn system_tools() -> Vec<Tool> {
         Tool {
             name: "ax_exec",
             title: "Execute a shell command",
-            description: "Execute a shell command via /bin/sh -c. Returns stdout, stderr, and exit code. 30s timeout.",
+            description: "Execute a shell command via /bin/sh -c. Returns stdout, stderr, and exit code. Runs to completion with no timeout.",
             input_schema: json!({"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"}},"required":["command"]}),
             output_schema: json!({"type":"object","properties":{"exit_code":{"type":"integer"},"stdout":{"type":"string"},"stderr":{"type":"string"}}}),
             annotations: annotations::DESTRUCTIVE,

@@ -4,7 +4,7 @@
 
 ## Overview
 
-AXTerminator is a macOS GUI testing framework that provides background testing (interacting with applications without stealing window focus), sub-millisecond element access via direct Accessibility API calls, and self-healing locators with 7 fallback strategies.
+AXTerminator is a macOS GUI testing framework that provides background testing (interacting with applications without stealing window focus), sub-millisecond element access via direct Accessibility API calls, and a 7-strategy self-healing locator API in the library (`find_with_healing`, not used by the MCP tools or CLI).
 
 ### Key Differentiators
 

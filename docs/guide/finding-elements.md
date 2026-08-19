@@ -1,6 +1,6 @@
 # Finding Elements
 
-AXTerminator provides multiple ways to locate UI elements, with automatic fallback through self-healing locators.
+AXTerminator provides multiple ways to locate UI elements. `ax_find` and `axterminator find` search the accessibility tree with a result cache; `ax_find` additionally falls back to fuzzy scene-graph matching when that finds nothing. The separate 7-strategy healing chain is a library API described in [Self-Healing](self-healing.md).
 
 ## Basic Finding
 

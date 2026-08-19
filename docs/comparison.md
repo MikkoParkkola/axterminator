@@ -107,7 +107,6 @@ Appium:       Client → HTTP → Node.js → XCTest → AXUIElement → Element
 - Speed matters (1000+ element operations)
 - Testing native macOS apps
 - You are driving the Mac from an AI agent over MCP
-- You need self-healing locators
 
 ### Use XCUITest when:
 - You're already in the Apple ecosystem

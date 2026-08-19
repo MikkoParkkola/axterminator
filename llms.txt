@@ -5,7 +5,7 @@
 
 ## What This Is
 
-AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. 19-34+ tools depending on features.
+AXTerminator is an MCP server that gives you (the AI agent) the ability to see and control macOS applications via the Accessibility API. 62 tools with default features, 84 with all optional features. It also exposes a shell, filesystem access and terminal sessions on this Mac -- see "Beyond the UI" below.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ which axterminator 2>/dev/null || echo "NOT INSTALLED"
 
 # If installed, check version
 axterminator check 2>/dev/null
-# Look at the "Version:" line — current release is 0.8.0
+# Look at the "Version:" line — current release is 0.10.2
 ```
 
 If already installed at an older version, follow the Upgrade section below.
@@ -196,7 +196,7 @@ axterminator mcp serve --http 8741 --localhost-only
 axterminator mcp serve --http 8741 --token YOUR_SECRET_TOKEN
 ```
 
-## Available Tools (34+)
+## Available Tools (62 default, 84 with all features)
 
 After connecting, call `tools/list` to get the full schema. Core tools:
 
@@ -217,7 +217,7 @@ After connecting, call `tools/list` to get the full schema. Core tools:
 - `ax_drag` — drag between coordinates
 - `ax_key_press` — send keyboard shortcuts
 - `ax_assert` — assert element state
-- `ax_find_visual` — visual element detection (requires VLM)
+- `ax_find_visual` — returns a screenshot plus a sampling request so your own model can locate the element
 - `ax_visual_diff` — visual regression testing (compare screenshots against baseline)
 - `ax_a11y_audit` — WCAG accessibility compliance audit
 - `ax_clipboard` — read/write system clipboard
@@ -232,7 +232,26 @@ After connecting, call `tools/list` to get the full schema. Core tools:
 - `ax_test_run` — black-box test execution
 - `ax_app_profile` — Electron app metadata
 
-Optional feature tools: `ax_listen`, `ax_speak`, `ax_audio_devices` (audio), `ax_camera_capture`, `ax_gesture_detect` (camera), `ax_list_spaces`, `ax_create_space` (spaces).
+- `ax_window_list` / `ax_window_focus` / `ax_window_move` / `ax_window_resize` / `ax_window_minimize` / `ax_window_tile` — window management
+- `ax_system_context`, `ax_system_memory`, `ax_system_disk`, `ax_system_network`, `ax_system_power`, `ax_system_launchd`, `ax_process_list` — machine state
+
+Optional feature tools: `ax_listen`, `ax_speak`, `ax_audio_devices` (audio), `ax_camera_capture`, `ax_gesture_detect` (camera), `ax_list_spaces`, `ax_create_space` (spaces), `ax_watch_start` (watch), `ax_browser_launch` (docker), `ax_location` (context).
+
+## Beyond the UI — shell, filesystem, terminal
+
+These ship in the default build, are not limited to the connected app, and have
+no confirmation gate. Ask the user before using them for anything they did not
+request.
+
+- `ax_exec` — run a shell command via `/bin/sh -c` as the user running the server
+- `ax_fs_read` / `ax_fs_write` / `ax_fs_edit` / `ax_fs_delete` / `ax_fs_list` / `ax_fs_search` — file access by path (`~/` expanded, no sandbox)
+- `ax_term_start` / `ax_term_send` / `ax_term_read` / `ax_term_close` / `ax_term_list` — interactive PTY sessions that persist across calls
+- `ax_http_get` — HTTP GET to any URL
+- `ax_app_launch` / `ax_notify` — launch or quit an app, post a notification
+
+`AXTERMINATOR_SECURITY_MODE=safe` blocks `ax_exec` and `ax_run_script`;
+`sandboxed` allows read-only tools only. Every mutating call is appended to
+`~/.local/share/axterminator/audit.jsonl`.
 
 ## Query Syntax
 
@@ -266,22 +285,22 @@ ax_find query="description:equals"
 ## Feature Flags (build-time)
 
 ```bash
-# Core only (default — 27 tools)
+# Core only (default — 62 tools)
 cargo build --release --features cli
 
-# With audio capture + TTS (30 tools)
+# With audio capture + TTS
 cargo build --release --features cli,audio
 
-# With camera + gesture detection (30 tools)
+# With camera + gesture detection
 cargo build --release --features cli,camera
 
-# With virtual desktop isolation (32 tools)
+# With virtual desktop isolation
 cargo build --release --features cli,spaces
 
-# Everything (34+ tools)
-cargo build --release --features cli,audio,camera,watch,spaces,http-transport
+# Everything (84 tools)
+cargo build --release --features cli,audio,camera,watch,spaces,context,docker,http-transport
 ```
 
 ## Version
 
-0.8.0
+0.10.2
