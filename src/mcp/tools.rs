@@ -190,7 +190,7 @@ fn tool_ax_find() -> Tool {
             - By role: \"role:AXButton\"\n\
             - Combined: \"role:AXButton title:Save\"\n\
             - XPath-like: \"//AXButton[@AXTitle='OK']\"\n\
-            Uses 7-strategy self-healing locators.",
+            Searches the accessibility tree with a result cache, then falls back to fuzzy scene-graph matching.",
         input_schema: json!({
             "type": "object",
             "properties": {

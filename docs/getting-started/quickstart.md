@@ -52,7 +52,9 @@ args = ["mcp", "serve"]
 
 Open **System Settings > Privacy & Security > Accessibility** and add your terminal app.
 
-Your agent now has 19 core tools to control any macOS app.
+Your agent now has 62 tools to control any macOS app. That includes a shell
+(`ax_exec`), file read/write/delete and PTY terminal sessions, all on by
+default; see [MCP Tools](../api/mcp-tools.md#beyond-the-ui-shell-filesystem-terminal).
 
 ## CLI
 

@@ -5,7 +5,7 @@
 
 ## What To Do
 
-You are setting up `axterminator` -- an MCP server that gives you the ability to see and control macOS applications via the Accessibility API. 27 core tools, up to 34+ with optional features. Run these steps in order:
+You are setting up `axterminator` -- an MCP server that gives you the ability to see and control macOS applications via the Accessibility API. 62 tools with default features, 84 with optional features (audio, camera, spaces, watch, context, docker, HTTP transport). Run these steps in order:
 
 ### Step 1: Install
 
@@ -76,7 +76,7 @@ axterminator find "File" --app Finder
 # Expected: UI element match
 ```
 
-Tell the user: "AXTerminator is installed with up to 34 MCP tools. I can see your screen, click buttons, type text, take screenshots, read UI trees, run AppleScript, audit accessibility, and control apps in the background while you work. Just tell me what to do."
+Tell the user: "AXTerminator is installed with 62 MCP tools. I can see your screen, click buttons, type text, take screenshots, read UI trees, run AppleScript, audit accessibility, and control apps in the background while you work. The same server also lets me run shell commands, read and write files, and open terminal sessions on this Mac. Just tell me what to do."
 
 ---
 
@@ -116,7 +116,7 @@ You now have MCP tools to control any macOS application. Tools are grouped by ca
 | Tool | What it does |
 |------|-------------|
 | `ax_assert` | Assert element state (exists, enabled, value) |
-| `ax_find_visual` | Visual element detection (requires VLM) |
+| `ax_find_visual` | Returns a screenshot plus a sampling request so your own model can locate the element |
 | `ax_visual_diff` | Visual regression testing (compare screenshots) |
 | `ax_a11y_audit` | WCAG accessibility compliance audit |
 
@@ -130,6 +130,31 @@ You now have MCP tools to control any macOS application. Tools are grouped by ca
 | `ax_session_info` | Server session state |
 | `ax_analyze` | Detect UI patterns, infer app state, suggest actions |
 | `ax_query` | Natural language UI questions |
+
+### Shell, Files and Terminal
+
+These are part of the default build and are not limited to the connected app.
+
+| Tool | What it does |
+|------|-------------|
+| `ax_exec` | Run a shell command via `/bin/sh -c` as the user running the server |
+| `ax_fs_read` / `ax_fs_write` / `ax_fs_edit` / `ax_fs_delete` | Read, write, find-and-replace, delete a path (`~/` expanded, no sandbox) |
+| `ax_fs_list` / `ax_fs_search` | List a directory, search file contents |
+| `ax_term_start` / `ax_term_send` / `ax_term_read` / `ax_term_close` / `ax_term_list` | Interactive PTY sessions that persist across calls |
+| `ax_http_get` | HTTP GET to any URL |
+| `ax_app_launch` / `ax_notify` | Launch or quit an app, post a notification |
+| `ax_process_list`, `ax_system_memory`, `ax_system_disk`, `ax_system_network`, `ax_system_power`, `ax_system_launchd`, `ax_system_context` | Machine state |
+
+Ask the user before touching files or running commands they did not request.
+`AXTERMINATOR_SECURITY_MODE=safe` blocks `ax_exec` and `ax_run_script`;
+`sandboxed` allows read-only tools only.
+
+### Windows
+
+| Tool | What it does |
+|------|-------------|
+| `ax_window_list` | List windows with positions |
+| `ax_window_focus` / `ax_window_move` / `ax_window_resize` / `ax_window_minimize` / `ax_window_tile` | Focus, move, resize, minimize, tile a window |
 
 ### Workflows
 

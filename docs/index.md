@@ -11,9 +11,9 @@
 
 </div>
 
-Up to 34+ MCP tools (27 core + optional audio, camera, spaces). Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
+62 MCP tools with default features, 84 with the optional audio, camera, spaces, watch, context, docker and HTTP-transport flags. Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
-**Current version: 0.8.0** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
+**Current version: 0.10.2** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
 
 ## Deploy
 
@@ -64,7 +64,7 @@ args = ["mcp", "serve"]
 
 Replace `/path/to/axterminator` with the actual binary path.
 
-Done. Your agent has 27 core tools (up to 34+ with all feature flags) to control any macOS app.
+Done. Your agent has 62 tools (84 with all feature flags) to control any macOS app.
 
 ## MCP Tools
 
@@ -73,7 +73,9 @@ Done. Your agent has 27 core tools (up to 34+ with all feature flags) to control
 | **GUI** | `ax_connect`, `ax_find`, `ax_click`, `ax_click_at`, `ax_type`, `ax_set_value`, `ax_get_value`, `ax_scroll`, `ax_drag`, `ax_key_press` | Connect to apps, find elements, interact |
 | **Observe** | `ax_is_accessible`, `ax_screenshot`, `ax_get_tree`, `ax_get_attributes`, `ax_list_windows`, `ax_list_apps`, `ax_wait_idle` | Check permissions, see UI state, screenshots |
 | **Verify** | `ax_assert`, `ax_find_visual`, `ax_visual_diff`, `ax_a11y_audit` | Assert element state, AI vision fallback, visual regression, WCAG audit |
-| **System** | `ax_clipboard`, `ax_run_script`, `ax_undo`, `ax_session_info`, `ax_analyze` | Clipboard, AppleScript/JXA, undo actions, session state, UI analysis |
+| **System** | `ax_clipboard`, `ax_run_script`, `ax_undo`, `ax_session_info`, `ax_analyze`, `ax_system_context`, `ax_system_memory`, `ax_system_disk`, `ax_system_network`, `ax_system_power`, `ax_system_launchd`, `ax_process_list` | Clipboard, AppleScript/JXA, undo actions, session state, UI analysis, machine state |
+| **Windows** | `ax_window_list`, `ax_window_focus`, `ax_window_move`, `ax_window_resize`, `ax_window_minimize`, `ax_window_tile` | Move, resize, tile, focus windows |
+| **Shell & files** | `ax_exec`, `ax_fs_read`, `ax_fs_write`, `ax_fs_edit`, `ax_fs_search`, `ax_fs_delete`, `ax_fs_list`, `ax_term_start`, `ax_term_send`, `ax_term_read`, `ax_term_close`, `ax_term_list`, `ax_http_get`, `ax_app_launch`, `ax_notify` | Run shell commands, read/write/delete files, drive interactive terminal sessions, fetch a URL, launch or quit apps |
 | **Audio** | `ax_listen`, `ax_speak`, `ax_audio_voices`, `ax_audio_devices` | Capture mic/system audio (48kHz native), text-to-speech; optional Kokoro/Piper via `enhanced-tts` |
 | **Camera** | `ax_camera_capture`, `ax_gesture_detect`, `ax_gesture_listen` | Camera frames, gesture recognition |
 | **Spaces** | `ax_list_spaces`, `ax_create_space`, `ax_move_to_space`, `ax_switch_space`, `ax_destroy_space` | Virtual desktop isolation |
@@ -90,9 +92,25 @@ Agents can browse app state without tool calls:
 | `axterminator://app/{name}/state` | Focused element, window title |
 | `axterminator://system/displays` | Monitor layout |
 
+### Beyond the UI
+
+The default build is not limited to the app you connect to. `ax_exec` runs any
+command through `/bin/sh -c` as the user who started the server. `ax_fs_read`,
+`ax_fs_write`, `ax_fs_edit` and `ax_fs_delete` use the path you give them, with
+`~/` expanded and no project sandbox. `ax_term_start` opens a PTY session that
+persists across calls. `ax_http_get` fetches any URL. All of these are on by
+default and are not covered by the accessibility permission.
+
 ### Security
 
-Destructive actions require confirmation via elicitation. HTTP transport requires bearer token auth. The AI has hands, not root.
+`ax_click` refuses to click an element whose label reads destructive (delete,
+remove, quit, and similar) unless the call sets `confirm=true`. That flag is a
+tool argument the calling agent sets itself, not a prompt to you, and no other
+tool has such a gate. Every mutating call is appended to
+`~/.local/share/axterminator/audit.jsonl`. `AXTERMINATOR_SECURITY_MODE=safe`
+blocks `ax_exec` and `ax_run_script`; `sandboxed` allows read-only tools only.
+HTTP transport binds `127.0.0.1` and requires a bearer token unless started with
+`--localhost-only`. See [Configuration](api/config.md).
 
 ## Feature Flags
 
@@ -110,6 +128,8 @@ cargo build --release --features "cli,audio,enhanced-tts,camera,spaces"
 | `camera` | Camera capture, gesture detection (88.8% thumbs_up verified) |
 | `watch` | Continuous background monitoring (implies audio + camera) |
 | `spaces` | Virtual desktop management (CGSSpace private API) |
+| `context` | Geolocation via CoreLocation |
+| `docker` | Browser containers as isolated test targets (requires Docker) |
 | `http-transport` | Streamable HTTP MCP transport with bearer token auth |
 
 ## CLI
@@ -129,7 +149,7 @@ AXTerminator uses an undocumented behavior of Apple's Accessibility API: `AXUIEl
 
 379us per element access (Criterion, M1 MacBook Pro). Appium needs 500ms for the same thing.
 
-7-strategy self-healing locators survive UI changes: data_testid, aria_label, identifier, title, xpath, position, visual_vlm.
+`ax_find` parses the query into search criteria and runs a cached breadth-first search of the accessibility tree, with fuzzy scene-graph matching as a fallback. The 7-strategy self-healing chain is a library API, `axterminator::find_with_healing`; see [Self-Healing](guide/self-healing.md).
 
 ## Performance
 
