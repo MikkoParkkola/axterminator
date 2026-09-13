@@ -18,11 +18,12 @@ FLOORS = {
     "pillow": "12.2.0",
     "urllib3": "2.7.0",
     "python-multipart": "0.0.27",
-    "PyJWT": "2.12.0",
+    "PyJWT": "2.13.0",
     "pyasn1": "0.6.3",
     "cryptography": "46.0.5",
     "protobuf": "5.29.6",
-    "GitPython": "3.1.50",
+    "GitPython": "3.1.59",
+    "idna": "3.15",
 }
 
 ENTRYPOINTS = ("mkdocs-material", "mkdocstrings", "pymdown-extensions")
