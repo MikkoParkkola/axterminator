@@ -1,7 +1,7 @@
 # Docs toolchain for .github/workflows/docs.yml (MIK-5221).
 # Entrypoints plus explicit floors for the eight Dependabot HIGH packages.
 mkdocs-material>=9.7.7
-mkdocstrings[python]>=0.29.0
+mkdocstrings[python]>=1.0.6
 pymdown-extensions>=10.14
 pillow>=12.3.0
 urllib3>=2.7.0
