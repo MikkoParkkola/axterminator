@@ -119,7 +119,7 @@ core-graphics-types = "0.2"
 
 # macOS specific
 objc = "0.2"
-cocoa = "0.26"
+cocoa = "0.27"
 block = "0.1"
 
 # Async runtime
