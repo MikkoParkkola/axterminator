@@ -1,0 +1,14 @@
+{
+  "name": "axterminator",
+  "displayName": "AXTerminator",
+  "version": "0.10.2",
+  "description": "Local stdio MCP server that lets Claude connect to macOS apps and click, type, and take screenshots through the Accessibility API.",
+  "author": {
+    "name": "Mikko Parkkola",
+    "url": "https://github.com/MikkoParkkola"
+  },
+  "homepage": "https://mikkoparkkola.github.io/axterminator/",
+  "repository": "https://github.com/MikkoParkkola/axterminator",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "keywords": ["macos", "accessibility", "gui", "automation"]
+}

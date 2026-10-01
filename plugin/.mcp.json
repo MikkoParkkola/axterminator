@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "axterminator": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "axterminator@0.10.2", "mcp", "serve"]
+    }
+  }
+}
