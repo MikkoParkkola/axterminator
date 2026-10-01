@@ -133,8 +133,6 @@ of your licenses.
 
 Required Notice: Copyright (c) 2026 Mikko Parkkola (https://github.com/MikkoParkkola/axterminator)
 
-For commercial licensing, contact mikko.parkkola@iki.fi.
-
 ---
 
 ## Earlier versions

@@ -10,5 +10,6 @@
   "homepage": "https://mikkoparkkola.github.io/axterminator/",
   "repository": "https://github.com/MikkoParkkola/axterminator",
   "license": "PolyForm-Noncommercial-1.0.0",
-  "keywords": ["macos", "accessibility", "gui", "automation"]
+  "keywords": ["macos", "accessibility", "gui", "automation"],
+  "mcpServers": "./.mcp.json"
 }

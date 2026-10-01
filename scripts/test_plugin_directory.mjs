@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -36,7 +36,28 @@ function wordsOutsideFences(markdown) {
   return stripped.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word));
 }
 
-const pluginJsons = walk(pluginDir).filter((path) => basename(path) === "plugin.json");
+function repoPluginManifests(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    if (name === ".git" || name === "target" || name === "node_modules") continue;
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) {
+      if (name === ".claude-plugin") {
+        const manifest = join(path, "plugin.json");
+        try {
+          statSync(manifest);
+          out.push(manifest);
+        } catch {
+          // directory without a plugin manifest
+        }
+      }
+      out.push(...repoPluginManifests(path));
+    }
+  }
+  return out;
+}
+
+const pluginJsons = repoPluginManifests(root);
 assert.equal(pluginJsons.length, 1, `expected exactly one plugin.json, found ${pluginJsons.length}: ${pluginJsons.join(", ")}`);
 assert.equal(pluginJsons[0], join(pluginDir, ".claude-plugin", "plugin.json"));
 
@@ -63,9 +84,17 @@ assert.ok(wordCount >= 40, `README has ${wordCount} words outside code fences`);
 const exampleHeadings = readme.split("\n").filter((line) => line.startsWith("### Example"));
 assert.ok(exampleHeadings.length >= 3, `expected >= 3 "### Example" headings, found ${exampleHeadings.length}`);
 
-const repoLicense = readFileSync(join(root, "LICENSE.md"));
-const pluginLicense = readFileSync(join(pluginDir, "LICENSE.md"));
-assert.ok(repoLicense.equals(pluginLicense), "plugin/LICENSE.md bytes differ from LICENSE.md");
+const email = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const repoLicense = readFileSync(join(root, "LICENSE.md"), "utf8");
+const pluginLicense = readFileSync(join(pluginDir, "LICENSE.md"), "utf8");
+assert.match(pluginLicense, /PolyForm Noncommercial License 1\.0\.0/);
+assert.doesNotMatch(pluginLicense, email);
+for (const line of pluginLicense.split("\n")) {
+  assert.ok(repoLicense.includes(line), "plugin licence line is not in the repository licence");
+}
+const onlyInRepo = repoLicense.split("\n").filter((line) => line.trim() && !pluginLicense.includes(line));
+assert.equal(onlyInRepo.length, 1, `repo licence differs by ${onlyInRepo.length} lines`);
+assert.match(onlyInRepo[0], email, "the only licence line omitted from the plugin is the contact email");
 
 const mcp = JSON.parse(readFileSync(join(pluginDir, ".mcp.json"), "utf8"));
 const servers = Object.values(mcp.mcpServers ?? {});
@@ -75,8 +104,9 @@ for (const server of servers) {
   assert.equal(SHELLS.has(server.command), false);
   assert.equal(server.url, undefined, "hosted/remote MCP url is not allowed");
   assert.ok(Array.isArray(server.args), "MCP args must be an array");
-  assert.ok(server.args.includes("axterminator@0.10.2"), `missing axterminator@0.10.2 in ${JSON.stringify(server.args)}`);
-  assert.deepEqual(server.args, ["-y", "axterminator@0.10.2", "mcp", "serve"]);
+  const pin = `axterminator@${latest}`;
+  assert.ok(server.args.includes(pin), `missing ${pin} in ${JSON.stringify(server.args)}`);
+  assert.deepEqual(server.args, ["-y", pin, "mcp", "serve"]);
 }
 
 const privacy = readFileSync(join(pluginDir, "PRIVACY.md"), "utf8");
@@ -84,7 +114,10 @@ assert.match(privacy, /macOS-only/);
 assert.match(privacy, /Accessibility/);
 assert.match(privacy, /GitHub issues/);
 assert.match(privacy, /https:\/\/github\.com\/MikkoParkkola\/axterminator\/issues/);
-assert.doesNotMatch(privacy, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-assert.equal(privacy.includes("@"), false, "PRIVACY.md must not contain @");
+for (const path of walk(pluginDir)) {
+  const text = readFileSync(path, "utf8");
+  assert.doesNotMatch(text, email, `${path} contains an email address`);
+}
+assert.match(privacy, /Mikko Parkkola/);
 
 console.log(`ok plugin ${manifest.version} words=${wordCount} examples=${exampleHeadings.length} release=${tag}`);
