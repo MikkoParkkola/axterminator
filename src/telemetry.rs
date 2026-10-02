@@ -1,8 +1,9 @@
 //! Daily install heartbeat.
 //!
 //! At most one POST per 24 hours. The JSON body is `project`, `event`,
-//! `version`, `runtime`, and `install_id`. Failure is ignored. Importing this
-//! module does no I/O.
+//! `version`, `runtime`, `install_id`, `install_date`, and `machine_id`.
+//! The machine id is random and shared by products on this machine. It is
+//! not a name. Failure is ignored. Importing this module does no I/O.
 
 use std::fs;
 #[cfg(test)]
@@ -43,6 +44,10 @@ struct Body<'a> {
     runtime: String,
     #[serde(skip_serializing_if = "str::is_empty")]
     install_id: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    install_date: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    machine_id: &'a str,
 }
 
 enum Proxy {
@@ -64,18 +69,19 @@ pub fn heartbeat_in_background(version: &str) {
     if url.is_empty() {
         return;
     }
-    let Some(dir) = state_dir() else {
+    let Some(home) = home_dir() else {
         return;
     };
-    let Some(body) = claim(&dir, version, SystemTime::now()) else {
+    let dir = home.join(".axterminator/telemetry");
+    let Some(body) = claim(&dir, &home, version, SystemTime::now()) else {
         return;
     };
     std::thread::spawn(move || post(&url, &body, Proxy::System));
 }
 
-fn state_dir() -> Option<PathBuf> {
+fn home_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").filter(|value| !value.is_empty())?;
-    Some(PathBuf::from(home).join(".axterminator/telemetry"))
+    Some(PathBuf::from(home))
 }
 
 fn allowed(version: &str, ci: bool, opt_out: bool) -> bool {
@@ -108,13 +114,15 @@ fn resolve_endpoint(override_value: Option<&str>) -> String {
     }
 }
 
-fn claim(dir: &Path, version: &str, now: SystemTime) -> Option<Vec<u8>> {
+fn claim(dir: &Path, home: &Path, version: &str, now: SystemTime) -> Option<Vec<u8>> {
     if !due(dir, now) {
         return None;
     }
     let _ = mark_sent(dir, now);
-    let id = install_id(dir);
-    build_body(version, &id)
+    let (id, fresh) = install_id(dir);
+    let installed = install_date(dir, now, fresh);
+    let machine = machine_id(home);
+    build_body(version, &id, &installed, &machine)
 }
 
 fn due(dir: &Path, now: SystemTime) -> bool {
@@ -135,30 +143,118 @@ fn mark_sent(dir: &Path, now: SystemTime) -> std::io::Result<()> {
     fs::rename(tmp, dest)
 }
 
-fn install_id(dir: &Path) -> String {
+fn install_id(dir: &Path) -> (String, bool) {
     let path = dir.join("install-id");
     if let Ok(text) = fs::read_to_string(&path) {
         let existing = text.trim();
         if !existing.is_empty() {
+            return (existing.to_string(), false);
+        }
+    }
+    use rand::RngExt;
+    let bytes: [u8; 16] = rand::rng().random();
+    let id = hex_encode(&bytes);
+    if ensure_dir(dir).is_ok() && write_private(&path, id.as_bytes()).is_ok() {
+        return (id, true);
+    }
+    (String::new(), false)
+}
+
+fn valid_day(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return false;
+    }
+    let Ok(year) = value[0..4].parse::<i64>() else {
+        return false;
+    };
+    let Ok(month) = value[5..7].parse::<u64>() else {
+        return false;
+    };
+    let Ok(day) = value[8..10].parse::<u64>() else {
+        return false;
+    };
+    let Some(days) = days_from_civil(year, month, day) else {
+        return false;
+    };
+    let (got_year, got_month, got_day) = civil_from_days(days);
+    got_year == year && got_month == month && got_day == day
+}
+
+fn format_day(time: SystemTime) -> String {
+    let stamp = format_rfc3339(time);
+    stamp[..10].to_string()
+}
+
+fn install_date(dir: &Path, now: SystemTime, fresh: bool) -> String {
+    let path = dir.join("install-date");
+    if let Ok(text) = fs::read_to_string(&path) {
+        let existing = text.trim();
+        if valid_day(existing) {
+            return existing.to_string();
+        }
+    }
+    let mut day = format_day(now);
+    if !fresh {
+        if let Some(born) = birth_day(&dir.join("install-id")) {
+            day = born;
+        }
+    }
+    if ensure_dir(dir).is_ok() {
+        let _ = write_private(&path, day.as_bytes());
+    }
+    day
+}
+
+fn birth_day(path: &Path) -> Option<String> {
+    let meta = fs::metadata(path).ok()?;
+    let created = meta.created().or_else(|_| meta.modified()).ok()?;
+    let secs = created.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    if secs < 86_400 {
+        return None;
+    }
+    Some(format_day(created))
+}
+
+fn machine_id(home: &Path) -> String {
+    let dir = home.join(".revaluator");
+    let path = dir.join("machine-id");
+    if let Ok(text) = fs::read_to_string(&path) {
+        let existing = text.trim();
+        if is_machine_id(existing) {
             return existing.to_string();
         }
     }
     use rand::RngExt;
     let bytes: [u8; 16] = rand::rng().random();
     let id = hex_encode(&bytes);
-    if ensure_dir(dir).is_ok() {
-        let _ = write_private(&path, id.as_bytes());
+    if ensure_dir(&dir).is_ok() && write_private(&path, id.as_bytes()).is_ok() {
+        return id;
     }
-    id
+    String::new()
 }
 
-fn build_body(version: &str, install_id: &str) -> Option<Vec<u8>> {
+fn is_machine_id(value: &str) -> bool {
+    value.len() == 32
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn build_body(
+    version: &str,
+    install_id: &str,
+    install_date: &str,
+    machine_id: &str,
+) -> Option<Vec<u8>> {
     let body = Body {
         project: PROJECT,
         event: EVENT,
         version,
         runtime: format!("{}/{}/rust", std::env::consts::OS, std::env::consts::ARCH),
         install_id,
+        install_date,
+        machine_id,
     };
     let bytes = serde_json::to_vec(&body).ok()?;
     if bytes.len() > MAX_BODY {
@@ -373,7 +469,7 @@ mod tests {
         );
         let dir = scratch();
         let now = parse_rfc3339("2026-10-02T12:00:00Z").unwrap();
-        let body = claim(&dir, "0.10.2", now).unwrap();
+        let body = claim(&dir, &dir, "0.10.2", now).unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let mut keys = parsed
             .as_object()
@@ -384,12 +480,22 @@ mod tests {
         keys.sort();
         assert_eq!(
             keys,
-            ["event", "install_id", "project", "runtime", "version"]
+            [
+                "event",
+                "install_date",
+                "install_id",
+                "machine_id",
+                "project",
+                "runtime",
+                "version"
+            ]
         );
         assert_eq!(parsed["project"], PROJECT);
         assert_eq!(parsed["event"], EVENT);
         assert_eq!(parsed["version"], "0.10.2");
         assert!(parsed["install_id"].as_str().unwrap().len() == 32);
+        assert_eq!(parsed["install_date"], "2026-10-02");
+        assert!(parsed["machine_id"].as_str().unwrap().len() == 32);
         assert!(parsed.get("hostname").is_none());
         assert_eq!(
             fs::read_to_string(dir.join("heartbeat")).unwrap(),
@@ -402,8 +508,8 @@ mod tests {
             assert_eq!(mode.mode() & 0o777, 0o600);
         }
         let _ = mode;
-        assert!(claim(&dir, "0.10.2", now + Duration::from_secs(60)).is_none());
-        let next = claim(&dir, "0.10.2", now + DAY).unwrap();
+        assert!(claim(&dir, &dir, "0.10.2", now + Duration::from_secs(60)).is_none());
+        let next = claim(&dir, &dir, "0.10.2", now + DAY).unwrap();
         assert!(next.starts_with(b"{"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -418,7 +524,13 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let handle = std::thread::spawn(move || read_body(listener));
-        let body = build_body("0.10.2", "0123456789abcdef0123456789abcdef").unwrap();
+        let body = build_body(
+            "0.10.2",
+            "0123456789abcdef0123456789abcdef",
+            "2026-10-02",
+            "fedcba9876543210fedcba9876543210",
+        )
+        .unwrap();
         post(
             &format!("http://127.0.0.1:{port}/v1/heartbeat"),
             &body,
