@@ -7,8 +7,11 @@
     "name": "Mikko Parkkola",
     "url": "https://github.com/MikkoParkkola"
   },
-  "homepage": "https://mikkoparkkola.github.io/axterminator/",
+  "homepage": "https://github.com/MikkoParkkola/axterminator/tree/directory/plugin-ready/plugin",
   "repository": "https://github.com/MikkoParkkola/axterminator",
+  "documentationUrl": "https://github.com/MikkoParkkola/axterminator/blob/directory/plugin-ready/plugin/README.md",
+  "privacyPolicyUrl": "https://github.com/MikkoParkkola/axterminator/blob/directory/plugin-ready/plugin/PRIVACY.md",
+  "supportUrl": "https://github.com/MikkoParkkola/axterminator/issues",
   "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": ["macos", "accessibility", "gui", "automation"],
   "mcpServers": "./.mcp.json"

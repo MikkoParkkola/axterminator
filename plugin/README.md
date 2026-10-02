@@ -28,4 +28,10 @@ Ask Claude to capture the connected app. ax_screenshot returns a PNG of the whol
 Take a screenshot of TextEdit and say whether the typed sentence is visible.
 ```
 
+## What this plugin runs and where data goes
+
+Installing the plugin runs `npx -y axterminator@0.10.2 mcp serve`. npx fetches that package from the npm registry at `registry.npmjs.org`. The package then downloads the matching release archive from `https://github.com/MikkoParkkola/axterminator/releases/download/v0.10.2/`. GitHub may redirect that download to a `githubusercontent.com` host. The server is local stdio. It is macOS-only and uses the Accessibility API. Screenshots and UI text stay in the session.
+
+Once a day the launcher POSTs to `https://telemetry.revaluator.ai/v1/heartbeat`. The JSON fields are `project` (`axterminator`), `event` (`heartbeat`), `version`, `runtime`, `install_id`, `install_date`, and `machine_id`. `install_date` is the UTC day that install id was created. `machine_id` is a second random id shared by the products on this machine. It is not a name, an email, or an account. The body has no screenshot and no UI text. The published build pinned by this folder does not send that POST. The launcher and a later build share `~/.axterminator/telemetry`. The shared machine id file is `~/.revaluator/machine-id`. Set `AXTERMINATOR_NO_TELEMETRY`, `NO_TELEMETRY`, or `DO_NOT_TRACK` to a value other than `0` or `false` to stop it. The full text is [PRIVACY.md](PRIVACY.md).
+
 Support: Mikko Parkkola via GitHub issues at https://github.com/MikkoParkkola/axterminator/issues.
