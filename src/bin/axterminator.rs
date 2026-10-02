@@ -292,6 +292,9 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    // Daily heartbeat. Returns immediately. Opt out with AXTERMINATOR_NO_TELEMETRY,
+    // NO_TELEMETRY, or DO_NOT_TRACK. Skipped for dev builds, CI, and tests.
+    axterminator::telemetry::heartbeat_in_background(env!("CARGO_PKG_VERSION"));
     dispatch(cli.command)
 }
 

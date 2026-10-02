@@ -100,13 +100,20 @@ const mcp = JSON.parse(readFileSync(join(pluginDir, ".mcp.json"), "utf8"));
 const servers = Object.values(mcp.mcpServers ?? {});
 assert.ok(servers.length >= 1, ".mcp.json has no mcpServers");
 for (const server of servers) {
-  assert.equal(server.command, "npx", `MCP command must be npx, got ${server.command}`);
+  assert.equal(server.command, "node", `MCP command must be node, got ${server.command}`);
   assert.equal(SHELLS.has(server.command), false);
   assert.equal(server.url, undefined, "hosted/remote MCP url is not allowed");
-  assert.ok(Array.isArray(server.args), "MCP args must be an array");
+  assert.deepEqual(server.args, ["${CLAUDE_PLUGIN_ROOT}/bin/launch.js"]);
+  const launchPath = join(pluginDir, "bin", "launch.js");
+  const launch = readFileSync(launchPath, "utf8");
   const pin = `axterminator@${latest}`;
-  assert.ok(server.args.includes(pin), `missing ${pin} in ${JSON.stringify(server.args)}`);
-  assert.deepEqual(server.args, ["-y", pin, "mcp", "serve"]);
+  assert.ok(launch.includes(pin), `launch.js is missing ${pin}`);
+  assert.ok(launch.includes("spawn("));
+  assert.ok(launch.includes("shell: false"));
+  assert.equal(launch.includes("exec("), false);
+  assert.equal(launch.includes("execSync"), false);
+  assert.ok(launch.includes('"mcp"'));
+  assert.ok(launch.includes('"serve"'));
 }
 
 const privacy = readFileSync(join(pluginDir, "PRIVACY.md"), "utf8");
@@ -114,6 +121,16 @@ assert.match(privacy, /macOS-only/);
 assert.match(privacy, /Accessibility/);
 assert.match(privacy, /GitHub issues/);
 assert.match(privacy, /https:\/\/github\.com\/MikkoParkkola\/axterminator\/issues/);
+assert.match(privacy, /https:\/\/telemetry\.revaluator\.ai\/v1\/heartbeat/);
+assert.equal(privacy.includes("telemetry.trvl.app"), false);
+assert.match(privacy, /install_id/);
+assert.match(privacy, /city name and country code/);
+assert.match(privacy, /Coordinates and the IP are not written/);
+assert.match(privacy, /AXTERMINATOR_NO_TELEMETRY/);
+assert.match(privacy, /NO_TELEMETRY/);
+assert.match(privacy, /DO_NOT_TRACK/);
+assert.match(privacy, /The published build pinned by this folder does not\./);
+assert.match(privacy, /no UI text/);
 for (const path of walk(pluginDir)) {
   const text = readFileSync(path, "utf8");
   assert.doesNotMatch(text, email, `${path} contains an email address`);

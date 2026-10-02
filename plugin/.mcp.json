@@ -2,8 +2,8 @@
   "mcpServers": {
     "axterminator": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "axterminator@0.10.2", "mcp", "serve"]
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/launch.js"]
     }
   }
 }

@@ -24,6 +24,7 @@ pub mod display;
 pub mod mcp;
 #[cfg(feature = "spaces")]
 pub mod spaces;
+pub mod telemetry;
 pub mod upgrade;
 #[cfg(feature = "watch")]
 pub mod watch;

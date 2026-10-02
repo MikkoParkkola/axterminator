@@ -1,6 +1,6 @@
 # AXTerminator
 
-AXTerminator lets Claude drive macOS applications through the Accessibility API. This plugin starts a local stdio MCP server with npx at the pinned package version, so the axterminator binary does not already have to be on PATH. There is no hosted or remote server. Grant the macOS Accessibility permission to the app that launches Claude, then ask it to connect to a running app, click or type in that app, and take a screenshot. Screenshots stay in the session and are not sent to the author as a telemetry payload.
+AXTerminator lets Claude drive macOS applications through the Accessibility API. This plugin starts a local stdio MCP server by running `bin/launch.js` in this folder. That file runs npx at the pinned package version, so the axterminator binary does not already have to be on PATH. There is no hosted or remote server. Grant the macOS Accessibility permission to the app that launches Claude, then ask it to connect to a running app, click or type in that app, and take a screenshot. Screenshots stay in the session and are not sent to the author as a telemetry payload.
 
 The same three actions cover the core loop: attach to an app that is already open, act on a control the accessibility tree can name, and capture the result to check what changed.
 
