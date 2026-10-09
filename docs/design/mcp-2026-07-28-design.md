@@ -1,6 +1,8 @@
 # Solution design — MIK-7617
 
-Status: awaiting design review. This document chooses the approach. It contains no implementation. The ratified problem is `docs/design/mcp-2026-07-28-problem.md` at commit `d177a8ec18384aee0a3d7fe06c078865aa3c243d`. Two status sentences in that file now point here. The acceptance text is unchanged.
+Status: second statement, awaiting design review. This document chooses the approach. It contains no implementation. The ratified problem is `docs/design/mcp-2026-07-28-problem.md` at commit `d177a8ec18384aee0a3d7fe06c078865aa3c243d`. Two status sentences in that file point here. The acceptance text is unchanged.
+
+The first statement is `56e08df`. Both reviews of it were SHIP-WITH-FIXES. This statement closes four NOW findings. A modern request is recognized only by the `_meta` protocol-version key, so a legacy HTTP client that sends `MCP-Protocol-Version` stays legacy. A non-string version is `-32602`. `clientCapabilities` without that version key is `-32602`. Header values that reach `post_mcp` are checked for the spec's allowed bytes, and a failure is `-32020`.
 
 ## What this change is for
 
@@ -68,6 +70,8 @@ Nothing in this design depends on a schema file. `DiscoverResult.capabilities` i
 
 9. Serve the modern revision on a second port or a second path. Rejected. The versioning page says a dual-era server may serve both eras on one endpoint. A second route would leave the shared-handle clause of items 4 through 7 untested on the route clients already use.
 
+10. Require a second result type for every modern success. Rejected as a requirement. The wire object is the legacy result plus the named fields. A second type would duplicate the tool-list builder, or it would change the legacy shape, which item 2 does not ask for. The implementation may wrap the legacy value or add the fields after serialization. Either one meets the wire object. The choice is not a second protocol.
+
 ## Chosen approach
 
 Classify each JSON-RPC request. `initialize` stays the legacy path and always returns `2025-11-25`. A request that carries the per-request protocol version is modern. Modern `tools/list`, `tools/call`, and `server/discover` run without consulting `phase` or `client_supports_sampling`. Their JSON results gain the fields named below. HTTP status is chosen at `post_mcp` from the JSON-RPC code. Stdio has no status.
@@ -89,11 +93,13 @@ These methods are exempt. They ignore `_meta` and the MCP headers. They use toda
 
 `initialize` is exempt so item 1 stays a legacy result even if a caller also sends `_meta`. The four methods from the third open question are exempt so this design does not choose their modern behavior. `notifications/initialized` stays the notification that moves `Initializing` to `Running`.
 
-Every other method is classified from the request.
+Every other method is classified from the request. There is one classifier. `post_mcp` and `Server::handle` both use it.
 
-A request is modern when `params._meta["io.modelcontextprotocol/protocolVersion"]` is present, or, on HTTP, when the header `MCP-Protocol-Version` is present. Header names are matched case-insensitively. The version strings are exact.
+A request is modern only when `params._meta["io.modelcontextprotocol/protocolVersion"]` is present. The header `MCP-Protocol-Version` is not a modern signal. The [2025-11-25 transport page](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), read 2026-10-10, requires that header on every HTTP request after initialize. A legacy client does not send the modern `_meta` keys. Classifying on the header would reject that client.
 
-If neither signal is present, the request is legacy. Today's dispatch runs. A legacy `tools/list` still requires `phase == Running`. A legacy `server/discover` is still "Server not yet initialized" before `Running`, and method-not-found after `Running`.
+On a non-exempt method, `params._meta["io.modelcontextprotocol/clientCapabilities"]` without the protocol-version key is not legacy. The response is JSON-RPC `-32602`. On HTTP the status is 400. A request with neither modern key is legacy, including an HTTP request that carries `MCP-Protocol-Version` and no `_meta`. A `_meta` object that carries only a progress token stays legacy. That key is not one of the two modern keys.
+
+If the request is legacy, today's dispatch runs. A legacy `tools/list` still requires `phase == Running`. A legacy `server/discover` is still "Server not yet initialized" before `Running`, and method-not-found after `Running`. Header names are matched case-insensitively. The version strings are exact.
 
 `ToolCallParams` does not declare `_meta` (`src/mcp/protocol.rs` lines 333–337) and does not deny unknown fields. A modern `tools/call` can carry `_meta` beside `name` and `arguments` and still deserialize. The meta keys are read from the raw params value.
 
@@ -101,13 +107,23 @@ If neither signal is present, the request is legacy. Today's dispatch runs. A le
 
 The first failure is the response. Later checks do not run.
 
-1. HTTP only. Stdio does not run this step. `MCP-Protocol-Version` must be present, the meta version must be present, and the two values must be equal. `Mcp-Method` must be present and equal the JSON-RPC method. For `tools/call`, `Mcp-Name` must be present and equal `params.name`. A missing header, or a header that disagrees with the body, is JSON-RPC `-32020` and HTTP 400. `post_mcp` returns that error and does not call `handle`. An empty header value is present and does not equal a non-empty body value. This step does not add a separate invalid-character grammar. A value the transport page would reject for its characters, and that still equals the body, is not given its own error. Item 4's required mismatch case is the version disagreement, pinned below. The transport page also requires `Mcp-Name` for `resources/read` and `prompts/get`. Those two methods are not in the served set, so this change does not add that check for them.
+1. HTTP only, and only after the request has been classified modern. Stdio skips this step. A message with no `id` is a notification. `post_mcp` does not build a JSON-RPC error for it. `Server::handle` already returns no body for a missing id (`src/mcp/server.rs` lines 165–168).
 
-2. The meta version must be a JSON string, and that string must be `2026-07-28` or `2025-11-25`. Any other value is `UnsupportedProtocolVersionError`. The code is `-32022`. `data.supported` contains `2026-07-28` and `2025-11-25`. `data.requested` is the string the request sent when the value was a string. HTTP status is 400. This is not `-32020` and not `-32601`. A meta version of `2025-11-25` passes. `RpcError` already has a `data` field (`src/mcp/protocol.rs` lines 64–70). `RpcError::new` leaves it empty (lines 81–86). The unsupported-version error sets `data`. No new error type is required.
+`MCP-Protocol-Version` and `Mcp-Method` must be present. `tools/call` also requires `Mcp-Name`. Each raw header value that reaches `post_mcp` must be made of bytes `0x09`, `0x20`, and `0x21` through `0x7E`. Any other byte is JSON-RPC `-32020` and HTTP 400. That is the invalid-character rule on the [streamable HTTP page](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http), Value Encoding, read 2026-10-10. A value the HTTP parser rejects before `post_mcp` never becomes a JSON-RPC body.
+
+`Mcp-Name` may be the sentinel `=?base64?` … `?=`. The markers are exact and lowercase. The middle is decoded as base64 before it is compared with `params.name`. A sentinel that does not decode is `-32020`. `MCP-Protocol-Version` and `Mcp-Method` are compared as received. They are not decoded.
+
+The header values must then agree with the body. `MCP-Protocol-Version` equals the meta version string. `Mcp-Method` equals the JSON-RPC method. `Mcp-Name`, after that decode when the sentinel is present, equals `params.name`. A missing header, or a disagreement, is `-32020` and HTTP 400. `post_mcp` returns that error and does not call `handle`. An empty header value is present and does not equal a non-empty body value. Item 4's required mismatch case is the version disagreement, pinned below.
+
+The transport page also requires `Mcp-Name` for `resources/read` and `prompts/get`. Those methods are not in the served set, so this change does not add that check for them.
+
+A legacy HTTP request may carry `MCP-Protocol-Version: 2025-11-25` and no protocol-version meta key. It stays on today's dispatch. This change does not return 400 when that header is unsupported and the protocol-version meta key is absent. The 2025-11-25 page requires that 400. It is not an acceptance item.
+
+2. The meta version must be a JSON string. A value that is not a string is `-32602`, not `-32022`. On HTTP the status is 400. A string other than `2026-07-28` and `2025-11-25` is `UnsupportedProtocolVersionError`. The code is `-32022`. `data.supported` is the one list named under collateral strings. `data.requested` is that string. HTTP status is 400. This is not `-32020` and not `-32601`. The string `2025-11-25` passes. `RpcError` already has a `data` field (`src/mcp/protocol.rs` lines 64–70). `RpcError::new` leaves it empty (lines 81–86). The unsupported-version error sets `data`. No new error type is required.
 
 3. The key `io.modelcontextprotocol/clientCapabilities` must be present on `_meta`. If the key is absent, the code is `-32602` and, on HTTP, the status is 400. That is not `-32020`. A present value of any JSON type, including an empty object and null, is not this failure. This change does not validate the shape of that value. Shape validation is part of the deferred schema comparison.
 
-4. Dispatch. `tools/list`, `tools/call`, and `server/discover` run even when `phase` is not `Running`. They do not read `client_supports_sampling`. Any other method that today's match already implements (`resources/list`, `resources/templates/list`, `resources/read`, `prompts/list`, `prompts/get`) falls through to today's phase-gated arm. A method today's match does not implement returns `-32601`. On HTTP that status is 404. Before `Running`, today's code returns "Server not yet initialized" for that unknown method (`src/mcp/server.rs` lines 218–223). A modern unknown method returns `-32601` instead. The exempt methods never reach this step.
+4. Dispatch. `tools/list`, `tools/call`, and `server/discover` run even when `phase` is not `Running`. They do not read `client_supports_sampling`. Modern `tools/call` uses the same tool dispatch the legacy call uses, including the security gates on that path. The sampling read stays inside the `ax_find_visual` branch. Any other method that today's match already implements (`resources/list`, `resources/templates/list`, `resources/read`, `prompts/list`, `prompts/get`) falls through to today's phase-gated arm. A method today's match does not implement returns `-32601`. On HTTP that status is 404. Before `Running`, today's code returns "Server not yet initialized" for that unknown method (`src/mcp/server.rs` lines 218–223). A modern unknown method returns `-32601` instead. The exempt methods never reach this step.
 
 ## Results
 
@@ -124,13 +140,15 @@ Legacy `tools/list` and legacy `tools/call` keep today's JSON shape. Item 2 does
 
 `server/discover` is not added to the legacy path. `instructions` on that result is optional in the schema. The acceptance does not require it. The implementation may copy the instructions string `initialize` already returns. Item 5 does not assert it.
 
+The capability object on that result is the object `initialize` already returns. It advertises resources, prompts, and tasks. The modern path does not serve those methods. Trimming the object would decide the third open question, so the object stays. Whether that advertisement is accurate waits on that question.
+
 The proof tool for item 7 is `ax_list_apps`. `handle_list_apps` returns `ToolCallResult::ok` of the running-app list (`src/mcp/tools_gui.rs` lines 592–595). It does not read `client_supports_sampling`. The only reader of that flag on the tool path is `ax_find_visual` (`src/mcp/server_handlers.rs` lines 553–559). `ax_list_apps` is already listed and the existing suite already calls it. The call does not ask the client. A live GUI target is not required.
 
 `handle_tools_call` can write `notifications/resources/updated` when the legacy subscription set is non-empty (`src/mcp/server_handlers.rs` lines 570–576 and 594). That write is outside the JSON-RPC result. Items 4 and 7 assert the result. This design does not clear the subscription set. The third open question owns that state. The proof call is `ax_list_apps`, whose result JSON does not change when the set is non-empty.
 
 ## HTTP status
 
-`post_mcp` today returns the JSON body with axum's default status, which is 200 (`src/mcp/transport.rs` lines 318–320). This change maps status only for a request that was classified modern:
+`post_mcp` today returns the JSON body with axum's default status, which is 200 (`src/mcp/transport.rs` lines 318–320). This change maps status for a modern request, and for the partial-meta `-32602`:
 
 | code | HTTP status |
 |---|---|
@@ -139,7 +157,7 @@ The proof tool for item 7 is `ax_list_apps`. `handle_list_apps` returns `ToolCal
 | `-32602` | 400 |
 | `-32601` | 404 |
 
-A legacy request keeps today's status for every JSON-RPC outcome, including a legacy `-32602` and a legacy `-32601`. Auth is unchanged. A failed `check_auth` still returns before classification.
+`post_mcp` applies that table to errors from the modern checks and to the partial-meta `-32602`. A legacy handler's error keeps today's status, including a legacy `-32602` and a legacy `-32601`. Auth is unchanged. A failed `check_auth` still returns before classification.
 
 ## Shared handle
 
@@ -158,24 +176,26 @@ When item 1 changes the advertised string, the same change sets these three to `
 
 The client strings sent by `src/mcp/server_tests.rs` stay `2025-11-05`. Those tests send a client string. They do not assert the result string. The fallback accepts that client string and still answers `2025-11-25`.
 
+The initialize result, the system-status field, design line 4, and the transport assertion are one value, `2025-11-25`. `supportedVersions` and `data.supported` are one list: `2026-07-28`, then `2025-11-25`. The implementation keeps that list in one place.
+
 Section 3.1 is not rewritten. Lines 3117 and 3119 are not edited. `src/mcp/security.rs` is not edited. The module comment at `src/mcp/protocol.rs` line 1 says the types are MCP 2025-11-25, wire-compatible with 2025-11-05. That comment is updated so it does not claim the types are only that revision. The comment is not a wire result.
 
 ## Tests
 
 The test plan is the next document. This section is the constraint that plan has to meet. It is not the plan.
 
-The existing CI job `test` stays the only protocol job (`.github/workflows/ci.yml`). New tests live in that suite. They do not fetch a schema and they do not skip with `live_`. They call `Server::handle`, which is the function `run_stdio` calls, and they call `post_mcp`. They do not require a spawned process. They use types and helpers that exist on `2ba9d37`, so they compile there. On that parent the named assertion fails. On the implementation revision it passes.
+The existing CI job `test` stays the only protocol job (`.github/workflows/ci.yml`). New tests live in that suite. They do not fetch a schema and they do not skip with `live_`. They call `Server::handle`, which is the function `run_stdio` calls, and they call `post_mcp`. They do not require a spawned process. They use types and helpers that exist on `2ba9d37`, so they compile there. Items 1, 4, 5, 6, and 7 fail on that parent on the named assertion. Item 2 holds there. On the implementation revision all seven hold.
 
 Pinned requests, so each failure has one cause:
 
 - Item 1. Two initializes, client `protocolVersion` `2026-07-28` and `2025-11-25`. Result `protocolVersion` is `2025-11-25`. Stdio handle and HTTP.
-- Item 2. After each of those initializes, `notifications/initialized`, then `tools/list` with no modern signal. JSON-RPC success. `resultType` is not required.
-- Item 4 success. Meta version `2026-07-28`, `clientCapabilities` present, no prior initialize. HTTP also sends `MCP-Protocol-Version: 2026-07-28` and `Mcp-Method: tools/list`. Result has `resultType`, `ttlMs`, and `cacheScope`.
-- Item 4 omission. Same versions, both sides `2026-07-28`, `Mcp-Method: tools/list`, `clientCapabilities` key absent. Not null. Code `-32602`, HTTP 400.
-- Item 4 mismatch. Meta `2026-07-28`, header `2025-11-25`, `Mcp-Method: tools/list`, `clientCapabilities` present. Both versions are supported, so the failure is the disagreement. Code `-32020`, HTTP 400.
-- Item 5. The same two meta fields, HTTP header plus `Mcp-Method: server/discover`. Result has `resultType`, `ttlMs`, `cacheScope`, and `supportedVersions` containing both revisions.
-- Item 6. `tools/list`, both meta fields, version `1900-01-01` on both the meta value and `MCP-Protocol-Version`, `Mcp-Method: tools/list`. Code `-32022`, `data.supported` contains both revisions, `data.requested` is `1900-01-01`. HTTP 400.
-- Item 7. `tools/call` of `ax_list_apps`, both meta fields, HTTP header, `Mcp-Method: tools/call`, `Mcp-Name: ax_list_apps`. JSON-RPC success, `resultType` present, body is not "Server not yet initialized".
+- Item 2. After each of those initializes, `notifications/initialized`, then `tools/list` with no protocol-version meta key. On HTTP the request also sends `MCP-Protocol-Version: 2025-11-25`. JSON-RPC success. The code is not `-32020`. `resultType` is not required. This case holds on `2ba9d37`, because that parent ignores the header. It fails if the header alone selects the modern path.
+- Item 4 success. Meta version `2026-07-28`, `clientCapabilities` present, no prior initialize. Stdio sends no headers. HTTP also sends `MCP-Protocol-Version: 2026-07-28` and `Mcp-Method: tools/list`. Result has `resultType`, `ttlMs`, and `cacheScope`.
+- Item 4 omission. Same versions, both sides `2026-07-28`, `Mcp-Method: tools/list`, `clientCapabilities` key absent. Not null. Code `-32602`, HTTP 400. Stdio is the same omission with no headers.
+- Item 4 mismatch. Meta `2026-07-28`, header `2025-11-25`, `Mcp-Method: tools/list`, `clientCapabilities` present. Both versions are supported, so the failure is the disagreement. Code `-32020`, HTTP 400. Stdio has no header, so this case is HTTP only.
+- Item 5. Stdio: the two meta fields and no headers. HTTP: those fields, `MCP-Protocol-Version`, and `Mcp-Method: server/discover`. Result has `resultType`, `ttlMs`, `cacheScope`, and `supportedVersions` containing both revisions.
+- Item 6. `tools/list`, both meta fields, version `1900-01-01` on the meta value. HTTP also sets `MCP-Protocol-Version` to `1900-01-01` and `Mcp-Method: tools/list`. Stdio sends no headers. Code `-32022`, `data.supported` contains both revisions, `data.requested` is `1900-01-01`. HTTP 400.
+- Item 7. Stdio: `tools/call` of `ax_list_apps` with the two meta fields and no headers. HTTP: those fields, `MCP-Protocol-Version`, `Mcp-Method: tools/call`, and `Mcp-Name: ax_list_apps`. JSON-RPC success, `resultType` present, body is not "Server not yet initialized".
 - Shared handle. For items 4, 5, 6, and 7, repeat the HTTP case on an `AppState` that has already completed `initialize` and `notifications/initialized`, with the earlier client declaring sampling. The modern outcome still holds.
 
 The full schema-file comparison is not one of these tests.
@@ -183,7 +203,7 @@ The full schema-file comparison is not one of these tests.
 ## How the acceptance is met
 
 1. `MIK-7617.MCP.1` Exempt `initialize`. `build_initialize_result` returns `2025-11-25` for every client string that deserializes, including the two named strings and `2025-11-05`. Stdio and HTTP both use that result. No `resultType` is required.
-2. `MIK-7617.MCP.2` A `tools/list` with no modern signal, after `notifications/initialized`, still uses today's handler. The legacy result stays a JSON-RPC success without a required `resultType`.
+2. `MIK-7617.MCP.2` A `tools/list` with no protocol-version meta key, after `notifications/initialized`, still uses today's handler. On HTTP that request may carry `MCP-Protocol-Version: 2025-11-25`. The legacy result stays a JSON-RPC success without a required `resultType`. The code is not `-32020`.
 3. `MIK-7617.MCP.3` The tests in the previous section run in the existing `test` job, compile on `2ba9d37`, fail there on the named assertion, and pass on the implementation. No schema file.
 4. `MIK-7617.MCP.4` A modern `tools/list` skips the phase gate and adds `resultType`, `ttlMs`, and `cacheScope`. The omission case fails check 3. The mismatch case fails check 1. The shared-handle case uses the same handler, which does not read the earlier initialize.
 5. `MIK-7617.MCP.5` A modern `server/discover` skips the phase gate and returns the fields in the results table, including both versions in `supportedVersions`.
