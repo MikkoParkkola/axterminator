@@ -1,6 +1,6 @@
 # Problem definition — MIK-7617
 
-Status: awaiting ratification. This document chooses no solution, no parser, and no library.
+Status: both reviews approved this statement on 2026-10-09. GPT run `ax7617-problem6-d177a8e`. Claude ledger `2026-10-09T21:59:39Z`, model `claude-opus-5`. This document chooses no solution, no parser, and no library. Solution design has not started.
 
 ## Problem
 
@@ -127,4 +127,4 @@ Named and set aside. Not selected.
 
 ## Where the work sits
 
-The statement lives at `docs/design/mcp-2026-07-28-problem.md` on `feat/mcp-2026-07-28`, cut from `origin/main` `2ba9d37`. Status stays "awaiting ratification" until both reviews record an approval of this statement. The solution document stays empty until that approval is recorded.
+The statement lives at `docs/design/mcp-2026-07-28-problem.md` on `feat/mcp-2026-07-28`, cut from `origin/main` `2ba9d37`. Both reviews approved commit `d177a8ec18384aee0a3d7fe06c078865aa3c243d` on 2026-10-09. The solution document stays empty. Solution design has not started.
