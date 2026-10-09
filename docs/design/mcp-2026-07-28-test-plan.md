@@ -1,6 +1,6 @@
 # Test plan — MIK-7617
 
-Status: second statement, awaiting test-plan review. The first statement is `d53afdf`. Both reviews of it were recorded with process status ok. This statement closes those NOW findings. It does not reopen the approved design. This document specifies tests. It contains no implementation. The approved design is `docs/design/mcp-2026-07-28-design.md` at `cd46747af9b37b089dd6cbaf15e0f91b1f3ed73d`. `change_id` `b150926a565243c93cc3aa52a9657f54f023fca694002298cce42d7f29ba2d78` is that file's sha256 and is not recomputed. The ratified problem is `docs/design/mcp-2026-07-28-problem.md` at `d177a8ec18384aee0a3d7fe06c078865aa3c243d`. Acceptance text is unchanged.
+Status: third statement, awaiting test-plan review. The second statement is `e310943`. Both reviews of it were recorded with process status ok and required repairs. This statement closes those NOW findings inside the plan. It does not edit the approved design. This document specifies tests. It contains no implementation. The approved design is `docs/design/mcp-2026-07-28-design.md` at `cd46747af9b37b089dd6cbaf15e0f91b1f3ed73d`. `change_id` `b150926a565243c93cc3aa52a9657f54f023fca694002298cce42d7f29ba2d78` is that file's sha256 and is not recomputed. The ratified problem is `docs/design/mcp-2026-07-28-problem.md` at `d177a8ec18384aee0a3d7fe06c078865aa3c243d`. Acceptance text is unchanged.
 
 ## What this plan is for
 
@@ -9,7 +9,7 @@ Prove each acceptance item in the existing CI job `test`, on the assertions this
 ## What is out
 
 - A schema file, a parser, and a fetch of the published schema. Question (e) stays deferred. No case compares a file.
-- Production behavior. The failing-test commit adds tests, changes one existing assertion literal, and adds a `cfg(test)` app-list stub that `handle_list_apps` consults. When the stub is unset, the call is `list_running_apps`, which is today's behavior.
+- Production behavior. The failing-test commit adds tests, changes one existing assertion literal, and adds a `cfg(test)` app-list stub that `handle_list_apps` consults. When the stub is unset, the call is `list_running_apps`, which is today's behavior. The red baseline for the four cases that set the stub is that commit, not a checkout of `2ba9d37` by itself. `2ba9d37` does not contain the new tests. Those tests use types that exist there. They fail on the assertion this plan names. The stub seam is the only production edit those cases need, and an unset stub does not change behavior.
 - A new CI job, a spawned process, and any test whose name contains `live_`.
 - Publishing, tagging, and the plugin and directory tickets.
 - Rewriting design section 3.1, `MCP_SERVER_DESIGN.md` lines 3117 and 3119, or `src/mcp/security.rs`.
@@ -17,7 +17,7 @@ Prove each acceptance item in the existing CI job `test`, on the assertions this
 
 ## Levels and types
 
-Every row is an integration test. It drives `Server::handle` (the function `run_stdio` calls) or `post_mcp`. It is not a pure unit test. Types are functional (a success shape), negative (a pinned error), or regression (a rule that is not its own acceptance item). The suite runs in `.github/workflows/ci.yml` job `test`: `cargo test --all-features -- --skip live_`. No test is feature-gated. `ax_list_apps` is in the default tool set.
+Every row is an integration test. It drives `Server::handle` (the function `run_stdio` calls) or `post_mcp`. It is not a pure unit test. Types are functional (a success shape), negative (a pinned error), or regression (a rule that is not its own acceptance item). The suite runs in `.github/workflows/ci.yml` job `test`: `cargo test --all-features -- --skip live_`. HTTP rows live in the `http-transport` test module. That job's `--all-features` enables the module. A run without the feature does not compile those rows. `ax_list_apps` is in the default tool set.
 
 Stdio cases live in `src/mcp/server_tests.rs` and call `Server::handle`. HTTP cases live in the `transport.rs` test module and call `post_mcp`. The HTTP helper is test-only: `post_json_with_headers(state, headers, body) -> (StatusCode, Vec<u8>, Value)`. Empty body bytes stay empty. `Value` is JSON null only when those bytes are empty. A body of the four characters `null` is not empty. The helper is the existing `post_json` with a `HeaderMap` argument and the raw bytes kept. It uses localhost-only auth, peer `127.0.0.1`, and no `Authorization` header. No new production type is added.
 
@@ -26,8 +26,8 @@ Stdio cases live in `src/mcp/server_tests.rs` and call `Server::handle`. HTTP ca
 These are readings of the approved design. They are not a new design statement. The design text stays as the reviewers approved it. An implementation that picks the other reading fails the case named here.
 
 1. The meta version's JSON type is checked before the header is compared to it. A non-string is `-32602` on stdio and on HTTP, not `-32020`. Case R1.
-2. The allowed-byte check applies only to `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name`. The approved design sentence names every header that reaches `post_mcp`. This plan does not edit that sentence. R3 is the lock for the narrower reading: the header and the meta version are the same string, and that string contains a forbidden byte, so agreement passes and only the byte rule returns `-32020`. R4 expects success when the bad byte is on a different header. An implementation that checks every header fails R4.
-3. For a request classified modern, and for the partial-meta `-32602`, every JSON-RPC error whose code is in the design table uses that table. `-32020`, `-32022`, and `-32602` are HTTP 400. `-32601` is HTTP 404. A code that is not in the table, including the phase-gate `-32600`, stays HTTP 200. A legacy request stays HTTP 200. Case R7 locks the handler `-32602`. Case N4 locks `-32600` staying 200.
+2. The allowed-byte check applies to every header value that reaches `post_mcp`. That is the approved design sentence. This plan does not narrow it. A byte outside `0x09`, `0x20`, and `0x21`–`0x7E` on any such header is `-32020`. R4 is that case. R3 still locks the version header: the header and the meta version are the same forbidden string, so agreement passes and only the byte rule returns `-32020` rather than `-32022`.
+3. The status table applies to errors from the modern checks and to the partial-meta `-32602`. That is the sentence after the table in the approved design. The table's heading says the mapping is for a modern request. This plan follows the sentence after the table and does not edit the design. `-32020`, `-32022`, and that `-32602` are HTTP 400. `-32601` from a modern unknown method is HTTP 404. A handler error on a modern request keeps HTTP 200. Case R7 locks that. A legacy request stays HTTP 200. Cases N7 and N8 lock that. A code that is not in the table, including the phase-gate `-32600`, stays HTTP 200. Case N4 locks that.
 4. A message with no `id` is still passed to `handle`. HTTP responds `204` with an empty body. No JSON-RPC error body is built. Case N1.
 5. The `Mcp-Name` sentinel is decoded with the `base64` crate already in `Cargo.toml`. The suite cannot tell that crate from another decoder that accepts and rejects the same inputs. That choice is review-carried. See surviving mutants.
 
@@ -98,6 +98,18 @@ Parent behavior today: production code on this branch is still the parent. `_met
 | design check 4 | modern unknown method on stdio is `-32601` | S18 | integration | negative | red: cold parent is `-32600` |
 | status table | a legacy handler error stays HTTP 200 | N7, N8 | integration | regression | green |
 | exempt methods | modern meta and no MCP headers stay on today's handlers | N9, N10, N11, N12, N13 | integration | regression | green |
+| design check 1 | forbidden bytes on an agreeing version are `-32020` | R3 | integration | negative | red: cold parent is `-32600` at 200 |
+| design check 1 | a forbidden byte on any header that reaches `post_mcp` is `-32020` | R4 | integration | negative | red: cold parent is `-32600` at 200 |
+| design check 1 | `MCP-Protocol-Version` absent | R12 | integration | negative | red: cold parent is `-32600` at 200 |
+| design check 1 | plain `Mcp-Name` disagrees with `params.name` | R5d | integration | negative | red: cold parent is `-32600` at 200 |
+| design check 2 | a non-string meta version is `-32602` on both transports | R1 | integration | negative | red: cold parent is `-32600` |
+| design check 2 | capabilities key without the protocol-version key is `-32602` | R2 | integration | negative | red: primed parent succeeds |
+| design check 3 | a present null `clientCapabilities` is not an omission | R8 | integration | functional | red: cold parent is `-32600` |
+| design check 1 | `Mcp-Name` sentinel decode | R5a, R5b, R5c | integration | functional | red: R5a like H14; R5b and R5c are not `-32020` |
+| status table | a handler error on a modern request stays HTTP 200 | R7 | integration | regression | green |
+| notification | a message with no `id` gets 204 and an empty body | N1, N2 | integration | regression | green |
+| phase gate | an implemented method that is not in the served set keeps today's result | N4, N5 | integration | regression | green |
+| progress token | `_meta` with only `progressToken` stays legacy | N14 | integration | regression | green |
 | collateral | system-status `protocol_version` | C1 | integration | functional | red: text contains `2025-11-05` |
 | collateral | design doc line 4 | C2 | integration | functional | red: line says `2025-11-05` |
 | — | no schema file | none | — | — | question (e) is deferred. Named fields are the proof |
@@ -156,7 +168,7 @@ S6, H6. Cold. Meta version `2026-07-28`, `clientCapabilities` `{}`. Method `tool
 
 Success assertions, both: `error` absent. `resultType` `complete`. `ttlMs` equals `0` and is a number. `cacheScope` `public`. `tools` is an array and contains an element whose `name` is `ax_list_apps`. Result key set is exactly `tools`, `resultType`, `ttlMs`, `cacheScope`. H6 status 200.
 
-H7. One test builds a cold `AppState` and a primed `AppState`. It asserts the primed `resultType` equality first. That is the parent failure: the primed parent succeeds and omits `resultType`. Only after that assertion does it compare `result.tools` with the cold result. The comparison is not the parent failure.
+H7. One test builds a cold `AppState` and a primed `AppState`. Both responses have status 200. It asserts the primed `resultType` equality first. That is the parent failure: the primed parent succeeds and omits `resultType`. Only after that assertion does it compare `result.tools` with the cold result. The comparison is not the parent failure.
 
 S8. Cold stdio. Meta version `2026-07-28`. The `clientCapabilities` key is absent, not null. `error.code` `-32602`, not `-32020`. Parent returns `-32600`. That is the named assertion failing. After implementation, deleting the capabilities check makes this a modern success, because `tools/list` no longer consults `phase`. A check that runs only after the phase gate would leave this case at `-32600`.
 
@@ -170,7 +182,7 @@ S10, H10. Cold. Method `server/discover`. Meta version `2026-07-28`, `clientCapa
 
 Assertions: `error` absent. `resultType` `complete`. `ttlMs` equals `0`. `cacheScope` `public`. `supportedVersions` equals the version list (length 2, identity and order). `capabilities` is an object and contains the keys `tools`, `logging`, `resources`, `prompts`, `elicitation`, `tasks`, and `sampling`. `experimental` may be present. The key set of `capabilities` is not pinned. `instructions` may be present. It is not required, and it is not forbidden. The discover object is not an exact key set. H10 status 200.
 
-H11. Primed, then the H10 request. Same assertions. `supportedVersions` equals H10's list.
+H11. One test sends H10's request on a cold `AppState`, then the same request on a primed `AppState`. Both responses have status 200. It asserts the primed `resultType` equality first. That is the parent failure: the primed parent returns `-32601`. It then applies the other H10 assertions to both results. The primed result then deep-equals the cold result, including `capabilities` and `instructions` when that key is present. A field that changes because of the earlier initialize fails that equality. The deep-equal is not the parent failure.
 
 ### Item 6
 
@@ -182,17 +194,17 @@ H13. Primed, then the H12 request. Code remains `-32022`. Status 400.
 
 ### Item 7
 
-`handle_list_apps` calls `list_running_apps` unless a `cfg(test)` stub is set. The stub's unset state is today's call. S14 and H14 set it to the JSON array `["FixedApp"]` and clear it afterwards. Existing tests leave it unset.
+`handle_list_apps` calls `list_running_apps` unless a `cfg(test)` stub is set. The stub is `thread_local` storage of `RefCell<Option<Vec<String>>>`. `None` is today's call. A test that sets it installs a `Drop` guard that writes `None` when the test returns, including on panic. The test harness may reuse a thread, so the guard is required. A test on another thread does not see the value. S14, H14, H15, and R5a set the value to `["FixedApp"]`. Existing tests leave it unset. The red baseline for these four cases is the failing-test commit described under What is out.
 
 S14, H14. Cold. Method `tools/call`. Name `ax_list_apps`. Arguments `{}`. Meta version `2026-07-28`, `clientCapabilities` `{}`. H14 headers: `mcp-protocol-version: 2026-07-28`, `mcp-method: tools/call`, `mcp-name: ax_list_apps` (plain, not the sentinel).
 
 Assertions: `error` absent. `resultType` `complete`. Result key set is exactly `content`, `isError`, `resultType`. No `ttlMs` key. No `cacheScope` key. `isError` is false. `content` is an array of length 1. `content[0].type` equals `text`. `content[0].text` equals the literal `{"apps":["FixedApp"]}`. The response text does not contain `Server not yet initialized`. H14 status 200.
 
-H15. One test sets the same stub, calls H14's request on a cold `AppState`, then on a primed `AppState`. It asserts the primed `resultType` first. That is the parent failure. It then asserts both `content[0].text` values equal `{"apps":["FixedApp"]}`. A handler that drops an app when sampling is set fails the second equality.
+H15. One test sets the same stub, calls H14's request on a cold `AppState`, then on a primed `AppState`. Both responses have status 200. It asserts the primed `resultType` first. That is the parent failure. It then asserts both `content[0].text` values equal `{"apps":["FixedApp"]}`. A handler that drops an app when sampling is set fails the second equality.
 
 ### Design checks that acceptance does not number
 
-S16, H16. Cold modern `tools/list` whose meta version is `2025-11-25`, `clientCapabilities` `{}`. H16 header `mcp-protocol-version: 2025-11-25` agrees. Same success assertions as S6. This is the case that fails if the allow-list drops `2025-11-25` while still advertising it from discover. Question (d)'s fallback: served under the 2026 result rules, not item 6's error.
+S16, H16. Cold modern `tools/list` whose meta version is `2025-11-25`, `clientCapabilities` `{}`. H16 header `mcp-protocol-version: 2025-11-25` agrees. H16 status is 200. Same success assertions as S6. This is the case that fails if the allow-list drops `2025-11-25` while still advertising it from discover. Question (d)'s fallback: served under the 2026 result rules, not item 6's error.
 
 S17. A separate test. It sends S16's modern request and does not assert that request's success. It then sends `tools/list` with params omitted and asserts `error.code` equals `-32600` and the message contains `Server not yet initialized`. Parent is green: both calls already return `-32600`. A modern call that moves `phase` to `Running` makes the follow-up succeed, and this test fails.
 
@@ -204,13 +216,15 @@ R2. Primed `tools/list`. `clientCapabilities` is `{}`. The protocol-version key 
 
 R3. Cold HTTP `tools/list`. `clientCapabilities` `{}`. `mcp-method: tools/list`. The meta version and `mcp-protocol-version` are the same string: `2026-07-28` plus U+0080. The header bytes are the ASCII of `2026-07-28` followed by `0xC2 0x80`. `HeaderValue::from_bytes` accepts those bytes. The two sides agree, so a missing byte check does not return `-32020` from disagreement. The string is not an allowed version, so a missing byte check falls through to `-32022`. This case asserts `-32020`, not `-32022`, status 400. Parent is `-32600` at 200.
 
-R4. Cold HTTP `tools/list`. Meta and the three MCP headers are the H6 success fixture. An additional header `x-unrelated` has value byte `0x80`. Expect the H6 success assertions. Parent fails this the same way it fails H6: no `resultType`. That parent failure does not prove the byte check is narrow. The narrow check is proved when R4 passes and R3 fails. Deleting the narrowing, so every header is checked, turns R4 into `-32020`.
+R4. Cold HTTP `tools/list`. Meta and the three MCP headers are the H6 success fixture. An additional header `x-unrelated` has value byte `0x80`. Code `-32020`. Status 400. Parent is `-32600` at 200. That code equality is the named failure. A check limited to the three MCP headers returns the H6 success and fails this case. R3 still separates a forbidden byte from an unsupported version.
 
-R5a. Cold HTTP `tools/call` of `ax_list_apps` with the H14 body. `mcp-name` is `=?base64?YXhfbGlzdF9hcHBz?=`. Same success assertions as H14. Parent fails like H14.
+R5a. Cold HTTP `tools/call` of `ax_list_apps` with the H14 body, the H14 stub value, and the H14 `Drop` guard. `mcp-name` is `=?base64?YXhfbGlzdF9hcHBz?=`. Same success assertions as H14, including the literal `{"apps":["FixedApp"]}`. Parent fails like H14: no `resultType`.
 
 R5b. Cold HTTP. Same, but `mcp-name` is `=?base64?b3RoZXI=?=`. Code `-32020`, status 400. The only defect is the decoded name.
 
 R5c. Cold HTTP. Same, but `mcp-name` is `=?base64?*?=`. Code `-32020`, status 400. The only defect is a sentinel that does not decode.
+
+R5d. Cold HTTP. The H14 body. `mcp-name` is the plain value `other`. Code `-32020`, status 400. The only defect is the undecoded name. No stub is required, because the case expects an error. Parent is `-32600` at 200.
 
 R6. Cold HTTP. Method `no/such`. Meta version `2026-07-28`, `clientCapabilities` `{}`. Headers agree and `mcp-method: no/such`. Code `-32601`, status 404. Parent cold is `-32600` at 200. A primed twin asserts the same code and status 404. Parent primed already returns `-32601` at 200, so the primed twin's red assertion is the status.
 
@@ -218,11 +232,13 @@ S18. Cold stdio. Method `no/such`. Meta version `2026-07-28`, `clientCapabilitie
 
 R9. Cold HTTP. The H6 body and `mcp-protocol-version: 2026-07-28`. The `mcp-method` header is absent. Code `-32020`, status 400. Parent is `-32600` at 200.
 
+R12. Cold HTTP. The H6 body and `mcp-method: tools/list`. The `mcp-protocol-version` header is absent. Code `-32020`, status 400. Parent is `-32600` at 200.
+
 R10. Cold HTTP. The H14 body, `mcp-protocol-version: 2026-07-28`, and `mcp-method: tools/call`. The `mcp-name` header is absent. Code `-32020`, status 400. Parent is `-32600` at 200.
 
 R11. Cold HTTP. The H6 body and `mcp-protocol-version: 2026-07-28`. `mcp-method` is `ping`. Code `-32020`, not `-32602`, status 400. The only defect is the method disagreement. Parent is `-32600` at 200.
 
-R7. Primed HTTP. Method `resources/read`. Meta version `2026-07-28`, `clientCapabilities` `{}`. Headers agree and `mcp-method: resources/read`. Params have `_meta` and no `uri`. `error.code` equals `-32602`. Status 400. Parent already returns `-32602` at 200, because the handler rejects a missing `uri`. The parent-red assertion is the status. This is the handler error the status reading covers. Check 1 does not require `mcp-name` on this method.
+R7. Primed HTTP. Method `resources/read`. Meta version `2026-07-28`, `clientCapabilities` `{}`. Headers agree and `mcp-method: resources/read`. Params have `_meta` and no `uri`. `error.code` equals `-32602`. Status 200, not 400. Parent already returns `-32602` at 200, because the handler rejects a missing `uri`. This row is green on that parent. It fails if the status table is applied to a handler error. Check 1 does not require `mcp-name` on this method. The approved design applies the table to errors from the modern checks and to the partial-meta `-32602`. This case follows that sentence.
 
 R8. Cold HTTP `tools/list`. Meta version `2026-07-28`. `clientCapabilities` is JSON null, which is present. Headers agree. Same success assertions as H6. Parent fails like H6. Rejecting null as an omission returns `-32602` and fails this case.
 
@@ -276,7 +292,7 @@ A3. `supportedVersions` and `data.supported` must equal the two-element list, no
 
 A4. The length-2 claim names both strings and their order.
 
-A5. Item 2's header is what a "header means modern" rule would trip. S5b is the same rule after a `2026-07-28` initialize. R2 is primed so the phase gate is not the decider. R1's HTTP header is a supported version so only the non-string type makes `-32602` win over `-32020`. H9 uses two supported versions so the disagreement is the decider. R3's header and meta version are the same forbidden string, so deleting the byte check yields `-32022`. R9 and R10 omit one required header and nothing else. N1's missing capabilities key is the defect a notification check would refuse. N3 and N9 through N13 omit MCP headers so exemption is the decider. N7 and N8 are legacy errors whose status stays 200. S17's follow-up is the decider for "modern does not open a session."
+A5. Item 2's header is what a "header means modern" rule would trip. S5b is the same rule after a `2026-07-28` initialize. R2 is primed so the phase gate is not the decider. R1's HTTP header is a supported version so only the non-string type makes `-32602` win over `-32020`. H9 uses two supported versions so the disagreement is the decider. R3's header and meta version are the same forbidden string, so deleting the byte check yields `-32022`. R9, R10, and R12 each omit one required header and nothing else. R4's unrelated byte is the decider for checking every header. R5a sets the stub its literal requires. H11's deep-equal is the decider for discover independence. N1's missing capabilities key is the defect a notification check would refuse. N3 and N9 through N13 omit MCP headers so exemption is the decider. N7 and N8 are legacy errors whose status stays 200. S17's follow-up is the decider for "modern does not open a session."
 
 A6. No assertion uses the current time. The app list in item 7 is the stub literal, not the live process list.
 
@@ -286,7 +302,7 @@ A7. S16 is the case that changes outcome when `2025-11-25` is removed from the a
 
 A8. Expected versions, codes, `complete`, `public`, and `0` are literals in the test. They are not read back from the server's own constant.
 
-A9. Each fixture has one refused defect. R4's parent failure is the missing modern result, and the plan says so. H13's parent failure is a success where `-32022` is required. R7's parent failure is status 200 where 400 is required, while the code is already `-32602`.
+A9. Each red fixture has one refused defect. R4's parent failure is `-32600` where `-32020` is required. H13's parent failure is a success where `-32022` is required. R7 is green on the parent. It fails when the status becomes 400.
 
 ## Surviving mutants
 
@@ -308,8 +324,10 @@ The app list is closed. H15 compares both calls to the literal `{"apps":["FixedA
 | header agreement | H9 | a skipped check returns a modern success, not `-32020` |
 | unsupported-version error | S12 | a skipped check returns a modern success, not `-32022` |
 | type check before header compare | R1 HTTP | header mismatch returns `-32020` |
-| byte check limited to three headers | R4 | an all-header check returns `-32020` |
-| status table on handler errors | R7 | status stays 200 |
+| byte check on every header that reaches `post_mcp` | R4 | a three-header check returns success |
+| handler error stays HTTP 200 | R7 | applying the table returns 400 |
+| discover result ignores the earlier initialize | H11 | the deep-equal fails |
+| app-list stub is per thread and cleared on drop | H15 | another test observes `["FixedApp"]` |
 | phase gate kept for `resources/list` | N4 | a `-32601` mapping fails the `-32600` assertion |
 | `initialize` exempt | S4 | modern checks on initialize reject it or add `resultType` |
 | a required MCP header | R9 | a skipped check returns a modern success, not `-32020` |
