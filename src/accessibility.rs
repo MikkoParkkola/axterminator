@@ -12,10 +12,13 @@
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::boolean::{CFBoolean, CFBooleanRef};
+use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
 use core_foundation::number::{CFNumber, CFNumberRef};
 use core_foundation::string::{CFString, CFStringRef};
 use std::ffi::c_void;
 use std::ptr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{AXError, AXResult};
 
@@ -24,6 +27,8 @@ use crate::error::{AXError, AXResult};
 #[allow(dead_code)]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
+    fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
+    static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementCopyAttributeValue(
@@ -105,10 +110,106 @@ pub const AX_ERROR_NO_VALUE: i32 = -25211;
 pub const AX_ERROR_PARAMETERIZED_ATTRIBUTE_UNSUPPORTED: i32 = -25212;
 pub const AX_ERROR_NOT_ENOUGH_PRECISION: i32 = -25213;
 
-/// Check if accessibility permissions are enabled
+/// Check if accessibility permissions are enabled.
+///
+/// This does not ask macOS to show a prompt. Status reads stay silent.
 #[must_use]
 pub fn check_accessibility_enabled() -> bool {
     unsafe { AXIsProcessTrusted() }
+}
+
+/// How far apart two Accessibility prompts may be.
+///
+/// A client that retries `tools/call` must not open System Settings on every call.
+const PROMPT_INTERVAL_MS: u64 = 30_000;
+
+static LAST_PROMPT_MS: AtomicU64 = AtomicU64::new(0);
+
+/// System Settings deep link for the Accessibility privacy pane.
+const ACCESSIBILITY_SETTINGS_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+
+/// What a permission request did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptOutcome {
+    /// This process is already trusted.
+    Trusted,
+    /// macOS was asked to show the prompt, and the pane was opened.
+    Requested,
+    /// A request already happened inside the interval. The switch is still off.
+    AlreadyRequested,
+}
+
+/// Text returned when this process is not trusted.
+pub const ACCESSIBILITY_PROMPT_SUGGESTION: &str = "\
+macOS was asked to show the Accessibility prompt for this process. \
+Turn on its switch in Privacy & Security > Accessibility, then retry. \
+This program cannot flip the switch.";
+
+/// `true` when a prompt may be shown now.
+///
+/// `last_ms` of 0 means this process has not asked yet.
+#[must_use]
+pub(crate) fn prompt_due(now_ms: u64, last_ms: u64) -> bool {
+    last_ms == 0 || now_ms.saturating_sub(last_ms) >= PROMPT_INTERVAL_MS
+}
+
+pub(crate) fn claim_prompt_slot(now_ms: u64, last_ms: &AtomicU64) -> bool {
+    let mut observed = last_ms.load(Ordering::Relaxed);
+    loop {
+        if !prompt_due(now_ms, observed) {
+            return false;
+        }
+        match last_ms.compare_exchange_weak(observed, now_ms, Ordering::Relaxed, Ordering::Relaxed)
+        {
+            Ok(_) => return true,
+            Err(current) => observed = current,
+        }
+    }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
+}
+
+/// Ask macOS to present the Accessibility prompt for this process.
+///
+/// Returns the trust bit after the request. The user still has to turn the switch on.
+#[must_use]
+pub fn request_accessibility_prompt() -> bool {
+    let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+    let value = CFBoolean::true_value();
+    let options = CFDictionary::from_CFType_pairs(&[(key, value)]);
+    unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) }
+}
+
+fn open_accessibility_pane() {
+    let _ = std::process::Command::new("/usr/bin/open")
+        .arg(ACCESSIBILITY_SETTINGS_URL)
+        .spawn();
+}
+
+/// Prompt when this process is untrusted, at most once per interval.
+///
+/// The silent check is unchanged. Call this from a user-facing command or tool.
+#[must_use]
+pub fn prompt_for_accessibility() -> PromptOutcome {
+    if check_accessibility_enabled() {
+        return PromptOutcome::Trusted;
+    }
+    if !claim_prompt_slot(now_ms(), &LAST_PROMPT_MS) {
+        return PromptOutcome::AlreadyRequested;
+    }
+    let _ = request_accessibility_prompt();
+    open_accessibility_pane();
+    if check_accessibility_enabled() {
+        PromptOutcome::Trusted
+    } else {
+        PromptOutcome::Requested
+    }
 }
 
 /// Create a system-wide accessibility element
@@ -573,6 +674,23 @@ mod tests {
     fn test_check_accessibility() {
         // This will return true if running with accessibility permissions
         let _ = check_accessibility_enabled();
+    }
+
+    #[test]
+    fn prompt_is_due_on_the_first_request_and_again_after_the_interval() {
+        assert!(prompt_due(1_000, 0));
+        assert!(!prompt_due(1_000, 1_000));
+        assert!(!prompt_due(30_999, 1_000));
+        assert!(prompt_due(31_000, 1_000));
+    }
+
+    #[test]
+    fn claim_prompt_slot_allows_one_request_inside_the_interval() {
+        let last = AtomicU64::new(0);
+        assert!(claim_prompt_slot(5_000, &last));
+        assert!(!claim_prompt_slot(5_100, &last));
+        assert!(claim_prompt_slot(35_000, &last));
+        assert_eq!(last.load(Ordering::Relaxed), 35_000);
     }
 
     #[test]
