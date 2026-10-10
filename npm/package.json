@@ -1,6 +1,6 @@
 {
   "name": "axterminator",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "MCP server for macOS desktop automation: give AI agents the ability to see and control macOS apps via the Accessibility API. Background GUI testing, sub-millisecond element access, self-healing locators. Works with Claude, Cursor, Windsurf, and any MCP client.",
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {

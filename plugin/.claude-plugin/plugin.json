@@ -1,7 +1,7 @@
 {
   "name": "axterminator",
   "displayName": "AXTerminator",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "See and control other macOS apps from Claude Code through the Accessibility API.",
   "author": {
     "name": "Mikko Parkkola",

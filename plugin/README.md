@@ -11,8 +11,8 @@ On macOS Ventura and later:
 1. Open System Settings.
 2. Open Privacy & Security, then Accessibility.
 3. Add the app that starts Claude Code, such as Terminal or the Claude app, and switch it on.
-4. Run `npx -y axterminator@0.10.2 check`. The line you want is `Accessibility: OK`.
+4. Run `npx -y axterminator@0.11.0 check`. The line you want is `Accessibility: OK`.
 
 On macOS Monterey, open System Preferences, then Security & Privacy, then Privacy, then Accessibility. Unlock the pane, add the same app, and leave its box checked.
 
-The server is the published package `axterminator@0.10.2`, started as `npx -y axterminator@0.10.2 mcp serve`. That version is pinned, so a later npm publish does not change this plugin until the manifest moves with the release.
+The server is the published package `axterminator@0.11.0`, started as `npx -y axterminator@0.11.0 mcp serve`. That version is pinned, so a later npm publish does not change this plugin until the manifest moves with the release.

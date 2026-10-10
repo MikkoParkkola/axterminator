@@ -49,6 +49,8 @@ class TestMik7618PluginManifest(unittest.TestCase):
         pins = re.findall(r"axterminator@([0-9][\w.\-]*)", README.read_text(encoding="utf-8"))
         self.assertGreaterEqual(len(pins), 1)
         self.assertTrue(all(pin == release for pin in pins), pins)
+        npm_pkg = json.loads((ROOT / "npm" / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(npm_pkg["version"], release)
 
     def test_plugin_folder_lists_license_platform_and_permission(self) -> None:
         """MIK-7618.AC1: license, a 40-word README, macOS-only, permission steps."""

@@ -13,7 +13,7 @@
 
 62 MCP tools with default features, 84 with the optional audio, camera, spaces, watch, context, docker and HTTP-transport flags. Background interaction via the macOS Accessibility API. 379us per element access. Audio capture with native 48kHz speech recognition, camera input with gesture detection (88.8% thumbs_up verified), virtual desktop isolation. Your AI agent connects and your Mac becomes an extension of it.
 
-**Current version: 0.10.2** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
+**Current version: 0.11.0** --- Rust binary with MCP server, CLI, and optional audio/camera/spaces features.
 
 ## Deploy
 
