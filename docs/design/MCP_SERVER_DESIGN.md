@@ -2690,6 +2690,7 @@ axterminator mcp serve --http --bind 0.0.0.0     # all interfaces (requires auth
 - Session management with `MCP-Session-Id` header
 - Resumability with SSE event IDs and `Last-Event-ID`
 - `MCP-Protocol-Version` header on all requests
+- On a request whose `_meta` names protocol version `2026-07-28` or `2025-11-25`: `MCP-Protocol-Version` and `Mcp-Method` must match the body, and `tools/call` also requires `Mcp-Name`
 - Origin header validation for DNS rebinding protection
 
 **Use cases**:
@@ -2750,6 +2751,8 @@ Errors follow the MCP distinction between protocol errors and tool execution err
 - `-32602`: Invalid params
 - `-32603`: Internal error
 - `-32002`: Resource not found
+- `-32020`: MCP header rejected
+- `-32022`: Unsupported protocol version
 
 **Tool execution errors** (returned in tool result with `isError: true`):
 
