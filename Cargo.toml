@@ -29,6 +29,7 @@ exclude = [
     "examples/",
     "browser-extension/",
     "demo/",
+    "plugin/",
     "EspressoMacSDK/",
     "AGENTS.md",
     "CLAUDE.md",
