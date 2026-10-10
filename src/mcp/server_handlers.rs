@@ -25,6 +25,17 @@ use crate::mcp::tools::call_tool;
 
 use super::server::{Phase, Server, TaskEntry, next_task_id};
 
+/// Whether `tools/call` may start a background task.
+///
+/// A modern request runs now. The tasks extension stays on the legacy handlers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ToolCallScheduling {
+    /// A legacy request with `_meta.task: true` returns a working task.
+    HonorTaskMeta,
+    /// Ignore `_meta.task` and run the tool through the security gates.
+    RunNow,
+}
+
 impl Server {
     // -----------------------------------------------------------------------
     // Core lifecycle
@@ -88,10 +99,29 @@ impl Server {
         JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
     }
 
+    /// `server/discover` for a modern request. The capability object is the one
+    /// `initialize` already returns. This method does not read phase.
+    pub(super) fn handle_server_discover(id: RequestId) -> JsonRpcResponse {
+        let init = build_initialize_result();
+        let capabilities = serde_json::to_value(&init.capabilities).unwrap();
+        JsonRpcResponse::ok(
+            id,
+            serde_json::json!({
+                "supportedVersions": crate::mcp::protocol::supported_versions_value(),
+                "capabilities": capabilities,
+                "instructions": init.instructions,
+                "resultType": "complete",
+                "ttlMs": 0,
+                "cacheScope": "public",
+            }),
+        )
+    }
+
     pub(super) fn handle_tools_call<W: Write>(
         &self,
         id: RequestId,
         params: Option<&Value>,
+        scheduling: ToolCallScheduling,
         out: &mut W,
     ) -> JsonRpcResponse {
         let Some(params_val) = params else {
@@ -106,7 +136,7 @@ impl Server {
                 let args = p
                     .arguments
                     .unwrap_or(Value::Object(serde_json::Map::default()));
-                if is_task_request(params_val) {
+                if scheduling == ToolCallScheduling::HonorTaskMeta && is_task_request(params_val) {
                     self.dispatch_as_task(id, &p.name, args)
                 } else {
                     let tool_result = self.dispatch_tool(&p.name, &args, out);
@@ -735,7 +765,7 @@ fn build_initialize_result() -> InitializeResult {
     let experimental = None;
 
     InitializeResult {
-        protocol_version: "2025-11-05",
+        protocol_version: crate::mcp::protocol::ADVERTISED_PROTOCOL_VERSION,
         capabilities: ServerCapabilities {
             tools: ToolsCapability {
                 list_changed: false,

@@ -1,4 +1,4 @@
-//! MCP 2025-11-25 protocol types (wire-compatible with 2025-11-05).
+//! MCP protocol types for the 2025-11-25 wire shape and a 2026-07-28 request.
 //!
 //! Covers the wire types for Phase 1, Phase 2, and Phase 5 (Tasks API):
 //! - `initialize` handshake with resources + prompts + tasks capabilities
@@ -75,6 +75,10 @@ impl RpcError {
     pub const METHOD_NOT_FOUND: i32 = -32_601;
     pub const INVALID_PARAMS: i32 = -32_602;
     pub const INTERNAL_ERROR: i32 = -32_603;
+    /// A modern HTTP header is missing, disagrees with the body, or contains a forbidden byte.
+    pub const PROTOCOL_HEADER_REJECTED: i32 = -32_020;
+    /// A modern request named a revision other than the two this server serves.
+    pub const UNSUPPORTED_PROTOCOL_VERSION: i32 = -32_022;
 
     /// Convenience constructor.
     #[must_use]
@@ -84,6 +88,127 @@ impl RpcError {
             message: message.into(),
             data: None,
         }
+    }
+}
+
+/// Revision `initialize` and the system-status resource advertise.
+pub(crate) const ADVERTISED_PROTOCOL_VERSION: &str = "2025-11-25";
+
+/// Revisions a modern request may name, newest first.
+pub(crate) const SUPPORTED_PROTOCOL_VERSIONS: [&str; 2] = ["2026-07-28", "2025-11-25"];
+
+pub(crate) const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
+pub(crate) const META_CLIENT_CAPABILITIES: &str = "io.modelcontextprotocol/clientCapabilities";
+
+/// How a request is classified before dispatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RequestClass {
+    Legacy,
+    /// `clientCapabilities` is present and `protocolVersion` is not.
+    Partial,
+    Modern,
+}
+
+/// HTTP status for a JSON-RPC error after classification.
+#[cfg(feature = "http-transport")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RpcHttpStatus {
+    Ok,
+    BadRequest,
+    NotFound,
+}
+
+pub(crate) fn supported_versions_value() -> Value {
+    Value::Array(
+        SUPPORTED_PROTOCOL_VERSIONS
+            .iter()
+            .copied()
+            .map(|version| Value::String(version.to_owned()))
+            .collect(),
+    )
+}
+
+fn exempt_method(method: &str) -> bool {
+    matches!(
+        method,
+        "initialize"
+            | "notifications/initialized"
+            | "ping"
+            | "resources/subscribe"
+            | "resources/unsubscribe"
+            | "tasks/list"
+            | "tasks/result"
+            | "tasks/cancel"
+    )
+}
+
+fn meta_map(msg: &JsonRpcRequest) -> Option<&serde_json::Map<String, Value>> {
+    msg.params
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|params| params.get("_meta"))
+        .and_then(Value::as_object)
+}
+
+/// One classifier for stdio and HTTP.
+///
+/// Modern only when the protocol-version meta key is present. Exempt methods
+/// stay legacy even when that key is present. A capabilities key without the
+/// version key is [`RequestClass::Partial`], not legacy.
+pub(crate) fn request_class(msg: &JsonRpcRequest) -> RequestClass {
+    if exempt_method(&msg.method) {
+        return RequestClass::Legacy;
+    }
+    let Some(meta) = meta_map(msg) else {
+        return RequestClass::Legacy;
+    };
+    if meta.contains_key(META_PROTOCOL_VERSION) {
+        RequestClass::Modern
+    } else if meta.contains_key(META_CLIENT_CAPABILITIES) {
+        RequestClass::Partial
+    } else {
+        RequestClass::Legacy
+    }
+}
+
+pub(crate) fn meta_protocol_version_str(msg: &JsonRpcRequest) -> Option<&str> {
+    meta_map(msg)?.get(META_PROTOCOL_VERSION)?.as_str()
+}
+
+#[cfg(feature = "http-transport")]
+fn modern_check_invalid_params(msg: &JsonRpcRequest) -> bool {
+    let Some(meta) = meta_map(msg) else {
+        return false;
+    };
+    let version_not_string = meta
+        .get(META_PROTOCOL_VERSION)
+        .is_some_and(|version| !version.is_string());
+    let caps_absent = !meta.contains_key(META_CLIENT_CAPABILITIES);
+    version_not_string || caps_absent
+}
+
+/// Status for errors from the modern checks and for the partial-meta `-32602`.
+///
+/// A handler error on a modern request stays [`RpcHttpStatus::Ok`] (HTTP 200).
+/// Re-reading the request is the memory of the class: the body is not mutated.
+#[cfg(feature = "http-transport")]
+pub(crate) fn http_status_for(msg: &JsonRpcRequest, error_code: Option<i32>) -> RpcHttpStatus {
+    let Some(code) = error_code else {
+        return RpcHttpStatus::Ok;
+    };
+    match request_class(msg) {
+        RequestClass::Partial if code == RpcError::INVALID_PARAMS => RpcHttpStatus::BadRequest,
+        RequestClass::Modern => match code {
+            RpcError::PROTOCOL_HEADER_REJECTED | RpcError::UNSUPPORTED_PROTOCOL_VERSION => {
+                RpcHttpStatus::BadRequest
+            }
+            RpcError::INVALID_PARAMS if modern_check_invalid_params(msg) => {
+                RpcHttpStatus::BadRequest
+            }
+            RpcError::METHOD_NOT_FOUND => RpcHttpStatus::NotFound,
+            _ => RpcHttpStatus::Ok,
+        },
+        _ => RpcHttpStatus::Ok,
     }
 }
 

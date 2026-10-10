@@ -30,16 +30,16 @@ use std::io::{self, BufRead, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-#[cfg(test)]
-use serde_json::Value;
-use serde_json::json;
+use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 
 use crate::mcp::protocol::{
-    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestId, RpcError, TaskInfo,
-    ToolCallResult,
+    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, META_CLIENT_CAPABILITIES, RequestClass,
+    RequestId, RpcError, SUPPORTED_PROTOCOL_VERSIONS, TaskInfo, ToolCallResult,
+    meta_protocol_version_str, request_class, supported_versions_value,
 };
 use crate::mcp::security::SecurityGuard;
+use crate::mcp::server_handlers::ToolCallScheduling;
 use crate::mcp::tools::AppRegistry;
 
 // ---------------------------------------------------------------------------
@@ -161,77 +161,154 @@ impl Server {
     ) -> Option<JsonRpcResponse> {
         debug!(method = %msg.method, "incoming message");
 
-        // Notifications have no id — never reply to them.
+        // Notifications have no id — never reply to them, and never run modern checks.
         if msg.id.is_none() {
             self.handle_notification(msg);
             return None;
         }
 
-        let id = match msg.id.clone() {
-            Some(id) => id,
-            None => {
-                return Some(JsonRpcResponse::err(
-                    RequestId::Number(0),
-                    RpcError::new(RpcError::INVALID_REQUEST, "Missing request id".to_string()),
-                ));
-            }
-        };
+        let id = msg.id.clone().unwrap_or(RequestId::Number(0));
+        Some(self.dispatch(id, msg, out))
+    }
 
+    fn dispatch<W: Write>(
+        &mut self,
+        id: RequestId,
+        msg: &JsonRpcRequest,
+        out: &mut W,
+    ) -> JsonRpcResponse {
+        match request_class(msg) {
+            RequestClass::Legacy => self.dispatch_legacy(id, msg, out),
+            RequestClass::Partial => JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    "Missing io.modelcontextprotocol/protocolVersion",
+                ),
+            ),
+            RequestClass::Modern => self.dispatch_modern(id, msg, out),
+        }
+    }
+
+    fn dispatch_legacy<W: Write>(
+        &mut self,
+        id: RequestId,
+        msg: &JsonRpcRequest,
+        out: &mut W,
+    ) -> JsonRpcResponse {
         match msg.method.as_str() {
-            "initialize" => Some(self.handle_initialize(id, msg.params.as_ref())),
-            "ping" => Some(Self::handle_ping(id)),
+            "initialize" => self.handle_initialize(id, msg.params.as_ref()),
+            "ping" => Self::handle_ping(id),
             // Phase 1 + Phase 3 — tools
-            "tools/list" if self.phase == Phase::Running => Some(self.handle_tools_list(id)),
-            "tools/call" if self.phase == Phase::Running => {
-                Some(self.handle_tools_call(id, msg.params.as_ref(), out))
-            }
+            "tools/list" if self.phase == Phase::Running => self.handle_tools_list(id),
+            "tools/call" if self.phase == Phase::Running => self.handle_tools_call(
+                id,
+                msg.params.as_ref(),
+                ToolCallScheduling::HonorTaskMeta,
+                out,
+            ),
             // Phase 2 — resources
-            "resources/list" if self.phase == Phase::Running => {
-                Some(Self::handle_resources_list(id))
-            }
+            "resources/list" if self.phase == Phase::Running => Self::handle_resources_list(id),
             "resources/templates/list" if self.phase == Phase::Running => {
-                Some(Self::handle_resources_templates_list(id))
+                Self::handle_resources_templates_list(id)
             }
             "resources/read" if self.phase == Phase::Running => {
-                Some(self.handle_resources_read(id, msg.params.as_ref()))
+                self.handle_resources_read(id, msg.params.as_ref())
             }
             // Phase 3 — resource subscriptions
             "resources/subscribe" if self.phase == Phase::Running => {
-                Some(self.handle_resources_subscribe(id, msg.params.as_ref()))
+                self.handle_resources_subscribe(id, msg.params.as_ref())
             }
             "resources/unsubscribe" if self.phase == Phase::Running => {
-                Some(self.handle_resources_unsubscribe(id, msg.params.as_ref()))
+                self.handle_resources_unsubscribe(id, msg.params.as_ref())
             }
             // Phase 2 — prompts
-            "prompts/list" if self.phase == Phase::Running => Some(Self::handle_prompts_list(id)),
+            "prompts/list" if self.phase == Phase::Running => Self::handle_prompts_list(id),
             "prompts/get" if self.phase == Phase::Running => {
-                Some(Self::handle_prompts_get(id, msg.params.as_ref()))
+                Self::handle_prompts_get(id, msg.params.as_ref())
             }
             // Phase 5 — tasks
-            "tasks/list" if self.phase == Phase::Running => Some(self.handle_tasks_list(id)),
+            "tasks/list" if self.phase == Phase::Running => self.handle_tasks_list(id),
             "tasks/result" if self.phase == Phase::Running => {
-                Some(self.handle_tasks_result(id, msg.params.as_ref()))
+                self.handle_tasks_result(id, msg.params.as_ref())
             }
             "tasks/cancel" if self.phase == Phase::Running => {
-                Some(self.handle_tasks_cancel(id, msg.params.as_ref()))
+                self.handle_tasks_cancel(id, msg.params.as_ref())
             }
             method if self.phase != Phase::Running => {
                 warn!(method, "request before initialized");
-                Some(JsonRpcResponse::err(
+                JsonRpcResponse::err(
                     id,
                     RpcError::new(RpcError::INVALID_REQUEST, "Server not yet initialized"),
-                ))
+                )
             }
             method => {
                 warn!(method, "method not found");
-                Some(JsonRpcResponse::err(
+                JsonRpcResponse::err(
                     id,
                     RpcError::new(
                         RpcError::METHOD_NOT_FOUND,
                         format!("Method not found: {method}"),
                     ),
-                ))
+                )
             }
+        }
+    }
+
+    fn dispatch_modern<W: Write>(
+        &mut self,
+        id: RequestId,
+        msg: &JsonRpcRequest,
+        out: &mut W,
+    ) -> JsonRpcResponse {
+        let Some(version) = meta_protocol_version_str(msg) else {
+            return JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    "Protocol version must be a string",
+                ),
+            );
+        };
+        if !SUPPORTED_PROTOCOL_VERSIONS.contains(&version) {
+            return JsonRpcResponse::err(id, unsupported_version(version));
+        }
+        let caps_present = msg
+            .params
+            .as_ref()
+            .and_then(|params| params.get("_meta"))
+            .and_then(Value::as_object)
+            .is_some_and(|meta| meta.contains_key(META_CLIENT_CAPABILITIES));
+        if !caps_present {
+            return JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::INVALID_PARAMS,
+                    "Missing io.modelcontextprotocol/clientCapabilities",
+                ),
+            );
+        }
+        match msg.method.as_str() {
+            "tools/list" => annotate_cacheable(self.handle_tools_list(id)),
+            "tools/call" => annotate_call(self.handle_tools_call(
+                id,
+                msg.params.as_ref(),
+                ToolCallScheduling::RunNow,
+                out,
+            )),
+            "server/discover" => Self::handle_server_discover(id),
+            "resources/list"
+            | "resources/templates/list"
+            | "resources/read"
+            | "prompts/list"
+            | "prompts/get" => self.dispatch_legacy(id, msg, out),
+            method => JsonRpcResponse::err(
+                id,
+                RpcError::new(
+                    RpcError::METHOD_NOT_FOUND,
+                    format!("Method not found: {method}"),
+                ),
+            ),
         }
     }
 
@@ -245,6 +322,36 @@ impl Server {
             }
             method => debug!(method, "unhandled notification"),
         }
+    }
+}
+
+fn annotate_cacheable(mut resp: JsonRpcResponse) -> JsonRpcResponse {
+    if let Some(result) = resp.result.as_mut().and_then(Value::as_object_mut) {
+        result.insert("resultType".to_owned(), json!("complete"));
+        result.insert("ttlMs".to_owned(), json!(0));
+        result.insert("cacheScope".to_owned(), json!("public"));
+    }
+    resp
+}
+
+fn annotate_call(mut resp: JsonRpcResponse) -> JsonRpcResponse {
+    if resp.error.is_some() {
+        return resp;
+    }
+    if let Some(result) = resp.result.as_mut().and_then(Value::as_object_mut) {
+        result.insert("resultType".to_owned(), json!("complete"));
+    }
+    resp
+}
+
+fn unsupported_version(requested: &str) -> RpcError {
+    RpcError {
+        code: RpcError::UNSUPPORTED_PROTOCOL_VERSION,
+        message: "Unsupported protocol version".to_owned(),
+        data: Some(json!({
+            "supported": supported_versions_value(),
+            "requested": requested,
+        })),
     }
 }
 

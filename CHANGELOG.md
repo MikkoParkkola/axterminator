@@ -5,6 +5,14 @@ All notable changes to AXTerminator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- A request carrying `_meta["io.modelcontextprotocol/protocolVersion"]` of `2026-07-28` or `2025-11-25`, plus `clientCapabilities`, is served without a prior `initialize`. `tools/list` and `server/discover` add `resultType`, `ttlMs`, and `cacheScope`. `tools/call` adds `resultType`. HTTP also requires matching `MCP-Protocol-Version` and `Mcp-Method` headers. `tools/call` also requires `Mcp-Name`.
+
+### Changed
+- `initialize` answers `protocolVersion` `2025-11-25` for every client string that deserializes. The previous answer `2025-11-05` was not a protocol revision.
+
 ## [0.10.2] - 2026-08-04
 
 ### Security
