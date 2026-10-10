@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A Claude Code and local Cowork plugin under `plugin/`. It launches `npx -y axterminator@<release>` and documents the macOS Accessibility grant.
 - A request carrying `_meta["io.modelcontextprotocol/protocolVersion"]` of `2026-07-28` or `2025-11-25`, plus `clientCapabilities`, is served without a prior `initialize`. `tools/list` and `server/discover` add `resultType`, `ttlMs`, and `cacheScope`. `tools/call` adds `resultType`. HTTP also requires matching `MCP-Protocol-Version` and `Mcp-Method` headers. `tools/call` also requires `Mcp-Name`.
 
 ### Changed
