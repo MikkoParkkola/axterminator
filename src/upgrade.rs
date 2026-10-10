@@ -100,6 +100,12 @@ struct WhatsNew {
 
 static WHATS_NEW: &[WhatsNew] = &[
     WhatsNew {
+        version: SemVer(0, 11, 1),
+        items: &[
+            "An untrusted process asks macOS to show the Accessibility prompt and opens the privacy pane. The switch stays manual. Restart this process if a retry still reports disabled",
+        ],
+    },
+    WhatsNew {
         version: SemVer(0, 11, 0),
         items: &[
             "MCP initialize answers 2025-11-25, and current clients are served without a prior initialize",
