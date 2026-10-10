@@ -88,6 +88,24 @@ impl Server {
         JsonRpcResponse::ok(id, serde_json::to_value(result).unwrap())
     }
 
+    /// `server/discover` for a modern request. The capability object is the one
+    /// `initialize` already returns. This method does not read phase.
+    pub(super) fn handle_server_discover(id: RequestId) -> JsonRpcResponse {
+        let init = build_initialize_result();
+        let capabilities = serde_json::to_value(&init.capabilities).unwrap();
+        JsonRpcResponse::ok(
+            id,
+            serde_json::json!({
+                "supportedVersions": crate::mcp::protocol::supported_versions_value(),
+                "capabilities": capabilities,
+                "instructions": init.instructions,
+                "resultType": "complete",
+                "ttlMs": 0,
+                "cacheScope": "public",
+            }),
+        )
+    }
+
     pub(super) fn handle_tools_call<W: Write>(
         &self,
         id: RequestId,
@@ -735,7 +753,7 @@ fn build_initialize_result() -> InitializeResult {
     let experimental = None;
 
     InitializeResult {
-        protocol_version: "2025-11-05",
+        protocol_version: crate::mcp::protocol::ADVERTISED_PROTOCOL_VERSION,
         capabilities: ServerCapabilities {
             tools: ToolsCapability {
                 list_changed: false,

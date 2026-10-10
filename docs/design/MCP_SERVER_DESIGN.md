@@ -1,7 +1,7 @@
 # AXTerminator MCP Server Design Document
 
 **Status**: Implemented | **Version**: 3.1 | **Date**: 2026-04-26
-**Protocol**: MCP 2025-11-05 | **SDK**: Hand-rolled Rust protocol layer
+**Protocol**: MCP 2025-11-25 | **SDK**: Hand-rolled Rust protocol layer
 **Runtime**: Pure Rust (unified `axterminator` binary) | **Python API**: Historical design, not shipped in the current crate
 **Author**: Mikko Parkkola
 

@@ -29,7 +29,7 @@ pub(super) fn read_system_status(
     let payload = json!({
         "accessibility_enabled": accessibility_enabled,
         "server_version": env!("CARGO_PKG_VERSION"),
-        "protocol_version": "2025-11-05",
+        "protocol_version": crate::mcp::protocol::ADVERTISED_PROTOCOL_VERSION,
         "connected_apps": connected,
         "connected_count": connected.len(),
     });

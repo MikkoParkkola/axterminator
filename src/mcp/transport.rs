@@ -168,8 +168,13 @@ mod http {
     use tokio_stream::wrappers::BroadcastStream;
     use tracing::{debug, error, info, warn};
 
+    use base64::Engine as _;
+
     use crate::mcp::auth::{AuthError, BearerValidator};
-    use crate::mcp::protocol::{JsonRpcRequest, JsonRpcResponse, RequestId, RpcError};
+    use crate::mcp::protocol::{
+        JsonRpcRequest, JsonRpcResponse, RequestClass, RequestId, RpcError, RpcHttpStatus,
+        http_status_for, meta_protocol_version_str, request_class,
+    };
 
     /// Maximum SSE clients per server instance.
     const SSE_CHANNEL_CAPACITY: usize = 64;
@@ -292,6 +297,16 @@ mod http {
             }
         };
 
+        // A message with no id is a notification. Header checks do not run, and
+        // there is no JSON-RPC error body. Modern checks also skip that message
+        // inside `Server::handle`.
+        if rpc_req.id.is_some() && request_class(&rpc_req) == RequestClass::Modern {
+            if let Err(err) = check_modern_headers(&headers, &rpc_req) {
+                let id = rpc_req.id.clone().unwrap_or(RequestId::Number(0));
+                return rpc_http(StatusCode::BAD_REQUEST, &JsonRpcResponse::err(id, err));
+            }
+        }
+
         let mut sink = Vec::<u8>::new();
         let maybe_resp = match state.server.lock() {
             Ok(mut server) => server.handle(&rpc_req, &mut sink),
@@ -316,17 +331,105 @@ mod http {
         }
 
         match maybe_resp {
-            Some(resp) => match serde_json::to_value(&resp) {
-                Ok(v) => Json(v).into_response(),
-                Err(e) => {
-                    error!("response serialization failed: {e}");
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                }
-            },
+            Some(resp) => {
+                let status = status_of(http_status_for(
+                    &rpc_req,
+                    resp.error.as_ref().map(|err| err.code),
+                ));
+                rpc_http(status, &resp)
+            }
             // Notification — no response body.
             // axum 0.8: `NoContent` is the idiomatic zero-allocation 204 type.
             None => NoContent.into_response(),
         }
+    }
+
+    fn status_of(kind: RpcHttpStatus) -> StatusCode {
+        match kind {
+            RpcHttpStatus::Ok => StatusCode::OK,
+            RpcHttpStatus::BadRequest => StatusCode::BAD_REQUEST,
+            RpcHttpStatus::NotFound => StatusCode::NOT_FOUND,
+        }
+    }
+
+    fn rpc_http(status: StatusCode, resp: &JsonRpcResponse) -> Response {
+        match serde_json::to_value(resp) {
+            Ok(value) => (status, Json(value)).into_response(),
+            Err(e) => {
+                error!("response serialization failed: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    fn header_rejected() -> RpcError {
+        RpcError::new(RpcError::PROTOCOL_HEADER_REJECTED, "MCP header rejected")
+    }
+
+    fn header_bytes_allowed(headers: &HeaderMap) -> bool {
+        headers.iter().all(|(_, value)| {
+            value
+                .as_bytes()
+                .iter()
+                .all(|byte| *byte == 0x09 || *byte == 0x20 || (0x21..=0x7E).contains(byte))
+        })
+    }
+
+    fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
+        let value = headers.get(name)?;
+        String::from_utf8(value.as_bytes().to_vec()).ok()
+    }
+
+    /// Decode an `Mcp-Name` sentinel. Markers are exact and lowercase.
+    /// `MCP-Protocol-Version` and `Mcp-Method` are not decoded.
+    fn decode_mcp_name(raw: &str) -> Result<String, RpcError> {
+        const PREFIX: &str = "=?base64?";
+        const SUFFIX: &str = "?=";
+        if let Some(rest) = raw.strip_prefix(PREFIX) {
+            if let Some(payload) = rest.strip_suffix(SUFFIX) {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(payload)
+                    .map_err(|_| header_rejected())?;
+                return String::from_utf8(bytes).map_err(|_| header_rejected());
+            }
+        }
+        Ok(raw.to_owned())
+    }
+
+    /// Check 1. Runs only for a modern request that has an id.
+    /// A failure returns here and `post_mcp` does not call `handle`.
+    /// `tools/list` ignores an extra `mcp-name`. `tools/call` requires a match.
+    fn check_modern_headers(headers: &HeaderMap, msg: &JsonRpcRequest) -> Result<(), RpcError> {
+        if !header_bytes_allowed(headers) {
+            return Err(header_rejected());
+        }
+        let Some(version_header) = header_text(headers, "mcp-protocol-version") else {
+            return Err(header_rejected());
+        };
+        let Some(method_header) = header_text(headers, "mcp-method") else {
+            return Err(header_rejected());
+        };
+        if meta_protocol_version_str(msg) != Some(version_header.as_str()) {
+            return Err(header_rejected());
+        }
+        if method_header != msg.method {
+            return Err(header_rejected());
+        }
+        if msg.method == "tools/call" {
+            let Some(name_header) = header_text(headers, "mcp-name") else {
+                return Err(header_rejected());
+            };
+            let decoded = decode_mcp_name(&name_header)?;
+            let body_name = msg
+                .params
+                .as_ref()
+                .and_then(|params| params.get("name"))
+                .and_then(Value::as_str);
+            if body_name != Some(decoded.as_str()) {
+                return Err(header_rejected());
+            }
+        }
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
