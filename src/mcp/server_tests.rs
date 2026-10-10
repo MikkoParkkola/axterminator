@@ -2202,6 +2202,40 @@ fn mcp2026_s14_call_cold_writes_nothing() {
 }
 
 #[test]
+fn mcp2026_modern_call_ignores_task_meta() {
+    let mut s = Server::new();
+    let mut meta = mcp2026_meta(json!("2026-07-28"), Some(json!({})));
+    meta["task"] = json!(true);
+    let params = json!({
+        "_meta": meta,
+        "name": "ax_list_apps",
+        "arguments": {}
+    });
+    let v = mcp2026_call(&mut s, 1, "tools/call", Some(params));
+    assert!(v["result"].get("task").is_none(), "{v}");
+    mcp2026_assert_call(&v);
+}
+
+#[test]
+fn mcp2026_modern_call_task_meta_still_hits_the_allowlist() {
+    let mut s = Server::new();
+    s.security.mode = crate::mcp::security::SecurityMode::Sandboxed;
+    let mut meta = mcp2026_meta(json!("2026-07-28"), Some(json!({})));
+    meta["task"] = json!(true);
+    let params = json!({
+        "_meta": meta,
+        "name": "not_a_tool",
+        "arguments": {}
+    });
+    let v = mcp2026_call(&mut s, 1, "tools/call", Some(params));
+    assert!(v["result"].get("task").is_none(), "{v}");
+    assert_eq!(v["result"]["isError"], true, "{v}");
+    let text = v["result"]["content"][0]["text"].as_str().unwrap_or("");
+    assert!(text.contains("blocked in sandboxed mode"), "{v}");
+    assert_eq!(v["result"]["resultType"], "complete");
+}
+
+#[test]
 fn mcp2026_s16_modern_list_at_2025_11_25() {
     let mut s = Server::new();
     let params = json!({ "_meta": mcp2026_meta(json!("2025-11-25"), Some(json!({}))) });

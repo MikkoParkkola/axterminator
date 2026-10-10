@@ -39,6 +39,7 @@ use crate::mcp::protocol::{
     meta_protocol_version_str, request_class, supported_versions_value,
 };
 use crate::mcp::security::SecurityGuard;
+use crate::mcp::server_handlers::ToolCallScheduling;
 use crate::mcp::tools::AppRegistry;
 
 // ---------------------------------------------------------------------------
@@ -200,9 +201,12 @@ impl Server {
             "ping" => Self::handle_ping(id),
             // Phase 1 + Phase 3 — tools
             "tools/list" if self.phase == Phase::Running => self.handle_tools_list(id),
-            "tools/call" if self.phase == Phase::Running => {
-                self.handle_tools_call(id, msg.params.as_ref(), out)
-            }
+            "tools/call" if self.phase == Phase::Running => self.handle_tools_call(
+                id,
+                msg.params.as_ref(),
+                ToolCallScheduling::HonorTaskMeta,
+                out,
+            ),
             // Phase 2 — resources
             "resources/list" if self.phase == Phase::Running => Self::handle_resources_list(id),
             "resources/templates/list" if self.phase == Phase::Running => {
@@ -286,7 +290,12 @@ impl Server {
         }
         match msg.method.as_str() {
             "tools/list" => annotate_cacheable(self.handle_tools_list(id)),
-            "tools/call" => annotate_call(self.handle_tools_call(id, msg.params.as_ref(), out)),
+            "tools/call" => annotate_call(self.handle_tools_call(
+                id,
+                msg.params.as_ref(),
+                ToolCallScheduling::RunNow,
+                out,
+            )),
             "server/discover" => Self::handle_server_discover(id),
             "resources/list"
             | "resources/templates/list"

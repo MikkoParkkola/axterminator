@@ -25,6 +25,17 @@ use crate::mcp::tools::call_tool;
 
 use super::server::{Phase, Server, TaskEntry, next_task_id};
 
+/// Whether `tools/call` may start a background task.
+///
+/// A modern request runs now. The tasks extension stays on the legacy handlers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ToolCallScheduling {
+    /// A legacy request with `_meta.task: true` returns a working task.
+    HonorTaskMeta,
+    /// Ignore `_meta.task` and run the tool through the security gates.
+    RunNow,
+}
+
 impl Server {
     // -----------------------------------------------------------------------
     // Core lifecycle
@@ -110,6 +121,7 @@ impl Server {
         &self,
         id: RequestId,
         params: Option<&Value>,
+        scheduling: ToolCallScheduling,
         out: &mut W,
     ) -> JsonRpcResponse {
         let Some(params_val) = params else {
@@ -124,7 +136,7 @@ impl Server {
                 let args = p
                     .arguments
                     .unwrap_or(Value::Object(serde_json::Map::default()));
-                if is_task_request(params_val) {
+                if scheduling == ToolCallScheduling::HonorTaskMeta && is_task_request(params_val) {
                     self.dispatch_as_task(id, &p.name, args)
                 } else {
                     let tool_result = self.dispatch_tool(&p.name, &args, out);
