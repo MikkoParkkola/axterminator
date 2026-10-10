@@ -143,7 +143,8 @@ pub enum PromptOutcome {
 /// Text returned when this process is not trusted.
 pub const ACCESSIBILITY_PROMPT_SUGGESTION: &str = "\
 macOS was asked to show the Accessibility prompt for this process. \
-Turn on its switch in Privacy & Security > Accessibility, then retry. \
+Turn on its switch in Privacy & Security > Accessibility. \
+If a retry still reports disabled, restart this process and retry. \
 This program cannot flip the switch.";
 
 /// `true` when a prompt may be shown now.
