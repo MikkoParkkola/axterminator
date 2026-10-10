@@ -22,7 +22,7 @@ which axterminator 2>/dev/null || echo "NOT INSTALLED"
 
 # If installed, check version
 axterminator check 2>/dev/null
-# Look at the "Version:" line — current release is 0.10.2
+# Look at the "Version:" line — current release is 0.11.0
 ```
 
 If already installed at an older version, follow the Upgrade section below.
@@ -303,4 +303,4 @@ cargo build --release --features cli,audio,camera,watch,spaces,context,docker,ht
 
 ## Version
 
-0.10.2
+0.11.0

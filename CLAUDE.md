@@ -12,7 +12,7 @@ The boundary is macOS-only. iOS/iPadOS support is tracked but will be screenshot
 
 ## Current Status
 
-- **v0.10.2** · Rust stable · macOS 12+ · PolyForm Noncommercial 1.0.0 (v0.9.1 was the last MIT + Apache-2.0 release)
+- **v0.11.0** · Rust stable · macOS 12+ · PolyForm Noncommercial 1.0.0 (v0.9.1 was the last MIT + Apache-2.0 release)
 - **62 tools** on default features, **84** with `audio`, `camera`, `spaces`, `watch`, `context`, `docker`, `http-transport` (measured via `tools/list`). Default set includes shell (`ax_exec`), filesystem (`ax_fs_*`), PTY terminals (`ax_term_*`), window management and HTTP GET, none of them scoped to the connected app
 - **~1000 tests** on default features; full suite with `--all-features`; CI runs `test --all-features` on macOS
 - **Performance**: 379 us per element access, ObjC FFI for CoreFoundation / CoreGraphics / AVFoundation

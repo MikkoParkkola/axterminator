@@ -49,6 +49,23 @@ class TestMik7618PluginManifest(unittest.TestCase):
         pins = re.findall(r"axterminator@([0-9][\w.\-]*)", README.read_text(encoding="utf-8"))
         self.assertGreaterEqual(len(pins), 1)
         self.assertTrue(all(pin == release for pin in pins), pins)
+        npm_pkg = json.loads((ROOT / "npm" / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(npm_pkg["version"], release)
+        lock = (ROOT / "Cargo.lock").read_text(encoding="utf-8")
+        self.assertIn(f'name = "axterminator"\nversion = "{release}"', lock)
+        self.assertIn(f"## [{release}]", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
+        plist = (ROOT / "resources" / "Info.plist").read_text(encoding="utf-8")
+        self.assertIn(f"<string>{release}</string>", plist)
+        upgrade = (ROOT / "src" / "upgrade.rs").read_text(encoding="utf-8")
+        major, minor, patch = release.split(".")
+        self.assertIn(f"SemVer({major}, {minor}, {patch})", upgrade)
+        for rel, needle in (
+            (ROOT / "CLAUDE.md", f"**v{release}**"),
+            (ROOT / "docs" / "index.md", f"Current version: {release}"),
+            (ROOT / "docs" / "api" / "mcp-tools.md", f"v{release}"),
+            (ROOT / "llms.txt", f"current release is {release}"),
+        ):
+            self.assertIn(needle, rel.read_text(encoding="utf-8"), rel)
 
     def test_plugin_folder_lists_license_platform_and_permission(self) -> None:
         """MIK-7618.AC1: license, a 40-word README, macOS-only, permission steps."""

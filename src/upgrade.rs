@@ -98,13 +98,22 @@ struct WhatsNew {
     items: &'static [&'static str],
 }
 
-static WHATS_NEW: &[WhatsNew] = &[WhatsNew {
-    version: SemVer(0, 9, 0),
-    items: &[
-        "New `upgrade` command with version stamp and migration framework",
-        "Shell completions for `upgrade` subcommand",
-    ],
-}];
+static WHATS_NEW: &[WhatsNew] = &[
+    WhatsNew {
+        version: SemVer(0, 11, 0),
+        items: &[
+            "MCP initialize answers 2025-11-25, and current clients are served without a prior initialize",
+            "Claude Code plugin launches the published npm package at this version",
+        ],
+    },
+    WhatsNew {
+        version: SemVer(0, 9, 0),
+        items: &[
+            "New `upgrade` command with version stamp and migration framework",
+            "Shell completions for `upgrade` subcommand",
+        ],
+    },
+];
 
 /// Print "what's new" items for all versions strictly after `from`.
 fn print_whats_new(from: SemVer, current: SemVer) {

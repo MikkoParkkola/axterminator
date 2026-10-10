@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-AXTerminator v0.10.2 exposes 62 MCP tools with default features and 84 with
+AXTerminator v0.11.0 exposes 62 MCP tools with default features and 84 with
 `audio,camera,spaces,watch,context,docker,http-transport` enabled, plus 6
 resources, 4 resource templates and 10 guided prompts. Counts measured with
 `tools/list`, `resources/list` and `prompts/list` against the built binary.
