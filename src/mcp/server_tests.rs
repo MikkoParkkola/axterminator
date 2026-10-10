@@ -1920,3 +1920,369 @@ fn ax_stop_capture_subscribed_emits_capture_status_notification() {
         "ax_stop_capture with subscribed capture/status must emit notification"
     );
 }
+
+// MIK-7617 cases. Fixtures are specified in docs/design/mcp-2026-07-28-test-plan.md.
+
+fn mcp2026_meta(version: Value, caps: Option<Value>) -> Value {
+    let mut meta = serde_json::Map::new();
+    meta.insert("io.modelcontextprotocol/protocolVersion".into(), version);
+    if let Some(caps) = caps {
+        meta.insert("io.modelcontextprotocol/clientCapabilities".into(), caps);
+    }
+    Value::Object(meta)
+}
+
+fn mcp2026_call(s: &mut Server, id: i64, method: &str, params: Option<Value>) -> Value {
+    let req = make_request(id, method, params);
+    let resp = s.handle(&req, &mut Vec::<u8>::new()).expect("id");
+    serde_json::to_value(&resp).unwrap()
+}
+
+fn mcp2026_keys(v: &Value) -> Vec<&str> {
+    let mut keys: Vec<&str> = v
+        .as_object()
+        .expect("object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    keys
+}
+
+fn mcp2026_assert_initialize(v: &Value) {
+    assert!(v.get("error").is_none(), "{v}");
+    assert_eq!(v["result"]["protocolVersion"], "2025-11-25");
+    assert!(v["result"].get("resultType").is_none(), "{v}");
+}
+
+fn mcp2026_initialize(version: &str, caps: Value, meta: Option<Value>) -> Value {
+    let mut params = json!({
+        "protocolVersion": version,
+        "capabilities": caps,
+        "clientInfo": {"name": "test", "version": "1"}
+    });
+    if let Some(meta) = meta {
+        params["_meta"] = meta;
+    }
+    let mut s = Server::new();
+    mcp2026_call(&mut s, 1, "initialize", Some(params))
+}
+
+fn mcp2026_prime(s: &mut Server, prove_tools_list: bool) {
+    let init = mcp2026_call(
+        s,
+        1,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2025-11-05",
+            "capabilities": {"sampling": {}},
+            "clientInfo": {"name": "test", "version": "1"}
+        })),
+    );
+    assert!(init.get("error").is_none(), "{init}");
+    let note = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: None,
+        method: "notifications/initialized".into(),
+        params: None,
+    };
+    assert!(s.handle(&note, &mut Vec::<u8>::new()).is_none());
+    if prove_tools_list {
+        let listed = mcp2026_call(s, 2, "tools/list", None);
+        assert!(listed.get("error").is_none(), "{listed}");
+    }
+}
+
+fn mcp2026_assert_legacy_list(v: &Value) {
+    assert!(v.get("error").is_none(), "{v}");
+    assert_eq!(mcp2026_keys(&v["result"]), ["tools"]);
+    let tools = v["result"]["tools"].as_array().expect("tools");
+    assert!(tools.iter().any(|tool| tool["name"] == "ax_list_apps"));
+}
+
+fn mcp2026_assert_modern_list(v: &Value) {
+    assert_eq!(v["result"]["resultType"], "complete");
+    assert!(v.get("error").is_none(), "{v}");
+    assert_eq!(v["result"]["ttlMs"], 0);
+    assert!(v["result"]["ttlMs"].is_number());
+    assert_eq!(v["result"]["cacheScope"], "public");
+    let tools = v["result"]["tools"].as_array().expect("tools");
+    assert!(tools.iter().any(|tool| tool["name"] == "ax_list_apps"));
+    assert_eq!(
+        mcp2026_keys(&v["result"]),
+        ["cacheScope", "resultType", "tools", "ttlMs"]
+    );
+}
+
+fn mcp2026_donor_capabilities() -> Value {
+    let donor = mcp2026_initialize("2025-11-25", json!({}), None);
+    assert!(donor.get("error").is_none(), "{donor}");
+    donor["result"]["capabilities"].clone()
+}
+
+fn mcp2026_assert_discover(v: &Value, capabilities: &Value) {
+    assert_eq!(v["result"]["resultType"], "complete");
+    assert!(v.get("error").is_none(), "{v}");
+    assert_eq!(v["result"]["ttlMs"], 0);
+    assert_eq!(v["result"]["cacheScope"], "public");
+    assert_eq!(
+        v["result"]["supportedVersions"],
+        json!(["2026-07-28", "2025-11-25"])
+    );
+    assert_eq!(&v["result"]["capabilities"], capabilities);
+}
+
+fn mcp2026_assert_apps(text: &str) {
+    assert!(!text.contains("Server not yet initialized"));
+    let parsed: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(mcp2026_keys(&parsed), ["apps"]);
+    let apps = parsed["apps"].as_array().expect("apps");
+    assert!(!apps.is_empty());
+    for app in apps {
+        assert_eq!(mcp2026_keys(app), ["name", "pid"]);
+        assert!(app["name"].is_string());
+        assert!(app["pid"].is_number());
+    }
+}
+
+fn mcp2026_assert_call(v: &Value) {
+    assert_eq!(v["result"]["resultType"], "complete");
+    assert!(v.get("error").is_none(), "{v}");
+    assert_eq!(
+        mcp2026_keys(&v["result"]),
+        ["content", "isError", "resultType"]
+    );
+    assert!(v["result"].get("ttlMs").is_none());
+    assert!(v["result"].get("cacheScope").is_none());
+    assert_eq!(v["result"]["isError"], false);
+    let content = v["result"]["content"].as_array().expect("content");
+    assert_eq!(content.len(), 1);
+    assert_eq!(content[0]["type"], "text");
+    mcp2026_assert_apps(content[0]["text"].as_str().expect("text"));
+}
+
+fn mcp2026_code(v: &Value) -> i64 {
+    v["error"]["code"].as_i64().expect("error code")
+}
+
+#[test]
+fn mcp2026_s1_initialize_client_2026() {
+    let v = mcp2026_initialize("2026-07-28", json!({}), None);
+    mcp2026_assert_initialize(&v);
+}
+
+#[test]
+fn mcp2026_s2_initialize_client_2025_11_25() {
+    let v = mcp2026_initialize("2025-11-25", json!({}), None);
+    mcp2026_assert_initialize(&v);
+}
+
+#[test]
+fn mcp2026_s3_initialize_client_2025_11_05() {
+    let v = mcp2026_initialize("2025-11-05", json!({}), None);
+    mcp2026_assert_initialize(&v);
+}
+
+#[test]
+fn mcp2026_s4_initialize_ignores_modern_meta() {
+    let meta = mcp2026_meta(json!("2026-07-28"), Some(json!({})));
+    let v = mcp2026_initialize("2026-07-28", json!({}), Some(meta));
+    mcp2026_assert_initialize(&v);
+}
+
+#[test]
+fn mcp2026_s5_legacy_list_after_2025_11_25() {
+    let mut s = Server::new();
+    let init = mcp2026_call(
+        &mut s,
+        1,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"}
+        })),
+    );
+    assert!(init.get("error").is_none(), "{init}");
+    assert!(
+        s.handle(
+            &make_notification("notifications/initialized"),
+            &mut Vec::<u8>::new()
+        )
+        .is_none()
+    );
+    let proof = mcp2026_call(&mut s, 2, "tools/list", None);
+    assert!(proof.get("error").is_none(), "{proof}");
+    let v = mcp2026_call(&mut s, 3, "tools/list", None);
+    mcp2026_assert_legacy_list(&v);
+}
+
+#[test]
+fn mcp2026_s5b_legacy_list_after_2026_initialize() {
+    let mut s = Server::new();
+    let init = mcp2026_call(
+        &mut s,
+        1,
+        "initialize",
+        Some(json!({
+            "protocolVersion": "2026-07-28",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"}
+        })),
+    );
+    assert!(init.get("error").is_none(), "{init}");
+    assert!(
+        s.handle(
+            &make_notification("notifications/initialized"),
+            &mut Vec::<u8>::new()
+        )
+        .is_none()
+    );
+    let proof = mcp2026_call(&mut s, 2, "tools/list", None);
+    assert!(proof.get("error").is_none(), "{proof}");
+    let v = mcp2026_call(&mut s, 3, "tools/list", None);
+    mcp2026_assert_legacy_list(&v);
+}
+
+#[test]
+fn mcp2026_s6_modern_list_cold() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("2026-07-28"), Some(json!({}))) });
+    let v = mcp2026_call(&mut s, 1, "tools/list", Some(params));
+    mcp2026_assert_modern_list(&v);
+}
+
+#[test]
+fn mcp2026_s8_missing_capabilities_is_32602() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("2026-07-28"), None) });
+    let v = mcp2026_call(&mut s, 1, "tools/list", Some(params));
+    assert_eq!(mcp2026_code(&v), -32602);
+    assert_ne!(mcp2026_code(&v), -32020);
+}
+
+#[test]
+fn mcp2026_s10_discover_cold() {
+    let capabilities = mcp2026_donor_capabilities();
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("2026-07-28"), Some(json!({}))) });
+    let v = mcp2026_call(&mut s, 1, "server/discover", Some(params));
+    mcp2026_assert_discover(&v, &capabilities);
+}
+
+#[test]
+fn mcp2026_s12_unsupported_version() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("1900-01-01"), Some(json!({}))) });
+    let v = mcp2026_call(&mut s, 1, "tools/list", Some(params));
+    assert_eq!(mcp2026_code(&v), -32022);
+    assert_ne!(mcp2026_code(&v), -32020);
+    assert_ne!(mcp2026_code(&v), -32601);
+    assert_eq!(v["error"]["data"]["requested"], "1900-01-01");
+    assert_eq!(
+        v["error"]["data"]["supported"],
+        json!(["2026-07-28", "2025-11-25"])
+    );
+}
+
+#[test]
+fn mcp2026_s14_call_cold_writes_nothing() {
+    let mut s = Server::new();
+    let params = json!({
+        "_meta": mcp2026_meta(json!("2026-07-28"), Some(json!({}))),
+        "name": "ax_list_apps",
+        "arguments": {}
+    });
+    let req = make_request(1, "tools/call", Some(params));
+    let mut out = Vec::<u8>::new();
+    let resp = s.handle(&req, &mut out).expect("id");
+    let v = serde_json::to_value(&resp).unwrap();
+    mcp2026_assert_call(&v);
+    assert!(out.is_empty(), "call wrote {out:?}");
+}
+
+#[test]
+fn mcp2026_s16_modern_list_at_2025_11_25() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("2025-11-25"), Some(json!({}))) });
+    let v = mcp2026_call(&mut s, 1, "tools/list", Some(params));
+    mcp2026_assert_modern_list(&v);
+}
+
+#[test]
+fn mcp2026_s17_modern_call_does_not_open_session() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("2025-11-25"), Some(json!({}))) });
+    let _ignored = mcp2026_call(&mut s, 1, "tools/list", Some(params));
+    let follow = mcp2026_call(&mut s, 2, "tools/list", None);
+    assert_eq!(mcp2026_code(&follow), -32600);
+    let message = follow["error"]["message"].as_str().unwrap_or("");
+    assert!(message.contains("Server not yet initialized"), "{follow}");
+}
+
+#[test]
+fn mcp2026_r1_non_string_meta_version_stdio() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!(1), Some(json!({}))) });
+    let v = mcp2026_call(&mut s, 1, "tools/list", Some(params));
+    assert_eq!(mcp2026_code(&v), -32602);
+    assert_ne!(mcp2026_code(&v), -32020);
+    assert_ne!(mcp2026_code(&v), -32022);
+}
+
+#[test]
+fn mcp2026_s19_partial_meta_primed_stdio() {
+    let mut s = Server::new();
+    mcp2026_prime(&mut s, true);
+    let params = json!({
+        "_meta": { "io.modelcontextprotocol/clientCapabilities": {} }
+    });
+    assert!(
+        !params["_meta"]
+            .as_object()
+            .unwrap()
+            .contains_key("io.modelcontextprotocol/protocolVersion")
+    );
+    let v = mcp2026_call(&mut s, 3, "tools/list", Some(params));
+    assert_eq!(v["error"]["code"], json!(-32602));
+}
+
+#[test]
+fn mcp2026_s18_unknown_method_cold() {
+    let mut s = Server::new();
+    let params = json!({ "_meta": mcp2026_meta(json!("2026-07-28"), Some(json!({}))) });
+    let v = mcp2026_call(&mut s, 1, "no/such", Some(params));
+    assert_eq!(mcp2026_code(&v), -32601);
+    assert_ne!(mcp2026_code(&v), -32600);
+}
+
+#[test]
+fn mcp2026_c1_system_status_protocol_version() {
+    let mut s = Server::new();
+    initialize_server(&mut s);
+    let v = mcp2026_call(
+        &mut s,
+        9,
+        "resources/read",
+        Some(json!({ "uri": "axterminator://system/status" })),
+    );
+    assert!(v.get("error").is_none(), "{v}");
+    let text = v["result"]["contents"][0]["text"].as_str().expect("text");
+    let parsed: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(parsed["protocol_version"], "2025-11-25");
+}
+
+#[test]
+fn mcp2026_c2_design_protocol_line() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/docs/design/MCP_SERVER_DESIGN.md"
+    );
+    let text = std::fs::read_to_string(path).unwrap();
+    let line = text
+        .lines()
+        .find(|line| line.contains("**Protocol**:"))
+        .expect("protocol line");
+    assert!(line.contains("MCP 2025-11-25"), "{line}");
+    assert!(!line.contains("MCP 2025-11-05"), "{line}");
+}
