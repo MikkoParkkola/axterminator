@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-10
+
 ### Changed
 - `ax_is_accessible`, other tool calls, and `axterminator check` ask macOS to show the Accessibility prompt for this process when it is not trusted, and open the Privacy & Security pane. The switch remains a manual action. A repeat inside 30 seconds does not open the pane again.
 
