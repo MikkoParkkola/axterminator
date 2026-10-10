@@ -46,6 +46,9 @@ class TestMik7618PluginManifest(unittest.TestCase):
         )
         self.assertEqual(plugin["version"], release)
         self.assertNotIn("@latest", json.dumps(mcp))
+        pins = re.findall(r"axterminator@([0-9][\w.\-]*)", README.read_text(encoding="utf-8"))
+        self.assertGreaterEqual(len(pins), 1)
+        self.assertTrue(all(pin == release for pin in pins), pins)
 
     def test_plugin_folder_lists_license_platform_and_permission(self) -> None:
         """MIK-7618.AC1: license, a 40-word README, macOS-only, permission steps."""
