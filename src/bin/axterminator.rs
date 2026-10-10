@@ -969,18 +969,17 @@ fn cmd_apps() -> Result<()> {
 }
 
 fn cmd_check() -> Result<()> {
-    let enabled = axterminator::check_accessibility_enabled();
-    if enabled {
-        println!("Accessibility: OK");
-        println!("Version:       {}", env!("CARGO_PKG_VERSION"));
-    } else {
-        eprintln!("Accessibility: DISABLED");
-        eprintln!();
-        eprintln!("To enable:");
-        eprintln!("  1. Open System Settings > Privacy & Security > Accessibility");
-        eprintln!("  2. Add and enable the terminal app (Terminal, iTerm2, etc.)");
-        eprintln!("  3. Restart the terminal");
-        std::process::exit(1);
+    match axterminator::prompt_for_accessibility() {
+        axterminator::PromptOutcome::Trusted => {
+            println!("Accessibility: OK");
+            println!("Version:       {}", env!("CARGO_PKG_VERSION"));
+        }
+        axterminator::PromptOutcome::Requested | axterminator::PromptOutcome::AlreadyRequested => {
+            eprintln!("Accessibility: DISABLED");
+            eprintln!();
+            eprintln!("{}", axterminator::ACCESSIBILITY_PROMPT_SUGGESTION);
+            std::process::exit(1);
+        }
     }
     Ok(())
 }

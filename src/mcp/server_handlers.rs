@@ -566,6 +566,11 @@ impl Server {
             );
         }
 
+        // Watch, visual sampling, and workflow tools return before `call_tool`.
+        // Ask here so those routes still raise the Accessibility prompt.
+        // `call_tool` asks again for every other tool. One 30s slot means one prompt.
+        let _ = crate::prompt_for_accessibility();
+
         // Execute.
         #[cfg(feature = "watch")]
         {
@@ -722,6 +727,9 @@ fn execute_tool_background<W: Write>(
     subscriptions: &std::sync::Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     out: &mut W,
 ) -> crate::mcp::protocol::ToolCallResult {
+    // Workflow tools return before `call_tool`. Ask first so a background
+    // workflow still raises the Accessibility prompt. The 30s slot keeps it one.
+    let _ = crate::prompt_for_accessibility();
     if let Some(result) =
         crate::mcp::tools_innovation::call_workflow_tool(name, args, workflows, out)
     {

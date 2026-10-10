@@ -131,7 +131,8 @@ fn tool_ax_is_accessible() -> Tool {
         title: "Check accessibility permissions",
         description: "Check if macOS accessibility permissions are enabled for this process. \
             Must return enabled=true before any other tool will work. \
-            If false, guide the user to System Settings > Privacy & Security > Accessibility.",
+            If this process is not trusted, macOS is asked to show the Accessibility prompt \
+            and the Privacy & Security pane is opened. The switch stays a manual action.",
         input_schema: json!({ "type": "object", "additionalProperties": false }),
         output_schema: json!({
             "type": "object",
@@ -559,6 +560,11 @@ pub fn call_tool<W: std::io::Write>(
     registry: &Arc<AppRegistry>,
     out: &mut W,
 ) -> ToolCallResult {
+    // ax_is_accessible prompts itself. Any other tool also asks once, so the
+    // first real use raises the system prompt even when the client skips the check.
+    if name != "ax_is_accessible" {
+        let _ = crate::prompt_for_accessibility();
+    }
     match name {
         "ax_is_accessible" => handle_is_accessible(),
         "ax_connect" => handle_connect(args, registry),

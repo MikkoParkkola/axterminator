@@ -26,13 +26,17 @@ use crate::mcp::tools::AppRegistry;
 // ---------------------------------------------------------------------------
 
 pub(crate) fn handle_is_accessible() -> ToolCallResult {
-    let enabled = crate::accessibility::check_accessibility_enabled();
+    let enabled = match crate::accessibility::prompt_for_accessibility() {
+        crate::accessibility::PromptOutcome::Trusted => true,
+        crate::accessibility::PromptOutcome::Requested
+        | crate::accessibility::PromptOutcome::AlreadyRequested => false,
+    };
     let result = if enabled {
         json!({ "enabled": true })
     } else {
         json!({
             "enabled": false,
-            "suggestion": "Open System Settings > Privacy & Security > Accessibility and enable the terminal app."
+            "suggestion": crate::accessibility::ACCESSIBILITY_PROMPT_SUGGESTION
         })
     };
     ToolCallResult {
