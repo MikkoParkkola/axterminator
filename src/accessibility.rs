@@ -192,6 +192,14 @@ fn open_accessibility_pane() {
         .spawn();
 }
 
+/// Release and debug binaries prompt. `cargo test` compiles this crate with
+/// `cfg(test)`, and those tests call this path on CI runners that are not
+/// Accessibility-trusted. The prompt API and `open` would raise a system dialog
+/// during the suite. Test builds report the untrusted outcome and stop.
+fn show_system_prompt() -> bool {
+    !cfg!(test)
+}
+
 /// Prompt when this process is untrusted, at most once per interval.
 ///
 /// The silent check is unchanged. Call this from a user-facing command or tool.
@@ -199,6 +207,9 @@ fn open_accessibility_pane() {
 pub fn prompt_for_accessibility() -> PromptOutcome {
     if check_accessibility_enabled() {
         return PromptOutcome::Trusted;
+    }
+    if !show_system_prompt() {
+        return PromptOutcome::AlreadyRequested;
     }
     if !claim_prompt_slot(now_ms(), &LAST_PROMPT_MS) {
         return PromptOutcome::AlreadyRequested;
@@ -691,6 +702,11 @@ mod tests {
         assert!(!claim_prompt_slot(5_100, &last));
         assert!(claim_prompt_slot(35_000, &last));
         assert_eq!(last.load(Ordering::Relaxed), 35_000);
+    }
+
+    #[test]
+    fn system_prompt_stays_off_in_test_builds() {
+        assert!(!show_system_prompt());
     }
 
     #[test]
