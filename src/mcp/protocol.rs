@@ -110,6 +110,7 @@ pub(crate) enum RequestClass {
 }
 
 /// HTTP status for a JSON-RPC error after classification.
+#[cfg(feature = "http-transport")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RpcHttpStatus {
     Ok,
@@ -174,6 +175,7 @@ pub(crate) fn meta_protocol_version_str(msg: &JsonRpcRequest) -> Option<&str> {
     meta_map(msg)?.get(META_PROTOCOL_VERSION)?.as_str()
 }
 
+#[cfg(feature = "http-transport")]
 fn modern_check_invalid_params(msg: &JsonRpcRequest) -> bool {
     let Some(meta) = meta_map(msg) else {
         return false;
@@ -189,6 +191,7 @@ fn modern_check_invalid_params(msg: &JsonRpcRequest) -> bool {
 ///
 /// A handler error on a modern request stays [`RpcHttpStatus::Ok`] (HTTP 200).
 /// Re-reading the request is the memory of the class: the body is not mutated.
+#[cfg(feature = "http-transport")]
 pub(crate) fn http_status_for(msg: &JsonRpcRequest, error_code: Option<i32>) -> RpcHttpStatus {
     let Some(code) = error_code else {
         return RpcHttpStatus::Ok;
