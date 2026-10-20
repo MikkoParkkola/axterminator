@@ -75,6 +75,30 @@ const ENCODER_DIM: usize = 1024;
 /// Maximum symbols emitted per encoder frame (prevents infinite loops).
 const MAX_SYMBOLS_PER_STEP: usize = 10;
 
+/// Return the process-wide ONNX Runtime environment, building it on first use.
+///
+/// ort 2.0.0-rc.14 takes an environment in every `Session::builder` and allows one
+/// per process, so it is built once and shared (`Environment` is an `Arc` clone).
+/// The lock serialises the first build; a failed build is retried on the next call.
+///
+/// # Errors
+///
+/// Returns [`AudioError::Transcription`] when ONNX Runtime cannot create the environment.
+fn ort_environment() -> Result<ort::environment::Environment, AudioError> {
+    static ENV: std::sync::Mutex<Option<ort::environment::Environment>> =
+        std::sync::Mutex::new(None);
+    let mut env = ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(env) = env.as_ref() {
+        return Ok(env.clone());
+    }
+    let built = ort::init()
+        .build()
+        .map_err(|e| AudioError::Transcription(format!("ONNX Runtime environment failed: {e}")))?;
+    Ok(env.insert(built).clone())
+}
+
 // ---------------------------------------------------------------------------
 // Model directory layout
 // ---------------------------------------------------------------------------
@@ -85,19 +109,6 @@ const MAX_SYMBOLS_PER_STEP: usize = 10;
 ///
 /// # Errors
 ///
-/// One ONNX Runtime environment shared by every Parakeet session; ort 2.0.0-rc.14
-/// requires one per `Session::builder`. `Environment` is a cheap `Arc` clone.
-fn ort_environment() -> Result<ort::environment::Environment, AudioError> {
-    static ENV: std::sync::OnceLock<ort::environment::Environment> = std::sync::OnceLock::new();
-    if let Some(env) = ENV.get() {
-        return Ok(env.clone());
-    }
-    let env = ort::init()
-        .build()
-        .map_err(|e| AudioError::Transcription(format!("ONNX Runtime environment failed: {e}")))?;
-    Ok(ENV.get_or_init(|| env).clone())
-}
-
 /// Returns [`AudioError::Transcription`] when `$HOME` cannot be determined.
 pub(crate) fn model_dir() -> Result<PathBuf, AudioError> {
     let home = std::env::var("HOME").map_err(|_| {
