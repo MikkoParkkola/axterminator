@@ -85,6 +85,19 @@ const MAX_SYMBOLS_PER_STEP: usize = 10;
 ///
 /// # Errors
 ///
+/// One ONNX Runtime environment shared by every Parakeet session; ort 2.0.0-rc.14
+/// requires one per `Session::builder`. `Environment` is a cheap `Arc` clone.
+fn ort_environment() -> Result<ort::environment::Environment, AudioError> {
+    static ENV: std::sync::OnceLock<ort::environment::Environment> = std::sync::OnceLock::new();
+    if let Some(env) = ENV.get() {
+        return Ok(env.clone());
+    }
+    let env = ort::init()
+        .build()
+        .map_err(|e| AudioError::Transcription(format!("ONNX Runtime environment failed: {e}")))?;
+    Ok(ENV.get_or_init(|| env).clone())
+}
+
 /// Returns [`AudioError::Transcription`] when `$HOME` cannot be determined.
 pub(crate) fn model_dir() -> Result<PathBuf, AudioError> {
     let home = std::env::var("HOME").map_err(|_| {
@@ -265,7 +278,7 @@ fn run_preprocessor(samples: &[f32], onnx_path: &Path) -> Result<(Vec<f32>, usiz
     use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(&ort_environment()?)
         .map_err(|e| {
             AudioError::Transcription(format!("Preprocessor session builder failed: {e}"))
         })?
@@ -330,7 +343,7 @@ fn run_encoder(
     use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(&ort_environment()?)
         .map_err(|e| AudioError::Transcription(format!("Encoder session builder failed: {e}")))?
         .commit_from_file(onnx_path)
         .map_err(|e| {
@@ -416,7 +429,7 @@ fn run_tdt_greedy_decode(
     use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(&ort_environment()?)
         .map_err(|e| AudioError::Transcription(format!("Decoder session builder failed: {e}")))?
         .commit_from_file(onnx_path)
         .map_err(|e| {
