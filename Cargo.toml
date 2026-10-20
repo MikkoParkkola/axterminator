@@ -99,7 +99,7 @@ clap_complete = { version = "4.6", optional = true }
 # Parakeet ASR (feature-gated): ONNX Runtime for Parakeet TDT 0.6B v3 inference.
 # `download-binaries` fetches pre-built ONNX Runtime libs at build time — no
 # manual installation required.  Zero impact on binary size when disabled.
-ort = { version = "2.0.0-rc.12", optional = true, features = ["download-binaries"] }
+ort = { version = "2.0.0-rc.14", optional = true, features = ["download-binaries"] }
 
 # Random token/password generation
 rand = "0.10"

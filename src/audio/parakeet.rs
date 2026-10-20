@@ -75,6 +75,30 @@ const ENCODER_DIM: usize = 1024;
 /// Maximum symbols emitted per encoder frame (prevents infinite loops).
 const MAX_SYMBOLS_PER_STEP: usize = 10;
 
+/// Return the process-wide ONNX Runtime environment, building it on first use.
+///
+/// ort 2.0.0-rc.14 takes an environment in every `Session::builder` and allows one
+/// per process, so it is built once and shared (`Environment` is an `Arc` clone).
+/// The lock serialises the first build; a failed build is retried on the next call.
+///
+/// # Errors
+///
+/// Returns [`AudioError::Transcription`] when ONNX Runtime cannot create the environment.
+fn ort_environment() -> Result<ort::environment::Environment, AudioError> {
+    static ENV: std::sync::Mutex<Option<ort::environment::Environment>> =
+        std::sync::Mutex::new(None);
+    let mut env = ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(env) = env.as_ref() {
+        return Ok(env.clone());
+    }
+    let built = ort::init()
+        .build()
+        .map_err(|e| AudioError::Transcription(format!("ONNX Runtime environment failed: {e}")))?;
+    Ok(env.insert(built).clone())
+}
+
 // ---------------------------------------------------------------------------
 // Model directory layout
 // ---------------------------------------------------------------------------
@@ -265,7 +289,7 @@ fn run_preprocessor(samples: &[f32], onnx_path: &Path) -> Result<(Vec<f32>, usiz
     use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(&ort_environment()?)
         .map_err(|e| {
             AudioError::Transcription(format!("Preprocessor session builder failed: {e}"))
         })?
@@ -330,7 +354,7 @@ fn run_encoder(
     use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(&ort_environment()?)
         .map_err(|e| AudioError::Transcription(format!("Encoder session builder failed: {e}")))?
         .commit_from_file(onnx_path)
         .map_err(|e| {
@@ -416,7 +440,7 @@ fn run_tdt_greedy_decode(
     use ort::session::Session;
     use ort::value::Tensor;
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(&ort_environment()?)
         .map_err(|e| AudioError::Transcription(format!("Decoder session builder failed: {e}")))?
         .commit_from_file(onnx_path)
         .map_err(|e| {
