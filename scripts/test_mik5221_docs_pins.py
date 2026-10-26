@@ -21,7 +21,7 @@ FLOORS = {
     "PyJWT": "2.15.1",
     "pyasn1": "0.6.4",
     "cryptography": "50.0.2",
-    "protobuf": "5.29.6",
+    "protobuf": "7.36.2",
     "GitPython": "3.2.1",
     "idna": "3.15",
 }
