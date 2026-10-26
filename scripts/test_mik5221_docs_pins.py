@@ -24,6 +24,7 @@ FLOORS = {
     "protobuf": "7.36.2",
     "GitPython": "3.2.1",
     "idna": "3.15",
+    "certifi": "2026.10.19",
 }
 
 ENTRYPOINTS = ("mkdocs-material", "mkdocstrings", "pymdown-extensions")
