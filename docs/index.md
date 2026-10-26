@@ -189,7 +189,7 @@ AXTerminator is free for personal, research, educational, noncommercial
 open-source, and free public-good use with attribution.
 
 Business use requires a written commercial license. See
-[`LICENSE.md`](../LICENSE.md) and [`COMMERCIAL.md`](../COMMERCIAL.md).
+[`LICENSE.md`](https://github.com/MikkoParkkola/axterminator/blob/main/LICENSE.md) and [`COMMERCIAL.md`](https://github.com/MikkoParkkola/axterminator/blob/main/COMMERCIAL.md).
 
 Earlier releases published under `MIT OR Apache-2.0` remain under those earlier
 license grants for those earlier versions only.
