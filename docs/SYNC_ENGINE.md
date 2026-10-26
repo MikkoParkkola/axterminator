@@ -399,5 +399,5 @@ test xpc_client::wait_for_idle        ... 45 ms
 
 AXTerminator is free for personal, research, educational, noncommercial
 open-source, and free public-good use with attribution. Business use requires a
-written commercial license. See [`LICENSE.md`](../LICENSE.md) and
-[`COMMERCIAL.md`](../COMMERCIAL.md).
+written commercial license. See [`LICENSE.md`](https://github.com/MikkoParkkola/axterminator/blob/main/LICENSE.md) and
+[`COMMERCIAL.md`](https://github.com/MikkoParkkola/axterminator/blob/main/COMMERCIAL.md).
