@@ -15,14 +15,14 @@ REQUIREMENTS = ROOT / "docs" / "requirements.txt"
 CARGO_LOCK = ROOT / "Cargo.lock"
 
 FLOORS = {
-    "pillow": "12.2.0",
-    "urllib3": "2.7.0",
-    "python-multipart": "0.0.27",
-    "PyJWT": "2.13.0",
-    "pyasn1": "0.6.3",
-    "cryptography": "46.0.5",
-    "protobuf": "5.29.6",
-    "GitPython": "3.1.59",
+    "pillow": "13.0.0",
+    "urllib3": "2.8.0",
+    "python-multipart": "0.0.32",
+    "PyJWT": "2.15.1",
+    "pyasn1": "0.6.4",
+    "cryptography": "50.0.2",
+    "protobuf": "7.36.2",
+    "GitPython": "3.2.1",
     "idna": "3.15",
 }
 
