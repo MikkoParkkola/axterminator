@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **rustix 1.1.5 -> 1.1.6**, clearing RUSTSEC-2026-0486.
+
 ## [0.11.1] - 2026-10-10
 
 ### Changed
