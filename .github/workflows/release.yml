@@ -20,7 +20,7 @@ jobs:
       matrix:
         include:
           # macOS Apple Silicon (ARM64)
-          - os: macos-14
+          - os: macos-26
             target: aarch64-apple-darwin
           # macOS Intel (x86_64)
           - os: macos-15
@@ -106,7 +106,7 @@ jobs:
     name: Publish to crates.io
     needs: [build-rust]
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: macos-14
+    runs-on: macos-26
     environment:
       name: crates-io
       url: https://crates.io/crates/axterminator
